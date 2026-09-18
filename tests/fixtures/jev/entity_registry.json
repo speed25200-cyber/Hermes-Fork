@@ -1,0 +1,129 @@
+{
+  "version": "entity-registry-fixture-2026-09-18",
+  "records": [
+    {
+      "inst_id": "EXM-USDT-SWAP",
+      "canonical_name": "Example Network",
+      "symbol": "EXM",
+      "aliases": [
+        "ExampleNet"
+      ],
+      "networks": [
+        "Example Chain"
+      ],
+      "project_ids": [
+        "example-network"
+      ],
+      "valid_from": "2024-01-01T00:00:00+00:00"
+    },
+    {
+      "inst_id": "EXMFI-USDT-SWAP",
+      "canonical_name": "Exampla Finance",
+      "symbol": "EXM",
+      "aliases": [],
+      "networks": [
+        "Exampla Chain"
+      ],
+      "project_ids": [
+        "exampla-finance"
+      ],
+      "valid_from": "2025-06-01T00:00:00+00:00"
+    },
+    {
+      "inst_id": "BTC-USDT-SWAP",
+      "canonical_name": "Bitcoin",
+      "symbol": "BTC",
+      "aliases": [],
+      "networks": [
+        "Bitcoin network"
+      ],
+      "project_ids": [
+        "bitcoin"
+      ],
+      "valid_from": "2020-01-01T00:00:00+00:00"
+    },
+    {
+      "inst_id": "ETH-USDT-SWAP",
+      "canonical_name": "Ethereum",
+      "symbol": "ETH",
+      "aliases": [
+        "Ether"
+      ],
+      "networks": [
+        "Ethereum mainnet"
+      ],
+      "project_ids": [
+        "ethereum"
+      ],
+      "valid_from": "2020-01-01T00:00:00+00:00"
+    },
+    {
+      "inst_id": "SOL-USDT-SWAP",
+      "canonical_name": "Solana",
+      "symbol": "SOL",
+      "aliases": [],
+      "networks": [
+        "Solana mainnet"
+      ],
+      "project_ids": [
+        "solana"
+      ],
+      "valid_from": "2021-01-01T00:00:00+00:00"
+    },
+    {
+      "inst_id": "MATIC-USDT-SWAP",
+      "canonical_name": "Polygon",
+      "symbol": "MATIC",
+      "aliases": [],
+      "networks": [
+        "Polygon PoS"
+      ],
+      "project_ids": [
+        "polygon"
+      ],
+      "valid_from": "2021-01-01T00:00:00+00:00",
+      "valid_to": "2024-09-04T00:00:00+00:00"
+    },
+    {
+      "inst_id": "POL-USDT-SWAP",
+      "canonical_name": "Polygon",
+      "symbol": "POL",
+      "aliases": [
+        "MATIC"
+      ],
+      "networks": [
+        "Polygon PoS"
+      ],
+      "project_ids": [
+        "polygon"
+      ],
+      "valid_from": "2024-09-04T00:00:00+00:00"
+    },
+    {
+      "inst_id": "AUR-USDT-SWAP",
+      "canonical_name": "Aurora Ledger",
+      "symbol": "AUR",
+      "aliases": [],
+      "networks": [
+        "Aurora Chain"
+      ],
+      "project_ids": [
+        "aurora-ledger"
+      ],
+      "valid_from": "2025-01-01T00:00:00+00:00"
+    },
+    {
+      "inst_id": "AURG-USDT-SWAP",
+      "canonical_name": "Aurum Gold Token",
+      "symbol": "AUR",
+      "aliases": [],
+      "networks": [
+        "Aurum Vault"
+      ],
+      "project_ids": [
+        "aurum-gold"
+      ],
+      "valid_from": "2025-01-01T00:00:00+00:00"
+    }
+  ]
+}

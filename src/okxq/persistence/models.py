@@ -4,7 +4,8 @@ Règles de conception :
 - ``TIMESTAMPTZ`` partout (TZDateTime) ; ``NUMERIC`` de précision explicite ;
 - unicité durable de (account_scope, client_order_id) ; aucune réutilisation après état terminal ;
 - fills dédupliqués par ``execution_key`` (clé construite selon la portée réelle des identifiants) ;
-- cache sémantique JEV unique par (model_version, question_hash, document_version_id, asset_mapping_version) ;
+- cache sémantique JEV unique par (model_version, question_hash, document_version_id, asset_mapping_version,
+  cleaning_pipeline_version) ;
 - écriture métier + outbox dans la même transaction ; consommation idempotente via ``consumer_offsets`` ;
 - versions optimistes sur les projections (orders.version, position_snapshots.version).
 """
@@ -172,14 +173,21 @@ class JevResult(Base):
     answers: Mapped[dict[str, Any]] = mapped_column(JsonDoc, nullable=False, default=dict)
     usage: Mapped[dict[str, Any]] = mapped_column(JsonDoc, nullable=False, default=dict)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Version du pipeline de nettoyage du texte (5e composante de la clé du cache sémantique, §50).
+    cleaning_pipeline_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="none", server_default="none"
+    )
+    inst_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     __table_args__ = (
         UniqueConstraint(
             "model_version",
             "question_hash",
             "document_version_id",
             "asset_mapping_version",
+            "cleaning_pipeline_version",
             name="uq_jev_semantic_cache",
         ),
+        Index("ix_jev_results_committed", "features_committed_at"),
     )
 
 
