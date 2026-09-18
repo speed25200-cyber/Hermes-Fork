@@ -132,3 +132,15 @@ class LedgerError(OkxqError):
 
 class ReconciliationError(OkxqError):
     code = "RECONCILIATION_MISMATCH"
+
+
+class CostModelError(OkxqError):
+    """Paramètre ou carnet invalide pour l'estimation des coûts (§37)."""
+
+    code = "COST_MODEL_INVALID"
+
+
+class DoubleCountingError(CostModelError):
+    """Un coût déjà contenu dans le prix est déduit une seconde fois (T24)."""
+
+    code = "COST_DOUBLE_COUNTED"
