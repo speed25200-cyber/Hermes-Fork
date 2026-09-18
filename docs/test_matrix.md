@@ -3,7 +3,7 @@
 <!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute
      correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->
 
-Source : `reports/junit.xml` — 507 cas collectés, 507 verts, 0 échecs, 0 erreurs, 0 sautés.
+Source : `reports/junit.xml` — 530 cas collectés, 530 verts, 0 échecs, 0 erreurs, 0 sautés.
 
 Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests `integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais `PASS`.
 
@@ -74,11 +74,11 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T54 | Ticker ambigu ou source contradictoire | Mapping non inventé, qualité explicite | unit | `test_jev_mapping::test_T54_ambiguous_ticker_yields_no_mapping_and_explicit_quality`<br>`test_jev_mapping::test_T54_ticker_alone_is_not_an_identity` | **PASS** | 2 cas verts |
 | T55 | Injection dans un document | Aucune permission, aucun secret ni action arbitraire accessibles | unit | `test_jev_sources::test_T55_prompt_injection_in_a_document_is_data_only` | **PASS** | 1 cas vert |
 | T56 | URL vers réseau privé ou redirection malveillante | SSRF bloquée | unit | `test_jev_sources::test_T56_non_public_addresses_are_refused`<br>`test_jev_sources::test_T56_public_addresses_are_accepted`<br>`test_jev_sources::test_T56_metadata_or_private_resolution_is_blocked_before_any_connection`<br>… (+2) | **PASS** | 28 cas verts |
-| T57 | Document rejoué depuis cache | Âge et provenance initiaux conservés | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T57 | Document rejoué depuis cache | Âge et provenance initiaux conservés | unit | `test_jev_cache_replay::test_T57_a_cached_evaluation_keeps_its_original_timestamps`<br>`test_jev_cache_replay::test_T57_a_cached_evaluation_keeps_its_provenance`<br>`test_jev_cache_replay::test_T57_the_document_age_is_measured_from_publication_not_from_the_cache_read`<br>… (+5) | **PASS** | 11 cas verts |
 | T58 | Source ou publication manquante | Absence explicitée, jamais timestamp inventé | unit | `test_jev_sources::test_T58_missing_date_yields_none_never_collection_time`<br>`test_jev_sources::test_T58_explicit_datetime_parsing_never_invents` | **PASS** | 13 cas verts |
-| T59 | Stop prévu mais non confirmé | Position marquée non protégée et alerte/réduction selon politique | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T59 | Stop prévu mais non confirmé | Position marquée non protégée et alerte/réduction selon politique | unit | `test_protections_and_watchdog::test_T59_a_confirmed_stop_protects_the_position`<br>`test_protections_and_watchdog::test_T59_a_stop_not_accepted_leaves_the_position_marked_unprotected`<br>`test_protections_and_watchdog::test_T59_an_exchange_error_while_placing_the_stop_is_not_a_protection`<br>… (+3) | **PASS** | 8 cas verts |
 | T60 | Cancel All After déclenché | Ordres concernés traités, position non supposée fermée | unit | `test_health_metrics::test_T60_gateway_connected_but_not_reconciled_is_not_ready`<br>`test_virtual_exchange::test_T60_cancel_all_after_cancels_orders_but_closes_no_position` | **PASS** | 2 cas verts |
-| T61 | Processus stratégie mort, heartbeat indépendant vivant | Pas de maintien aveugle de prises de risque orphelines | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T61 | Processus stratégie mort, heartbeat indépendant vivant | Pas de maintien aveugle de prises de risque orphelines | unit | `test_protections_and_watchdog::test_T61_a_heartbeat_without_observed_state_is_refused`<br>`test_protections_and_watchdog::test_T61_a_heartbeat_carrying_a_dead_strategy_is_refused`<br>`test_protections_and_watchdog::test_T61_a_stale_decision_makes_the_strategy_unhealthy_even_if_it_claims_to_be_alive`<br>… (+1) | **PASS** | 4 cas verts |
 | T62 | Exchange indisponible pendant flatten | État pending et exposition résiduelle visible | unit | `test_virtual_exchange::test_T62_unreachable_exchange_and_residual_exposure_are_visible` | **PASS** | 1 cas vert |
 | T63 | DEMO en échec | Aucun basculement réseau/clés vers LIVE | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T64 | LIVE sans approbations complètes | Refus avant connexion privée de trading | unit | `test_config::test_T64_live_without_manifest_is_refused`<br>`test_config::test_T64_live_manifest_must_be_signed_complete_and_unexpired` | **PASS** | 2 cas verts |
@@ -94,12 +94,12 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | Statut | Nombre sur 70 |
 |---|---|
 | `FAIL` | 0 |
-| `NOT_RUN` | 22 |
-| `PASS` | 48 |
+| `NOT_RUN` | 19 |
+| `PASS` | 51 |
 
 Aucune exigence en échec dans cette exécution.
 
-**Exigences non exécutées (22)** : T23, T24, T25, T26, T36, T37, T40, T41, T42, T43, T45, T46, T47, T48, T50, T51, T57, T59, T61, T63, T67, T68.
+**Exigences non exécutées (19)** : T23, T24, T25, T26, T36, T37, T40, T41, T42, T43, T45, T46, T47, T48, T50, T51, T63, T67, T68.
 
 Chacune reste bloquante pour la capacité qu'elle devait valider (§71.1) : rien ici n'est présenté comme couvert par autre chose.
 
