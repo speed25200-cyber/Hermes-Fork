@@ -1,0 +1,7 @@
+# DEMO : compte de démonstration OKX (x-simulated-trading: 1). Un échec DEMO ne bascule JAMAIS vers LIVE.
+extends: base.yaml
+project:
+  mode: DEMO
+account:
+  scope: okx-demo
+  region_profile: from_env  # OKX_ACCOUNT_REGION_PROFILE

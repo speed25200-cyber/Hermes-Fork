@@ -1,0 +1,41 @@
+# Secrets — jamais dans Git (principe 9)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+
+# Données et artefacts générés (le manifeste est versionné, pas les partitions)
+data/
+artifacts/*
+!artifacts/.gitkeep
+reports/*
+!reports/.gitkeep
+runtime/
+logs/
+*.parquet
+*.duckdb
+
+# Frontend
+frontend/node_modules/
+frontend/test-results/
+
+# Divers
+.DS_Store
+*.swp

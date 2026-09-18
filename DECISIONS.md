@@ -1,0 +1,13 @@
+# DECISIONS.md — choix dont dépend la suite
+
+| # | Décision | Motif | Conséquence |
+|---|----------|-------|-------------|
+| D1 | Interface web : l'interface Hermes existante (HTML/JS vanille, FR/EN/SQ, thème sombre/clair) est conservée et étendue ; pas de React/Vite. | Demande explicite du propriétaire (« garde la même interface graphique »). ADR-001. | `frontend/` reprend `index.html`, `vue.js`, `graphe.js`, `langues.js`, `pont.js`, polices ; nouvelles vues Décisions/Recherche/JEV/Risque dans le même langage visuel ; tests via `node --test` + smoke Playwright. |
+| D2 | Persistance : SQLAlchemy 2 + Alembic sur PostgreSQL ; SQLite mémoire pour les tests unitaires hermétiques. | Tests reproductibles sans service ; migrations testées sur PostgreSQL en intégration. | `TZDateTime` garantit l'UTC aware ; les tests PostgreSQL sont marqués `integration` et `NOT_RUN` sans base. |
+| D3 | `v = base_units_per_contract = ctVal` uniquement si `ctType=linear`, `settleCcy=USDT`, `ctValCcy=base`, `ctMult=1` ; sinon instrument refusé. | §45 : ne pas multiplier des champs dont la sémantique n'est pas validée. | Un instrument OKX à `ctMult≠1` n'entre jamais dans l'univers tant qu'un fixture indépendant ne l'a pas validé. |
+| D4 | Convention de coûts par défaut : MID (§37). | Données de niveau A/B initiales ; la convention EXECUTABLE est réservée aux expériences avec fills réels. | `EdgeEstimate.included_in_price` liste ce que le prix contient déjà ; test anti-double comptage. |
+| D5 | Garde LIVE : manifeste JSON signé HMAC-SHA256 par `OPERATOR_AUTH_SECRET` (serveur), lié au commit, au hash de config, aux limites et aux trois gates. | §71.3 : pas de YAML librement éditable. | Aucune commande `--force` ; l'API n'a pas de route d'activation LIVE. |
+| D6 | Modes strictement séparés par `project.mode` ; `fixture_only` interdit hors PAPER/RESEARCH. | §1, §63. | Une config de smoke ne peut jamais démarrer DEMO/LIVE. |
+| D7 | Bus interne : outbox transactionnelle en base + un seul gateway avec bail/fencing ; pas de Kafka. | §41, §52. | Split-brain et perte de bail testés hors ligne. |
+| D8 | Déploiement VPS : Docker Compose (PostgreSQL non exposé, un conteneur par processus, secrets par service) via un installateur idempotent ; l'ancien Hermes (Node/systemd) est arrêté, désinstallé et ses données effacées par un workflow à confirmation explicite. | Demande du propriétaire ; §60, §62. | Les clés OKX doivent être re-posées dans l'environnement du seul gateway. |
+| D9 | JEV : `defusedxml` pour les flux XML/RSS ; parseur HTML stdlib borné ; SSRF bloqué par résolution DNS et filtrage des plages privées avant connexion. | §50.1, T55–T56. | Dépendance ajoutée et verrouillée. |
