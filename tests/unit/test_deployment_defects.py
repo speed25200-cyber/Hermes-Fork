@@ -228,3 +228,36 @@ async def test_a_non_deciding_role_does_not_produce_decisions() -> None:
     # `run_process` ne câble `rt.loop` que pour les rôles décideurs ; il reste donc None ici.
     assert rt.loop is None
     assert await _boundary_callback(rt)(T0, T0) is None
+
+
+async def test_an_unchanged_account_is_not_re_inserted_every_minute() -> None:
+    """Le journal de PostgreSQL portait une ERROR par frontière, et c'était nous.
+
+    L'instantané de compte était inséré à chaque frontière et la contrainte d'unicité servait de
+    test d'existence : sur un compte au repos, PostgreSQL refusait l'insertion toutes les minutes et
+    journalisait l'échec. Un journal de base rempli d'erreurs ATTENDUES finit par cacher celles qui
+    ne le sont pas — et c'est précisément dans ce journal qu'on cherche quand quelque chose ne va
+    pas. La contrainte reste le garde-fou contre une course entre processus ; elle n'est plus le
+    moyen normal de savoir si la ligne existe.
+    """
+    from sqlalchemy import func, select
+
+    from okxq.config import load_config
+    from okxq.domain.clocks import SimulatedClock
+    from okxq.persistence.db import make_engine, make_session_factory
+    from okxq.persistence.models import AccountSnapshot, Base
+    from okxq.runtime.composition import advance_unit_value, build_runtime
+
+    cfg = load_config(Path(__file__).resolve().parents[2] / "tests/fixtures/configs/smoke.fixture.yaml")
+    engine = make_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    factory = make_session_factory(engine)
+    rt = build_runtime(cfg, role="risk", clock=SimulatedClock(T0), session_factory=factory)
+
+    # Dix frontières sans le moindre mouvement comptable.
+    valeurs = [advance_unit_value(rt, rt.ledger.equity({}), now=T0) for _ in range(10)]
+    assert len(set(valeurs)) == 1, "la valeur de part ne doit pas bouger sur un compte au repos"
+
+    with factory() as session:
+        lignes = session.scalar(select(func.count()).select_from(AccountSnapshot))
+    assert lignes == 1, f"{lignes} instantanés pour un compte immobile : une insertion par frontière"

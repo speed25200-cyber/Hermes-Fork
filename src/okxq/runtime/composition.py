@@ -1416,6 +1416,20 @@ def latest_unit_point(rt: Runtime) -> UnitPoint | None:
     )
 
 
+def _snapshot_version_of(rt: Runtime, version: str) -> bool:
+    """Cet instantané est-il déjà enregistré ? Lecture seule, sans effet."""
+    with rt.session_factory() as session:
+        return (
+            session.scalar(
+                select(AccountSnapshot.id).where(
+                    AccountSnapshot.account_scope == rt.cfg.account.scope,
+                    AccountSnapshot.equity_version == version,
+                )
+            )
+            is not None
+        )
+
+
 def advance_unit_value(rt: Runtime, view: Any, *, now: datetime) -> Decimal | None:
     """Fait avancer la valeur de part d'UN pas et la persiste ; rend la valeur courante.
 
@@ -1439,11 +1453,19 @@ def advance_unit_value(rt: Runtime, view: Any, *, now: datetime) -> Decimal | No
         # Equity nulle ou négative, ou parts épuisées par un retrait total : la valeur de part n'est
         # pas définie. `None` est la réponse honnête ; le kill switch retombe alors sur l'equity.
         return None
+    version = _snapshot_version(view)
+    if previous is not None and _snapshot_version_of(rt, version):
+        # État comptable inchangé depuis le dernier instantané : il n'y a rien à écrire, et tenter
+        # l'insertion pour se faire refuser laisserait une ERROR dans le journal de PostgreSQL à
+        # CHAQUE frontière — une minute sur deux, un journal de base plein d'erreurs attendues finit
+        # par cacher celles qui ne le sont pas. La contrainte d'unicité reste le garde-fou (course
+        # entre deux processus), mais on ne s'en sert plus comme d'un test d'existence.
+        return current.unit_value
     try:
         with rt.uow_factory.transaction() as uow:
             uow.snapshots.record_account(
                 account_scope=rt.cfg.account.scope,
-                equity_version=_snapshot_version(view),
+                equity_version=version,
                 as_of=now,
                 source=LEDGER_SNAPSHOT_SOURCE,
                 cash_collateral=view.cash_collateral,
