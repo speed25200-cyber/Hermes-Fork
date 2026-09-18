@@ -87,12 +87,16 @@ def test_T68_publishing_never_blocks_on_a_full_queue() -> None:
     """Bloquer sur une file pleine gèlerait la lecture du flux, donc la détection de rupture de
     séquence : la contre-pression doit abandonner, pas attendre."""
 
-    async def scenario() -> None:
+    async def scenario() -> int:
         collector = _collector()
-        # Si `publish` bloquait, ce `wait_for` expirerait.
+        # Première affirmation, implicite : si `publish` bloquait, ce `wait_for` lèverait.
         await asyncio.wait_for(collector.publish([_envelope(i) for i in range(TAILLE * 10)]), timeout=2.0)
+        return collector.stats.dropped
 
-    asyncio.run(scenario())
+    abandonnes = asyncio.run(scenario())
+    # Seconde affirmation, explicite : on est bien passé par le chemin de contre-pression. Sans elle,
+    # le test passerait aussi sur une file assez grande pour ne jamais saturer.
+    assert abandonnes == TAILLE * 10 - TAILLE
 
 
 def test_T68_consuming_frees_room_again() -> None:
