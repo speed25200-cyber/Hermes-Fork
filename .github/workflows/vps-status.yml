@@ -57,7 +57,7 @@ jobs:
             F=/opt/okxq/env/gateway.env; touch "$F"; chmod 600 "$F"
             for kv in "OKX_API_KEY=$K" "OKX_API_SECRET=$S" "OKX_API_PASSPHRASE=$P" "OKX_ACCOUNT_REGION_PROFILE=$R"; do
               k=${kv%%=*}; sed -i "/^$k=/d" "$F"; echo "$kv" >> "$F"; done
-            cd /opt/okxq && docker compose restart gateway >/dev/null 2>&1 || true
+            cd /opt/okxq && docker compose up -d --force-recreate gateway >/dev/null 2>&1 || true
             echo "  clés OKX posées dans env/gateway.env (gateway seul), gateway redémarré"
           '
 
@@ -70,7 +70,7 @@ jobs:
           printf '%s\n' "$T" | sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
             IFS= read -r T; F=/opt/okxq/env/jev-worker.env; touch "$F"; chmod 600 "$F"
             sed -i "/^TYPESAFE_API_KEY=/d" "$F"; echo "TYPESAFE_API_KEY=$T" >> "$F"
-            cd /opt/okxq && docker compose restart jev-worker >/dev/null 2>&1 || true
+            cd /opt/okxq && docker compose up -d --force-recreate jev-worker >/dev/null 2>&1 || true
             echo "  clé TypeSafe posée dans env/jev-worker.env, jev-worker redémarré"
           '
 
@@ -90,8 +90,24 @@ jobs:
             sed -i "/^OPERATOR_AUTH_SECRET=/d" "$F"
             printf "OPERATOR_AUTH_SECRET=%s\n" "$NEUF" >> "$F"
             chmod 600 "$F"
-            cd /opt/okxq && docker compose restart api >/dev/null 2>&1 || true
-            echo "  clé opérateur renouvelée ; toutes les clés dérivées précédentes sont révoquées"
+            cd /opt/okxq && docker compose up -d --force-recreate api >/dev/null 2>&1 || true
+            # `restart` ne suffit PAS : il réutilise le conteneur, et un fichier d'environnement
+            # n'est relu qu'à la CRÉATION. La rotation semblait réussir — le fichier changeait — et
+            # l'ancienne clé restait valide dans le conteneur. Une révocation qui ne révoque rien est
+            # pire qu'une absence de rotation : on se croit protégé. D'où `--force-recreate`, et la
+            # vérification ci-dessous plutôt qu'une supposition.
+            for _ in $(seq 1 30); do
+              curl -s -o /dev/null --max-time 3 http://127.0.0.1:8899/health/live && break
+              sleep 2
+            done
+            NOUVELLE=$(printf okxq-ui-key:v1:admin | openssl dgst -sha256 -hmac "$NEUF" -r | cut -d" " -f1)
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 6 \
+              -H "Authorization: Bearer $NOUVELLE" http://127.0.0.1:8899/api/v1/system/status)
+            if [ "$CODE" != "200" ]; then
+              echo "::error::la NOUVELLE clé est refusée ($CODE) : le conteneur n a pas relu son environnement, l ancienne clé reste donc valide"
+              exit 1
+            fi
+            echo "  nouvelle clé acceptée (200) : les clés dérivées précédentes sont bien révoquées"
             echo "  la lire (sur CETTE machine) :"
             echo "      S=\$(grep ^OPERATOR_AUTH_SECRET= /opt/okxq/env/api.env | cut -d= -f2-)"
             echo "      printf okxq-ui-key:v1:admin | openssl dgst -sha256 -hmac \"\$S\" -r | cut -d\" \" -f1"

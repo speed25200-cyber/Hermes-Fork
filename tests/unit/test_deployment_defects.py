@@ -303,3 +303,41 @@ def test_the_status_script_does_not_put_the_key_in_a_url() -> None:
     texte = (Path(__file__).resolve().parents[2] / "deploy" / "etat.sh").read_text(encoding="utf-8")
     assert "Authorization: Bearer" in texte
     assert "status?key=" not in texte, "le script remet la clé dans l'URL"
+
+
+def test_changing_an_env_file_recreates_the_container_instead_of_restarting_it() -> None:
+    """`docker compose restart` ne relit PAS le fichier d'environnement.
+
+    Un fichier `env_file` est lu à la CRÉATION du conteneur, pas à son redémarrage. Les trois
+    étapes qui posent une clé — OKX, TypeSafe, et la rotation de la clé opérateur — utilisaient
+    `restart` : le fichier changeait, le conteneur gardait l'ancienne valeur. La rotation semblait
+    réussir et l'ancienne clé restait valide.
+
+    C'est le pire mode d'échec pour une révocation : on se croit protégé. Il a été trouvé parce que
+    le script d'état a reçu un `403` avec la clé dérivée du NOUVEAU secret — le diagnostic a fait
+    son travail.
+    """
+    import yaml
+
+    racine = Path(__file__).resolve().parents[2]
+    texte = (racine / ".github" / "workflows" / "vps-status.yml").read_text(encoding="utf-8")
+    document = yaml.safe_load(texte)
+    assert document["jobs"]["status"]["steps"], "workflow vide : ce test ne vérifierait rien"
+
+    assert "docker compose restart" not in texte, (
+        "un `restart` après avoir écrit un fichier d'environnement ne prend pas la nouvelle valeur"
+    )
+    assert texte.count("--force-recreate") >= 3, "les trois poses de clé doivent recréer leur service"
+
+
+def test_the_rotation_verifies_the_new_key_instead_of_assuming_it() -> None:
+    """Une révocation doit être CONSTATÉE, pas supposée.
+
+    Sans ce contrôle, l'étape se terminait en vert alors que rien n'avait été révoqué.
+    """
+    racine = Path(__file__).resolve().parents[2]
+    texte = (racine / ".github" / "workflows" / "vps-status.yml").read_text(encoding="utf-8")
+    debut = texte.index("Tourner la clé opérateur")
+    etape = texte[debut : debut + 3000]
+    assert "Authorization: Bearer" in etape, "la vérification doit présenter la nouvelle clé"
+    assert 'if [ "$CODE" != "200" ]' in etape, "l'étape doit ÉCHOUER si la nouvelle clé est refusée"
