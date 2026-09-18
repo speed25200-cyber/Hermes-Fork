@@ -94,6 +94,39 @@ un par un. Deux tests que j'avais moi-même écrits étaient creux (ils comparai
 `tests/unit/test_no_hollow_tests.py` interdit désormais ce motif, et l'assertion de l'en-tête
 `x-simulated-trading` a été réécrite en toutes lettres après qu'une mutation l'eut traversée.
 
+## Défauts trouvés PAR LE DÉPLOIEMENT RÉEL
+
+Sept défauts qu'aucun test hors ligne ne pouvait voir, parce que la suite partage trois hypothèses
+tacites toutes fausses en exploitation : le paquet est INSTALLÉ (pas une copie de travail), la racine
+du conteneur est en LECTURE SEULE, et CINQ processus tournent sur la même base.
+
+| Défaut | Effet observable | Correction |
+| --- | --- | --- |
+| Manifeste de capacités atteint par `Path(__file__).parents[4]` | Introuvable une fois le paquet installé : aucune découverte d'univers, **aucune donnée de marché**, SOFT_HALT/DATA_STALE perpétuel. La plateforme était vivante et incapable de rien | le manifeste voyage avec le paquet ; vérifié en construisant la roue |
+| Alertes écrites sous `data/` | Volume en lecture seule pour la stratégie, absent pour risque/gateway/JEV : **quatre rôles sur cinq** ne pouvaient écrire aucune alerte, dont celui du risque | elles vont sous `runtime/`, un fichier par rôle |
+| Les cinq rôles faisaient tourner la boucle décisionnelle | Quatre `decision` par minute sur le même compte, collisions d'unicité | seul `strategy` décide, seul `risk` conduit la protection, les autres la RELISENT (`KillSwitch.refresh`) |
+| Instantané de compte réinséré à chaque frontière | Une `ERROR` PostgreSQL par minute ; un journal plein d'erreurs attendues cache celles qui ne le sont pas | on vérifie avant d'écrire ; la contrainte reste le garde-fou de course |
+| `etat.sh` présentait le SECRET comme clé d'accès | `403` permanent : un diagnostic qui ressemblait à une panne d'authentification | la clé est DÉRIVÉE du secret par HMAC, comme le fait l'API |
+| **Clé d'accès en clair dans un journal public** | Le journal d'uvicorn écrit l'URL complète ; recopié par un workflow, il a publié une clé admin | masquage des justificatifs en chaîne de requête, interrogation par en-tête `Authorization`, et action de rotation vérifiée |
+| `docker compose restart` après avoir changé un `env_file` | Un `env_file` n'est lu qu'à la CRÉATION : **la rotation ne révoquait rien** et se déclarait réussie | `up -d --force-recreate --no-deps`, et la rotation ÉCHOUE si la nouvelle clé n'est pas acceptée |
+
+Deux erreurs de ma part méritent d'être nommées, parce qu'elles n'étaient pas dans le code métier :
+
+- **Une apostrophe française coupait le script distant en deux.** Les blocs envoyés à `ssh` sont des
+  chaînes entre guillemets simples ; « L'échec n'est plus avalé » la refermait, et la suite tournait
+  sur le runner GitHub au lieu du serveur. Le symptôme (`cd: /opt/okxq: No such file or directory`)
+  était vrai, et ne désignait pas la cause. La rotation vit maintenant dans un fichier envoyé par
+  l'entrée standard, et un test interdit le motif.
+- **Une hypothèse fausse assumée puis corrigée** : j'ai d'abord attribué l'arrêt de l'API à un profil
+  compose manquant. Vérification faite, aucun service n'en déclare. La vraie cause était `depends_on`
+  — recréer `api` recréait PostgreSQL et rejouait les migrations. Le test écrit sur la fausse piste a
+  été remplacé.
+
+Le déploiement a aussi CONFIRMÉ trois correctifs du jour, en production : `capital_papier_inscrit
+100000 USDT`, `day_start_equity=100000` dans l'état persisté, et le kill switch qui s'arme seul
+(`halt_change NONE → SOFT_HALT, declencheurs=data_stale`). Le collecteur discute réellement avec OKX :
+467 instruments retenus, 15 écartés, WebSocket public connecté.
+
 ## Défauts connus, non corrigés
 
 - `features/derivatives.py` : `time_to_next_funding_s` peut être décalé d'un intervalle de funding
