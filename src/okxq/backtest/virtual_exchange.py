@@ -32,7 +32,7 @@ from okxq.backtest.fills import DepthReservation, match_aggressive, post_only_wo
 from okxq.backtest.latency import LatencyKind, LatencyModel
 from okxq.backtest.market_state import BookView, MarketState, Trade
 from okxq.backtest.queue_models import QueueAssumption, QueueState, initial_ahead
-from okxq.domain.clocks import SimulatedClock
+from okxq.domain.clocks import Clock
 from okxq.domain.errors import ExchangeError
 from okxq.domain.events import (
     Fill,
@@ -155,7 +155,9 @@ class VirtualExchange:
     def __init__(
         self,
         *,
-        clock: SimulatedClock,
+        # N'importe quelle horloge du protocole convient : le simulateur ne lit que `now_utc()`. Un
+        # processus PAPER en marche l'alimente avec l'horloge système, un backtest avec une horloge simulée.
+        clock: Clock,
         market: MarketState,
         account_scope: str = "paper-local",
         initial_cash: Decimal = Decimal("100000"),

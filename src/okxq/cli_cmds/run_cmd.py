@@ -17,7 +17,7 @@ import typer
 from okxq.cli_cmds._common import emit, load_or_exit, not_implemented
 from okxq.config.live_guard import verify_live_authorization
 from okxq.config.modes import Mode
-from okxq.domain.errors import LiveGuardError
+from okxq.domain.errors import LiveGuardError, OkxqError
 
 paper_app = typer.Typer(help="Mode PAPER : données publiques réelles, ordres simulés localement.")
 shadow_app = typer.Typer(help="Mode SHADOW : décisions archivées avant résultat, aucun ordre.")
@@ -42,7 +42,16 @@ def _run(config: Path, expected: Mode, role: str, max_minutes: float | None) -> 
     except ModuleNotFoundError:
         not_implemented(f"okxq {expected.value.lower()} run (composition non livrée)")
         return
-    asyncio.run(composition.run_process(cfg, role=role, max_minutes=max_minutes))
+    try:
+        report = asyncio.run(composition.run_process(cfg, role=role, max_minutes=max_minutes))
+    except OkxqError as exc:
+        # Un refus de démarrage est une réponse, pas un incident : l'opérateur doit lire le motif et
+        # le remède, pas une trace d'appels. Le code de sortie reste non nul.
+        emit({"ok": False, "error": exc.code, "message": str(exc), **exc.context})
+        raise typer.Exit(code=1) from exc
+    emit(report)
+    if not report.get("ok"):
+        raise typer.Exit(code=1)
 
 
 @paper_app.command("run")

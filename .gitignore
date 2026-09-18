@@ -22,13 +22,18 @@ coverage.xml
 htmlcov/
 
 # Données et artefacts générés (le manifeste est versionné, pas les partitions)
-data/
-artifacts/*
-!artifacts/.gitkeep
-reports/*
-!reports/.gitkeep
-runtime/
-logs/
+#
+# Ces motifs sont ANCRÉS à la racine (barre oblique de tête). Sans elle, `data/` et `runtime/`
+# excluraient TOUT répertoire de ce nom à n'importe quelle profondeur — y compris `src/okxq/data/`
+# et `src/okxq/runtime/`, c'est-à-dire la couche de données et le runtime de la plateforme. Le code
+# aurait alors continué à fonctionner sur le disque local tout en n'étant jamais versionné.
+/data/
+/artifacts/*
+!/artifacts/.gitkeep
+/reports/*
+!/reports/.gitkeep
+/runtime/
+/logs/
 *.parquet
 *.duckdb
 
