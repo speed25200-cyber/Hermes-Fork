@@ -56,7 +56,10 @@ poser() { # fichier clé valeur
 # Clé opérateur : fournie (OKXQ_OPERATOR_KEY_POSE) > existante > générée.
 if [ -z "${OKXQ_OPERATOR_KEY_POSE:-}" ] && ! grep -q "^OPERATOR_AUTH_SECRET=.\+" "$ENVDIR/api.env" 2>/dev/null; then
   OKXQ_OPERATOR_KEY_POSE=$(openssl rand -hex 16)
-  echo "  clé opérateur GÉNÉRÉE (jamais imprimée) : relancer avec l'entrée jeton pour en poser une connue"
+  echo "  clé opérateur GÉNÉRÉE (jamais imprimée)."
+  echo "  Pour la lire, depuis CETTE machine :"
+  echo "      grep OPERATOR_AUTH_SECRET /opt/okxq/env/api.env"
+  echo "  Pour en poser une connue à la place : secret de dépôt OKXQ_OPERATOR_KEY, puis relancer."
 fi
 poser api.env OPERATOR_AUTH_SECRET "${OKXQ_OPERATOR_KEY_POSE:-}"
 # Mot de passe PostgreSQL interne : généré une fois, partagé entre postgres et les services qui lisent la base.

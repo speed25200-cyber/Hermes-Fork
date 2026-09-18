@@ -185,5 +185,26 @@ jobs:
         if: always()
         run: |
           sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" bash -s < deploy/etat.sh || true
-          echo
-          echo "Adresse de l'interface : http://$VPS:8899/?key=<votre clé opérateur>"
+          # La clé opérateur n'est JAMAIS imprimée ici. Le journal d'un run est lisible par tout le
+          # monde sur un dépôt public : l'afficher donnerait l'accès à l'interface à n'importe qui.
+          # On donne donc la commande qui la lit sur la machine, à son propriétaire.
+          {
+            echo "## Accès à l'interface"
+            echo
+            echo "Adresse : \`http://$VPS:8899/?key=<votre clé opérateur>\`"
+            echo
+            echo "Une réponse **403 sans clé est le bon comportement** : la porte est fermée."
+            echo
+            echo "### Lire votre clé"
+            echo
+            echo "Elle a été générée sur la machine et n'est imprimée nulle part — ni ici, ni dans"
+            echo "les journaux. Depuis le terminal Hetzner (ou en SSH \`root@$VPS\`) :"
+            echo
+            echo '```sh'
+            echo "grep OPERATOR_AUTH_SECRET /opt/okxq/env/api.env | cut -d= -f2-"
+            echo '```'
+            echo
+            echo "Pour imposer une clé que vous choisissez : posez le secret de dépôt"
+            echo "\`OKXQ_OPERATOR_KEY\`, puis relancez ce workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Interface : http://$VPS:8899/ — clé à lire sur la machine (voir le résumé du run)."
