@@ -299,6 +299,21 @@ class KillSwitch:
     def state(self) -> RiskStateRecord:
         return self._state
 
+    def refresh(self) -> RiskStateRecord:
+        """Relit l'état persisté sans rien écrire. Pour les rôles qui NE conduisent PAS la protection.
+
+        Un seul processus doit faire avancer la machine d'état (``observe``) : deux écrivains sur la
+        même ligne ``risk_state`` se disputeraient la version optimiste, et chacun recalculerait la
+        frontière de jour de son côté. Mais tous les autres rôles doivent VOIR le halt que celui-là a
+        décidé — sinon la stratégie continuerait de décider sur le niveau chargé à sa construction,
+        c'est-à-dire sur l'état du monde au démarrage du processus. Un halt qu'on ne relit pas est un
+        halt qui ne protège que le processus qui l'a levé.
+        """
+        loaded = self._store.load(self._scope)
+        if loaded is not None:
+            self._state = loaded
+        return self._state
+
     @property
     def level(self) -> HaltLevel:
         return self._state.halt_level

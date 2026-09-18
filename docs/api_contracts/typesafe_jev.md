@@ -1,5 +1,5 @@
 <!-- Document GÉNÉRÉ par scripts/render_api_contracts.py — ne pas modifier à la main.
-     La source de vérité est le code et infra/capability_manifest.json. -->
+     La source de vérité est le code et src/okxq/exchange/okx/capability_manifest.json. -->
 
 # TypeSafe — contrat JEV (§49, §50, §52)
 

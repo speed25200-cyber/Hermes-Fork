@@ -441,9 +441,24 @@ class AlertManager:
         return alert
 
 
+#: Les alertes sont une sortie d'EXPLOITATION, pas une donnée de marché.
+#:
+#: Elles s'écrivaient sous ``data/``, qui porte les données de marché. En conteneur, ce volume est
+#: monté en LECTURE SEULE pour la stratégie (elle lit le marché, elle ne l'écrit pas) et n'est pas
+#: monté du tout pour le risque, le gateway et le worker JEV. Quatre rôles sur cinq ne pouvaient donc
+#: pas écrire une alerte — y compris le rôle RISQUE, celui dont les alertes comptent le plus. Le
+#: système le signalait (« alerte non délivrée ») au lieu de la perdre en silence, mais une alerte
+#: signalée non délivrée reste une alerte non délivrée.
+#:
+#: ``runtime/`` est monté en écriture pour tous les rôles : c'est là que vivent les sorties
+#: opérationnelles. Chaque rôle écrit dans son propre fichier, sinon cinq processus se disputeraient
+#: la même ligne.
+DEFAULT_ALERT_SINK = "runtime/alerts/alerts.jsonl"
+
+
 def build_default_manager(
     *,
-    sink_path: str | Path = "data/alerts/alerts.jsonl",
+    sink_path: str | Path = DEFAULT_ALERT_SINK,
     alert_sink: str = "local",
     webhook_url: str | None = None,
     webhook_transport: WebhookTransport | None = None,
