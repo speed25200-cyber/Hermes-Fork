@@ -3,7 +3,7 @@
 <!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute
      correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->
 
-Source : `reports/junit.xml` — 825 cas collectés, 825 verts, 0 échecs, 0 erreurs, 0 sautés.
+Source : `reports/junit.xml` — 835 cas collectés, 835 verts, 0 échecs, 0 erreurs, 0 sautés.
 
 Niveaux présents dans ce rapport : `contract`, `e2e`, `integration`, `property`, `unit`. Les tests `integration` (schéma et migrations sur PostgreSQL) ont été RÉELLEMENT exécutés contre un serveur PostgreSQL 16. La suite ne contient AUCUN test `connected` : rien ici n'a été confronté au vrai OKX ni au vrai service TypeSafe. Toute exigence qui demande un appel réel reste `NOT_RUN` par construction, et un `PASS` sur fixtures ne la remplace pas.
 

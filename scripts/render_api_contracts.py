@@ -28,11 +28,11 @@ from okxq.jev.client import (  # noqa: E402
     USER_AGENT,
 )
 
-MANIFEST = ROOT / "infra" / "capability_manifest.json"
+MANIFEST = ROOT / "src" / "okxq" / "exchange" / "okx" / "capability_manifest.json"
 OUT_DIR = ROOT / "docs" / "api_contracts"
 GENERATED = (
     "<!-- Document GÉNÉRÉ par scripts/render_api_contracts.py — ne pas modifier à la main.\n"
-    "     La source de vérité est le code et infra/capability_manifest.json. -->\n"
+    "     La source de vérité est le code et src/okxq/exchange/okx/capability_manifest.json. -->\n"
 )
 
 

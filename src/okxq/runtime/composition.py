@@ -112,6 +112,23 @@ ROLES: tuple[str, ...] = ("all", "collector", "strategy", "risk", "gateway", "je
 #: Seul rôle autorisé à détenir des identifiants d'échange (principe de séparation des secrets).
 CREDENTIALED_ROLE = "gateway"
 
+#: Rôles qui font tourner la BOUCLE DÉCISIONNELLE. Les autres processus observent, exécutent ou
+#: servent, mais ne décident pas.
+#:
+#: Tous les rôles la faisaient tourner : le collecteur, le risque, le gateway et le worker JEV
+#: produisaient chacun leurs propres décisions sur le même compte. Quatre boucles concurrentes sur
+#: un état partagé, là où §52 n'en veut qu'une — visible en exploitation par quatre lignes
+#: `decision` par minute et par des collisions sur la contrainte d'unicité des instantanés de
+#: compte. Inoffensif tant que tout est halté et rend NO_TRADE ; une course à quatre dès que les
+#: données arrivent.
+DECIDING_ROLES: frozenset[str] = frozenset({"strategy", "all"})
+
+#: Rôles qui CONDUISENT la protection (écrivent dans ``risk_state``). Un seul écrivain : la machine
+#: d'état du kill switch porte une version optimiste, et deux processus qui l'avancent se la
+#: disputent. Les autres rôles relisent l'état persisté (``KillSwitch.refresh``) pour voir le halt
+#: décidé ailleurs.
+PROTECTION_ROLES: frozenset[str] = frozenset({"risk", "all"})
+
 #: Variables d'environnement portant les identifiants OKX. Listées ici pour pouvoir VÉRIFIER qu'un
 #: rôle non autorisé ne les a pas reçues, jamais pour les lire ailleurs que dans le gateway.
 OKX_CREDENTIAL_VARS: tuple[str, ...] = ("OKX_API_KEY", "OKX_API_SECRET", "OKX_API_PASSPHRASE")
@@ -1519,7 +1536,8 @@ async def run_process(
     )
     bind_context(mode=cfg.mode.value, role=role, account_scope=cfg.account.scope)
     rt = build_runtime(cfg, role=role, clock=clock, session_factory=session_factory)
-    alerts = build_default_manager(clock=rt.clock)
+    # Un fichier par rôle : cinq processus qui écrivent la même ligne se marchent dessus.
+    alerts = build_default_manager(clock=rt.clock, sink_path=f"runtime/alerts/{role}.jsonl")
     report: dict[str, Any] = {"mode": cfg.mode.value, "role": role, "ok": False}
     try:
         rt.exchange = build_exchange_adapter(cfg, role=role, clock=rt.clock, market=rt.market)
@@ -1531,7 +1549,10 @@ async def run_process(
             report["collector"] = await start_collection(rt)
         startup = await build_startup_sequence(rt).run()
         report["startup"] = startup.as_dict()
-        rt.loop = build_decision_loop(rt)
+        if role in DECIDING_ROLES:
+            rt.loop = build_decision_loop(rt)
+        report["decide"] = role in DECIDING_ROLES
+        report["conduit_la_protection"] = role in PROTECTION_ROLES
         scheduler = DecisionScheduler(
             clock=rt.clock,
             interval_seconds=cfg.runtime.decision_interval_seconds,
@@ -1572,14 +1593,26 @@ async def run_process(
 
 
 def _boundary_callback(rt: Runtime) -> Callable[[datetime, datetime], Awaitable[object]]:
+    """Ce que fait un processus à chaque frontière de minute, selon SON rôle.
+
+    Tout rôle regarde la protection ; un seul la fait avancer ; un seul décide. La frontière reste
+    le battement commun — un rôle qui ne décide pas doit quand même constater qu'il est vivant et
+    voir le halt en cours.
+    """
+
     async def on_boundary(boundary: datetime, deadline: datetime) -> object:
-        loop = rt.loop
-        if loop is None:
-            return None
         rt.health.touch(health_names.STRATEGY)
         # La protection automatique s'évalue AVANT la décision : décider d'abord, puis constater le
         # halt, laisserait passer exactement une décision de trop.
-        observe_health(rt)
+        if rt.role in PROTECTION_ROLES:
+            observe_health(rt)
+        else:
+            # Lecture seule : voir le halt décidé par le rôle `risk`, sans se disputer sa ligne.
+            rt.kill_switch.refresh()
+            rt.metrics.set_halt_state(rt.kill_switch.level.value)
+        loop = rt.loop
+        if loop is None:
+            return None
         record = await loop.run_once(boundary, deadline)
         log.info(
             "decision",

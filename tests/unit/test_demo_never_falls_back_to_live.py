@@ -47,7 +47,7 @@ INST = "BTC-USDT-SWAP"
 #: Domaines attendus par profil, écrits EN TOUTES LETTRES pour la même raison que l'en-tête de
 #: simulation : les relire depuis `REGION_PROFILES` ferait comparer le code à lui-même, et une
 #: édition malencontreuse qui ferait pointer `eea` vers le domaine global passerait inaperçue.
-#: Source : `infra/capability_manifest.json` et docs-v5, consultés le 2026-09-18.
+#: Source : `src/okxq/exchange/okx/capability_manifest.json` et docs-v5, consultés le 2026-09-18.
 DOMAINES_ATTENDUS = {
     "global": "https://www.okx.com",
     "eea": "https://eea.okx.com",

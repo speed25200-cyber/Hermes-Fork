@@ -1,4 +1,4 @@
-"""Manifeste de capacités OKX (``infra/capability_manifest.json``) et profil par configuration (§46).
+"""Manifeste de capacités OKX (donnée du paquet) et profil par configuration (§46).
 
 Le profil dérivé d'une configuration fixe : le profil régional (domaines REST/WS), le canal de carnet et sa
 profondeur, les canaux publics souscrits, et la liste des features REFUSÉES parce qu'elles exigent plus de
@@ -20,7 +20,20 @@ from okxq.config.schema import AppConfig
 from okxq.domain.errors import ConfigError
 from okxq.exchange.okx.mappings import PRIVATE_CHANNELS, is_business_channel
 
-DEFAULT_MANIFEST_PATH = Path(__file__).resolve().parents[4] / "infra" / "capability_manifest.json"
+#: Le manifeste voyage AVEC le paquet, à côté de ce module.
+#:
+#: Il vivait auparavant dans ``infra/`` et était atteint par ``Path(__file__).parents[4]`` — « quatre
+#: niveaux au-dessus, c'est la racine du dépôt ». Vrai dans une copie de travail, faux partout
+#: ailleurs : installé dans un environnement (``uv sync --no-editable``), ce module est sous
+#: ``site-packages/okxq/exchange/okx/``, et quatre niveaux au-dessus désignent
+#: ``.../lib/python3.12``. En conteneur, le fichier n'était donc jamais trouvé — et ``infra/``
+#: n'était même pas copié dans l'image. Le collecteur échouait à découvrir l'univers, aucune donnée
+#: de marché n'arrivait, et la plateforme restait indéfiniment en SOFT_HALT/DATA_STALE. Aucun test
+#: hors ligne ne pouvait le voir : ils tournent tous depuis une copie de travail.
+#:
+#: Une donnée dont le code a besoin pour fonctionner appartient au paquet. Résolue relativement à
+#: ``__file__`` sans remonter d'un seul niveau, elle est trouvée dans les deux dispositions.
+DEFAULT_MANIFEST_PATH = Path(__file__).resolve().parent / "capability_manifest.json"
 REGION_ENV_VAR = "OKX_ACCOUNT_REGION_PROFILE"
 
 #: canaux publics souscrits par défaut (en plus du canal de carnet configuré)
