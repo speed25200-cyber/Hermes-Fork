@@ -126,6 +126,24 @@ class SolverError(OkxqError):
     code = "SOLVER_FAILED"
 
 
+class HorizonMismatchError(UnitError):
+    """Mélange d'horizons dans une même optimisation (§51) : refusé, jamais converti par division."""
+
+    code = "HORIZON_MISMATCH"
+
+
+class CovarianceError(DataQualityError):
+    """Échantillon insuffisant, valeurs non finies ou matrice non réparable (§51)."""
+
+    code = "COVARIANCE_INVALID"
+
+
+class HaltError(OkxqError):
+    """Action refusée par le niveau de halt courant ou reprise sans préconditions (§53)."""
+
+    code = "HALT_ACTIVE"
+
+
 class LedgerError(OkxqError):
     code = "LEDGER_INVALID"
 
