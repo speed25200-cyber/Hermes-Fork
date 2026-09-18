@@ -28,6 +28,7 @@ est conservée puis étendue.
 | Sécurité du dépôt | `scripts/security_check.py` | aucune anomalie sur les fichiers indexés |
 | Scripts de déploiement | `bash -n` sur `deploy/*.sh`, `infra/*.sh` | syntaxe valide |
 | Compose | `docker compose config` | valide ; séparation des secrets prouvée service par service |
+| **Intégration continue** | workflow `ci.yml` sur GitHub | **verte** : lint, format, types, contrôles de sécurité, tests hermétiques, parcours hors ligne, tests d'interface |
 
 ## 3. Ce qui n'a PAS été exécuté, et pourquoi
 
@@ -46,6 +47,21 @@ Les 22 identifiants encore NOT_RUN de la matrice (T23–T26, T36, T37, T40–T43
 T57, T59, T61, T63, T67, T68) sont listés sans être masqués dans `docs/test_matrix.md`. Pour
 plusieurs d'entre eux l'assertion existe dans le code sans qu'un test porte l'identifiant ; pour les
 autres, l'accès manquant est la cause.
+
+## 3bis. Un point de visibilité à trancher
+
+`speed25200-cyber/Hermes-Fork` est un dépôt **PUBLIC** ; `speed25200-cyber/Hermes` est privé.
+
+Aucun secret n'y est committé — `scripts/security_check.py` le vérifie à chaque exécution et la CI
+l'exécute. Mais la CONCEPTION complète de la plateforme y est lisible par tout le monde :
+architecture, limites de risque, politique d'exécution, et `docs/threat_model.md` qui décrit
+précisément les défenses et leurs limites.
+
+Ce n'est pas une fuite, et ce n'est peut-être pas un problème. C'est une décision qui vous
+appartient, et je la signale parce qu'elle n'est pas évidente en regardant le dépôt. Si la
+visibilité devait passer en privé, une seule chose casserait : le workflow de migration du dépôt
+`Hermes` récupère la plateforme sans jeton parce qu'elle est publique ; il faudrait lui passer un
+`token:`. C'est écrit dans son commentaire et dans `MIGRATION.md`.
 
 ## 4. Aucune preuve d'avantage de marché
 
@@ -113,6 +129,11 @@ significatifs :
    d'arguments de la vraie CLI ; deux versions antérieures de ce test étaient elles-mêmes vacuoles
    (l'aide court-circuite l'analyse ; Typer embarque sa propre copie de Click, ce qui rendait les
    tests de type toujours faux) et le commentaire du test le documente.
+8bis. Le contrôle local de lint rendait un verdict PÉRIMÉ. La CI refusait deux fichiers que
+   `ruff check` déclarait propres, avec la même version et la même commande : c'était le cache de
+   ruff. J'avais rapporté « ruff propre » sur la foi d'un résultat mis en cache. `make lint` passe
+   désormais `--no-cache` et `make typecheck` `--no-incremental` : un garde-fou qui affirme le
+   contraire de la vérité est pire que pas de garde-fou.
 8. Le chemin de prix des labels était échantillonné sur l'horodatage brut du premier événement,
    décalé de la latence d'ingestion, alors que les décisions sont alignées sur la minute. Aucun point
    ne tombait dans la fenêtre d'entrée et **100 % des labels sortaient NO_ENTRY** : le jeu
