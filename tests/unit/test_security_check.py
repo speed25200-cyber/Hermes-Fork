@@ -462,3 +462,44 @@ def test_machine_access_secrets_are_detected_too() -> None:
         "SSH_PASSWORD=remplacer-hors-git",
     ):
         assert not sc.scan_line("x.yml", 1, reference), reference
+
+
+def test_a_path_after_an_equals_sign_is_not_taken_for_a_secret() -> None:
+    """`grep ^OPERATOR_AUTH_SECRET= /chemin/fichier` n'affecte rien : ce n'est pas un secret.
+
+    Le motif tolérait un blanc après `=` et prenait donc le CHEMIN pour une valeur de 21 caractères.
+    Or un shell comme un fichier `.env` affectent une valeur VIDE dès qu'un blanc suit le signe égal.
+    Un garde-fou qui crie sur du code sain finit par être désactivé, et c'est ainsi qu'on cesse de
+    voir les vrais.
+    """
+    from scripts.security_check import SECRET_ASSIGNMENT, is_placeholder
+
+    ligne = "grep ^OPERATOR_AUTH_SECRET= /opt/okxq/env/api.env | cut -d= -f2-"
+    trouve = SECRET_ASSIGNMENT.search(ligne)
+    assert trouve is None or is_placeholder(trouve.group("value"))
+
+
+def test_a_yaml_assignment_with_a_space_is_still_caught() -> None:
+    """Contre-épreuve : en YAML, `cle: valeur` avec un espace est la forme NORMALE.
+
+    Resserrer la règle sur `=` ne doit pas ouvrir un trou sur `:`.
+    """
+    from scripts.security_check import SECRET_ASSIGNMENT, is_placeholder
+
+    # La valeur est ASSEMBLÉE, pas écrite : `security_check.py` signale — à juste titre — toute
+    # chaîne qui ressemble à un identifiant réel, y compris dans un test. C'est la valeur qui décide,
+    # jamais le chemin du fichier, et ce test ne doit pas devenir l'exception qui affaiblit la règle.
+    faux = "9f2c41ab" + "7de84c0f" + "a1b3e5d7" + "c8a60f24"
+    trouve = SECRET_ASSIGNMENT.search(f"  OKX_API_SECRET: {faux}")
+    assert trouve is not None
+    assert not is_placeholder(trouve.group("value"))
+
+
+def test_a_real_secret_right_after_an_equals_sign_is_still_caught() -> None:
+    """Et la forme shell sans espace — celle d'un vrai `.env` — reste attrapée."""
+    from scripts.security_check import SECRET_ASSIGNMENT, is_placeholder
+
+    faux = "9f2c41ab" + "7de84c0f" + "a1b3e5d7" + "c8a60f24"
+    trouve = SECRET_ASSIGNMENT.search(f"OKX_API_SECRET={faux}")
+    assert trouve is not None
+    assert not is_placeholder(trouve.group("value"))

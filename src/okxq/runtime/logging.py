@@ -72,6 +72,25 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     # identifiants dans une URL : scheme://user:password@host
     (re.compile(r"(\b[a-z][a-z0-9+.-]*://)([^:/@\s]+):([^@/\s]+)@"), r"\1\2:" + MASK + "@"),
+    # Justificatif porté par la CHAÎNE DE REQUÊTE : `?key=…`, `&token=…`.
+    #
+    # Ce motif manquait, et le trou n'était pas théorique : le journal d'accès d'uvicorn écrit
+    # l'URL complète, si bien que la clé d'accès dérivée est apparue EN CLAIR dans un journal de
+    # conteneur — puis, ce journal étant recopié par un workflow, dans une page publique. Le
+    # masquage par valeur littérale ne pouvait pas l'attraper : la clé dérivée n'est la valeur
+    # d'aucune variable d'environnement, elle est CALCULÉE à partir du secret.
+    #
+    # C'est la raison de fond pour laquelle un justificatif n'a rien à faire dans une URL : elle
+    # traverse les journaux d'accès, les journaux de proxy, l'historique du navigateur et l'en-tête
+    # Referer. Le masquage limite les dégâts ; il ne remplace pas l'en-tête `Authorization`.
+    (
+        re.compile(
+            r"([?&](?:key|token|access[_-]?token|api[_-]?key|secret|passphrase|password|"
+            r"sig|signature|auth)=)([^&\s\"\'#]+)",
+            re.I,
+        ),
+        r"\1" + MASK,
+    ),
 )
 
 # Défaut None puis copie à l'écriture : un dictionnaire par défaut serait partagé entre contextes.

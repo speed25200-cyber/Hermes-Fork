@@ -261,3 +261,45 @@ async def test_an_unchanged_account_is_not_re_inserted_every_minute() -> None:
     with factory() as session:
         lignes = session.scalar(select(func.count()).select_from(AccountSnapshot))
     assert lignes == 1, f"{lignes} instantanés pour un compte immobile : une insertion par frontière"
+
+
+#: Cas réel : cette clé dérivée est apparue en clair dans un journal de conteneur, puis dans la page
+#: publique du workflow qui recopiait ce journal.
+LIGNE_FUITEE = (
+    "GET /api/v1/system/status?key=4b3833147cdc4dcde7f9b42988e2d5d17363e83b1fd5986a9da4ec16ec96d3f5"
+    ' HTTP/1.1" 200'
+)
+
+
+def test_a_credential_in_a_query_string_is_masked_in_logs() -> None:
+    """Le journal d'accès écrit l'URL complète : le masquage doit couvrir la chaîne de requête.
+
+    Le masquage par valeur LITTÉRALE ne pouvait pas attraper celle-ci : la clé d'accès est dérivée
+    du secret par HMAC, elle n'est la valeur d'aucune variable d'environnement. Seul un motif sur la
+    forme `?key=…` la couvre.
+    """
+    from okxq.runtime.logging import get_masker
+
+    masque = get_masker().mask({"event": LIGNE_FUITEE})["event"]
+    assert "4b3833147cdc" not in masque, "la clé est encore lisible dans le journal"
+    assert "key=***" in masque
+
+
+def test_masking_a_query_string_does_not_swallow_ordinary_parameters() -> None:
+    """Contre-épreuve : un masquage trop large rendrait les journaux inutilisables."""
+    from okxq.runtime.logging import get_masker
+
+    masque = get_masker().mask({"event": "GET /api/v1/decisions?limit=50&inst_id=BTC-USDT-SWAP"})["event"]
+    assert "limit=50" in masque and "BTC-USDT-SWAP" in masque
+
+
+def test_the_status_script_does_not_put_the_key_in_a_url() -> None:
+    """Masquer limite les dégâts ; ne pas mettre le justificatif dans l'URL les évite.
+
+    Une URL traverse le journal d'accès du serveur, les journaux de proxy, l'historique du
+    navigateur et l'en-tête Referer. Le script d'état interroge donc l'API par l'en-tête
+    `Authorization`.
+    """
+    texte = (Path(__file__).resolve().parents[2] / "deploy" / "etat.sh").read_text(encoding="utf-8")
+    assert "Authorization: Bearer" in texte
+    assert "status?key=" not in texte, "le script remet la clé dans l'URL"

@@ -28,7 +28,12 @@ echo "===== statut système (API locale, clé DÉRIVÉE du secret, jamais imprim
 if [ -f "$DIR/env/api.env" ]; then
   SECRET=$(grep "^OPERATOR_AUTH_SECRET=" "$DIR/env/api.env" | tail -1 | cut -d= -f2-)
   CLE=$(printf 'okxq-ui-key:v1:admin' | openssl dgst -sha256 -hmac "$SECRET" -r | cut -d" " -f1)
-  curl -s --max-time 8 "http://127.0.0.1:${PORT}/api/v1/system/status?key=$CLE" | head -c 1500; echo
+  # La clé voyage par l'en-tête `Authorization`, JAMAIS par la chaîne de requête. Une URL traverse
+  # le journal d'accès du serveur, les journaux de proxy, l'historique du navigateur et l'en-tête
+  # Referer. C'est exactement ce qui s'est produit : la clé dérivée est apparue en clair dans le
+  # journal d'uvicorn, puis dans la page publique du workflow qui recopiait ce journal.
+  curl -s --max-time 8 -H "Authorization: Bearer $CLE" \
+    "http://127.0.0.1:${PORT}/api/v1/system/status" | head -c 1500; echo
 fi
 
 echo
