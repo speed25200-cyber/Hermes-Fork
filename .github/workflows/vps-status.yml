@@ -57,7 +57,15 @@ jobs:
             F=/opt/okxq/env/gateway.env; touch "$F"; chmod 600 "$F"
             for kv in "OKX_API_KEY=$K" "OKX_API_SECRET=$S" "OKX_API_PASSPHRASE=$P" "OKX_ACCOUNT_REGION_PROFILE=$R"; do
               k=${kv%%=*}; sed -i "/^$k=/d" "$F"; echo "$kv" >> "$F"; done
-            cd /opt/okxq && docker compose up -d --force-recreate gateway >/dev/null 2>&1 || true
+            # `--no-deps` est essentiel : sans lui, recréer un service recrée aussi ses dépendances
+            # — donc PostgreSQL et le service de migration, qui rejoue les migrations. L'API restait
+            # alors indisponible plus d'une minute, et la vérification concluait à tort que la
+            # nouvelle clé était refusée. Seul le service dont le fichier d'environnement a changé
+            # doit être recréé ; ses dépendances tournent déjà et n'ont rien à relire.
+            #
+            # L'échec n'est plus avalé (`>/dev/null 2>&1 || true`) : c'est ainsi qu'un service a pu
+            # rester à l'arrêt sans que l'étape s'en aperçoive.
+            cd /opt/okxq && docker compose up -d --force-recreate --no-deps gateway
             echo "  clés OKX posées dans env/gateway.env (gateway seul), gateway redémarré"
           '
 
@@ -70,7 +78,15 @@ jobs:
           printf '%s\n' "$T" | sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
             IFS= read -r T; F=/opt/okxq/env/jev-worker.env; touch "$F"; chmod 600 "$F"
             sed -i "/^TYPESAFE_API_KEY=/d" "$F"; echo "TYPESAFE_API_KEY=$T" >> "$F"
-            cd /opt/okxq && docker compose up -d --force-recreate jev-worker >/dev/null 2>&1 || true
+            # `--no-deps` est essentiel : sans lui, recréer un service recrée aussi ses dépendances
+            # — donc PostgreSQL et le service de migration, qui rejoue les migrations. L'API restait
+            # alors indisponible plus d'une minute, et la vérification concluait à tort que la
+            # nouvelle clé était refusée. Seul le service dont le fichier d'environnement a changé
+            # doit être recréé ; ses dépendances tournent déjà et n'ont rien à relire.
+            #
+            # L'échec n'est plus avalé (`>/dev/null 2>&1 || true`) : c'est ainsi qu'un service a pu
+            # rester à l'arrêt sans que l'étape s'en aperçoive.
+            cd /opt/okxq && docker compose up -d --force-recreate --no-deps jev-worker
             echo "  clé TypeSafe posée dans env/jev-worker.env, jev-worker redémarré"
           '
 
@@ -90,7 +106,15 @@ jobs:
             sed -i "/^OPERATOR_AUTH_SECRET=/d" "$F"
             printf "OPERATOR_AUTH_SECRET=%s\n" "$NEUF" >> "$F"
             chmod 600 "$F"
-            cd /opt/okxq && docker compose up -d --force-recreate api >/dev/null 2>&1 || true
+            # `--no-deps` est essentiel : sans lui, recréer un service recrée aussi ses dépendances
+            # — donc PostgreSQL et le service de migration, qui rejoue les migrations. L'API restait
+            # alors indisponible plus d'une minute, et la vérification concluait à tort que la
+            # nouvelle clé était refusée. Seul le service dont le fichier d'environnement a changé
+            # doit être recréé ; ses dépendances tournent déjà et n'ont rien à relire.
+            #
+            # L'échec n'est plus avalé (`>/dev/null 2>&1 || true`) : c'est ainsi qu'un service a pu
+            # rester à l'arrêt sans que l'étape s'en aperçoive.
+            cd /opt/okxq && docker compose up -d --force-recreate --no-deps api
             # `restart` ne suffit PAS : il réutilise le conteneur, et un fichier d'environnement
             # n'est relu qu'à la CRÉATION. La rotation semblait réussir — le fichier changeait — et
             # l'ancienne clé restait valide dans le conteneur. Une révocation qui ne révoque rien est
