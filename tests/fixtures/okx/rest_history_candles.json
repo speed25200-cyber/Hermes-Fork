@@ -1,0 +1,14 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#order-book-trading-market-data-get-candlesticks-history",
+  "_verified_at": "2026-09-18",
+  "_note": "GET /api/v5/market/history-candles?instId=BTC-USDT-SWAP&bar=1m&limit=100 : lignes [ts, o, h, l, c, vol (contrats), volCcy (base), volCcyQuote (USDT), confirm], du plus récent au plus ancien ; after = bougies strictement antérieures au ts donné. Ici la bougie 12:01 manque volontairement (trou détectable).",
+  "response": {
+    "code": "0",
+    "msg": "",
+    "data": [
+      ["1789732980000", "65008", "65015", "65001", "65010.5", "900", "9", "585050", "1"],
+      ["1789732920000", "65005.2", "65012", "64998", "65008", "1100", "11", "715060", "1"],
+      ["1789732800000", "65000.1", "65012.7", "64990.5", "65005.2", "2400", "24", "1560100", "1"]
+    ]
+  }
+}

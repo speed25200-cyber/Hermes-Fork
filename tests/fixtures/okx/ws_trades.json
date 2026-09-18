@@ -1,0 +1,28 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#order-book-trading-market-data-ws-trades-channel",
+  "_verified_at": "2026-09-18",
+  "_note": "Canal trades : 'side' est le côté du TAKER (buy = acheteur agresseur qui consomme les asks). sz en contrats. 'count' = nombre de trades agrégés dans le message.",
+  "message": {
+    "arg": { "channel": "trades", "instId": "BTC-USDT-SWAP" },
+    "data": [
+      {
+        "instId": "BTC-USDT-SWAP",
+        "tradeId": "130639474",
+        "px": "65000.1",
+        "sz": "2",
+        "side": "buy",
+        "ts": "1789732800123",
+        "count": "1"
+      },
+      {
+        "instId": "BTC-USDT-SWAP",
+        "tradeId": "130639475",
+        "px": "64999.9",
+        "sz": "1.5",
+        "side": "sell",
+        "ts": "1789732800456",
+        "count": "1"
+      }
+    ]
+  }
+}

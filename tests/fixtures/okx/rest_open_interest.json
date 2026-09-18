@@ -1,0 +1,12 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#public-data-rest-api-get-open-interest",
+  "_verified_at": "2026-09-18",
+  "_note": "GET /api/v5/public/open-interest?instType=SWAP&instId=BTC-USDT-SWAP : oi en contrats, oiCcy en devise de base, oiUsd en USD.",
+  "response": {
+    "code": "0",
+    "msg": "",
+    "data": [
+      { "instType": "SWAP", "instId": "BTC-USDT-SWAP", "oi": "1500000", "oiCcy": "15000", "oiUsd": "975000000", "ts": "1789732800500" }
+    ]
+  }
+}

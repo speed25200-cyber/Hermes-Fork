@@ -1,0 +1,11 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#public-data-websocket-mark-price-channel",
+  "_verified_at": "2026-09-18",
+  "_note": "Canal mark-price : markPx en USDT ; ts = horodatage du calcul.",
+  "message": {
+    "arg": { "channel": "mark-price", "instId": "BTC-USDT-SWAP" },
+    "data": [
+      { "instType": "SWAP", "instId": "BTC-USDT-SWAP", "markPx": "65000.05", "ts": "1789732800200" }
+    ]
+  }
+}
