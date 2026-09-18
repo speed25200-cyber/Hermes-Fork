@@ -70,7 +70,7 @@ PGPW=$(grep "^POSTGRES_PASSWORD=" "$ENVDIR/postgres.env" | cut -d= -f2-)
 poser postgres.env POSTGRES_USER okxq
 poser postgres.env POSTGRES_DB "okxq_${PROFILE}"
 DBURL="postgresql+psycopg://okxq:${PGPW}@postgres:5432/okxq_${PROFILE}"
-for svc in api collector strategy risk gateway jev-worker migrate; do
+for svc in api moteur collector strategy risk gateway jev-worker migrate; do
   poser "$svc.env" DATABASE_URL "$DBURL"
   poser "$svc.env" OKXQ_MODE "$(echo "$PROFILE" | tr '[:lower:]' '[:upper:]')"
 done

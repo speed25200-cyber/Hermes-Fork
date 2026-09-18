@@ -127,8 +127,38 @@ Le déploiement a aussi CONFIRMÉ trois correctifs du jour, en production : `cap
 (`halt_change NONE → SOFT_HALT, declencheurs=data_stale`). Le collecteur discute réellement avec OKX :
 467 instruments retenus, 15 écartés, WebSocket public connecté.
 
+## Pourquoi PAPER tournait sans rien faire
+
+Sept conteneurs sains, aucune erreur dans les journaux, et la plateforme incapable de rien. Le motif
+mérite d'être écrit, parce qu'aucun test unitaire ne pouvait le voir : chaque pièce fonctionnait,
+c'est leur ASSEMBLAGE qui ne tenait pas.
+
+L'état de marché (`MarketState`) vit **en mémoire**, dans le processus qui le remplit. Seul le rôle
+`collector` collecte, et il n'existe **aucun transport** de sa mémoire vers celle des autres rôles.
+Dans le découpage en six conteneurs, le processus qui DÉCIDE n'avait donc jamais vu une seule donnée
+de marché : sa porte de données restait fermée, le kill switch passait en `SOFT_HALT` sur
+`data_stale`, et chaque frontière rendait `NO_TRADE`. Indéfiniment.
+
+PAPER tourne désormais en **un seul processus** (`--role all`, service `moteur`) : collecte,
+features, décision, risque et exécution simulée partagent la même mémoire, dans le même ordre. C'est
+sans danger précisément en PAPER — la plateforme n'y ouvre aucune connexion privée
+(`build_exchange_adapter` rend un `VirtualExchange`), donc **aucun identifiant d'échange n'existe** :
+réunir les rôles ne réunit aucun secret.
+
+`tests/unit/test_topologie_compose.py` fixe l'invariant : tout processus qui décide doit collecter
+lui-même.
+
 ## Défauts connus, non corrigés
 
+- **DEMO et LIVE portent encore ce défaut de topologie**, et il n'est pas corrigeable en déplaçant
+  des conteneurs : le gateway y détient des clés et doit rester seul (§60). Il faut un vrai transport
+  de l'état de marché entre processus (message, base, mémoire partagée), qui reste à construire.
+  `tests/unit/test_topologie_compose.py` le déclare en `xfail(strict=True)` : le jour où le transport
+  existera, la suite échouera tant que ce fichier n'aura pas été rouvert et la correction actée.
+- **Aucun modèle n'est désigné** (`OKXQ_MODEL_ARTIFACT`) : même avec des données, la boucle rend
+  `NO_TRADE` avec `predictor_indisponible`. C'est voulu — §67 interdit qu'un modèle non validé pilote
+  quoi que ce soit — mais cela signifie que PAPER observe et n'entre jamais tant qu'aucun artefact
+  validé n'est enregistré.
 - `features/derivatives.py` : `time_to_next_funding_s` peut être décalé d'un intervalle de funding
   entier au voisinage exact d'un règlement. Observé, non corrigé, non masqué.
 - `place_orders_batch` n'attrape pas `ExchangeError` là où `place_order` le fait. L'asymétrie est
