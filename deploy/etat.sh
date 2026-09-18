@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 # État de la plateforme sur le VPS (poussé par `ssh ... bash -s`). N'imprime aucun secret.
 set -u
-DIR=/opt/okxq
-PORT=8899
+# Surchargeables pour que ce rapport soit TESTABLE. Il s'est trompé trois fois de suite en affirmant
+# qu'aucune décision n'avait lieu alors qu'il en arrivait une par minute ; un diagnostic faux coûte
+# plus cher qu'une absence de diagnostic, parce qu'on le croit.
+DIR=${OKXQ_DIR:-/opt/okxq}
+PORT=${OKXQ_PORT:-8899}
 
 # Le profil compose découle du mode, et non d'une convention écrite ici : c'est lui qui décide quels
 # services DOIVENT tourner, donc lui qui permet de repérer ceux qui tournent en trop.
 MODE=$(grep -h "^OKXQ_MODE=" "$DIR/env/api.env" 2>/dev/null | tail -1 | cut -d= -f2-)
 PROFIL=$(printf '%s' "${MODE:-PAPER}" | tr "[:upper:]" "[:lower:]")
+
+# `docker compose logs` SANS liste de services n'inclut que les services du profil actif — et aucun
+# profil n'est actif ici. Le conteneur `moteur`, déclaré sous `profiles: ["paper"]`, en était donc
+# absent : le diagnostic lisait les journaux de tout SAUF du seul processus qui décide, et
+# concluait « aucune décision » alors que des décisions étaient journalisées à chaque minute. Trois
+# rapports de suite ont ainsi affirmé le contraire de la réalité.
+#
+# On nomme donc explicitement les services présents. `ps` les liste tous, profils compris.
+SERVICES=$(cd "$DIR" 2>/dev/null && docker compose ps --format '{{.Service}}' 2>/dev/null | sed "/^$/d" | sort -u | tr '\n' ' ')
 
 echo "===== conteneurs ====="
 cd "$DIR" 2>/dev/null && docker compose ps 2>/dev/null || echo "  /opt/okxq absent ou compose indisponible"
@@ -47,10 +59,10 @@ echo "===== journaux applicatifs (20 dernières lignes par service) ====="
 # PostgreSQL est exclu VOLONTAIREMENT. Ses points de contrôle produisent une ligne toutes les cinq
 # minutes, sans rapport avec la plateforme, et noyaient tout le reste : un `tail` sur ce rapport ne
 # montrait plus que des « checkpoint complete ». Le diagnostic, lui, est en bas.
-if [ -n "${DIR:-}" ] && cd "$DIR" 2>/dev/null; then
-  SERVICES=$(docker compose ps --format '{{.Service}}' 2>/dev/null | grep -v "^postgres$" | sort -u | tr '\n' ' ')
+APPLICATIFS=$(printf '%s' "$SERVICES" | tr ' ' '\n' | grep -v "^postgres$" | tr '\n' ' ')
+if [ -n "$APPLICATIFS" ] && cd "$DIR" 2>/dev/null; then
   # shellcheck disable=SC2086
-  [ -n "$SERVICES" ] && docker compose logs --tail=20 --no-color $SERVICES 2>/dev/null | tail -100 || true
+  docker compose logs --tail=20 --no-color $APPLICATIFS 2>/dev/null | tail -100 || true
 fi
 
 echo
@@ -70,7 +82,8 @@ echo "===== diagnostic (les questions qu'on se pose vraiment) ====="
 # Ce bloc est en DERNIER, et c'est délibéré. Il était au milieu, avant les journaux : sur la page
 # d'un run, et plus encore quand on n'en lit que la fin, il n'était jamais visible. Ce qui répond à
 # « est-ce que ça marche ? » doit être la dernière chose écrite, pas la plus enfouie.
-JOURNAUX=$(cd "$DIR" 2>/dev/null && docker compose logs --no-color --since 10m 2>/dev/null)
+# shellcheck disable=SC2086
+JOURNAUX=$(cd "$DIR" 2>/dev/null && docker compose logs --no-color --since 10m $SERVICES 2>/dev/null)
 dire() { printf '  %-34s %s\n' "$1" "$2"; }
 if printf '%s' "$JOURNAUX" | grep -q "manifeste de capacités introuvable"; then
   dire "manifeste de capacités :" "INTROUVABLE — aucune découverte d'univers possible"
@@ -111,6 +124,22 @@ fi
 
 DECIDEURS=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | grep -o '"role": "[a-z-]*"' | sort -u | cut -d'"' -f4 | tr '\n' ' ')
 dire "rôles qui décident :" "${DECIDEURS:-aucun (aucune frontière depuis 10 min)}"
+NB=$(printf '%s' "$JOURNAUX" | grep -c '"event": "decision"')
+dire "décisions (10 min) :" "$NB"
+
+# Les deux portes qui rendent NO_TRADE même quand tout va bien. Sans ces lignes, on lit « NO_TRADE »
+# et on cherche une panne là où il n'y en a pas : la plateforme refuse d'agir parce qu'elle n'a
+# aucun modèle validé, ce qui est le comportement voulu et non un défaut.
+if printf '%s' "$JOURNAUX" | grep -q '"event": "predictor_indisponible"'; then
+  dire "prédicteur :" "INDISPONIBLE — aucun modèle désigné (OKXQ_MODEL_ARTIFACT)"
+else
+  dire "prédicteur :" "disponible"
+fi
+if printf '%s' "$JOURNAUX" | grep -q '"event": "entrees_non_autorisees"'; then
+  dire "entrées :" "NON AUTORISÉES (séquence de démarrage incomplète)"
+else
+  dire "entrées :" "autorisées par la séquence de démarrage"
+fi
 HALT=$(printf '%s' "$JOURNAUX" | grep '"event": "halt_change"' | tail -1 | grep -o '"apres": "[A-Z_]*"' | cut -d'"' -f4)
 dire "dernier changement de halt :" "${HALT:-aucun}"
 DERNIERE=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | tail -1 | grep -o '"reason_codes": "[^"]*"' | cut -d'"' -f4)
