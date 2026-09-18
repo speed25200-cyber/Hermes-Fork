@@ -129,11 +129,38 @@ fi
 echo "  /health/live : 200"
 ready=$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "http://127.0.0.1:${PORT}/health/ready" || echo 000)
 echo "  /health/ready : $ready (503 tant que la réconciliation/les données ne sont pas prêtes — normal au premier démarrage)"
+# Ce que la porte DOIT répondre dépend d'un réglage, pas d'une conviction. Le contrôle lisait 403 en
+# dur ; le jour où l'exploitant a ouvert l'accès en lecture, l'installation a échoué sur sa propre
+# vérification alors que la plateforme marchait. Un contrôle qui ignore la configuration qu'il est
+# censé vérifier finit par empêcher le comportement demandé.
+#
+# On lit donc l'attendu dans la configuration effective, et on vérifie l'égalité — pas une valeur
+# choisie d'avance. Absent du fichier, le défaut est `non` : porte fermée.
+ACCES=$(grep -E "^[[:space:]]*acces_sans_cle:" "/app/configs/${PROFILE}.yaml" 2>/dev/null \
+  | tail -1 | sed "s/.*acces_sans_cle:[[:space:]]*//" | tr -d "\"' " )
+ACCES=${ACCES:-non}
 root=$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "http://127.0.0.1:${PORT}/" || echo 000)
-if [ "$root" = "403" ] || [ "$root" = "401" ]; then
-  echo "  / sans clé : $root — la porte est fermée, c'est le bon comportement"
-else
-  echo "  !! / sans clé a répondu $root"; exit 1
-fi
+case "$ACCES" in
+  non)
+    if [ "$root" = "403" ] || [ "$root" = "401" ]; then
+      echo "  / sans clé : $root — la porte est fermée, c'est le bon comportement"
+    else
+      echo "  !! acces_sans_cle=non mais / sans clé a répondu $root : la porte devrait être fermée"
+      exit 1
+    fi
+    ;;
+  lecture|total)
+    if [ "$root" = "200" ]; then
+      echo "  / sans clé : 200 — PORTE OUVERTE (acces_sans_cle=$ACCES), demandé explicitement"
+      echo "     toute personne qui atteint ce port voit le tableau de bord"
+    else
+      echo "  !! acces_sans_cle=$ACCES mais / sans clé a répondu $root : la porte devrait être ouverte"
+      exit 1
+    fi
+    ;;
+  *)
+    echo "  !! acces_sans_cle inconnu dans la configuration : $ACCES"; exit 1
+    ;;
+esac
 docker compose --profile "$PROFILE" ps
 echo "install: OK — mode $(echo "$PROFILE" | tr '[:lower:]' '[:upper:]'), LIVE désactivé"

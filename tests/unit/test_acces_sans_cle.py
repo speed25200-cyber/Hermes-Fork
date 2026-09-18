@@ -135,3 +135,38 @@ def test_an_anonymous_visitor_is_named_anonymous_in_the_audit() -> None:
 
     principal = Principal(role=Role.READER, actor="anonyme", via="libre")
     assert principal.actor == "anonyme" and principal.via == "libre"
+
+
+def test_the_installer_checks_the_door_against_the_configuration_not_a_conviction() -> None:
+    """`install.sh` exigeait un 403 EN DUR sur `/` sans clé.
+
+    Le jour où l'accès en lecture a été ouvert, l'installation a échoué sur sa PROPRE vérification
+    alors que la plateforme fonctionnait. Un contrôle qui ignore la configuration qu'il est censé
+    vérifier finit par empêcher le comportement demandé — et on croit à une panne.
+
+    Il lit maintenant l'attendu dans la configuration effective et vérifie l'égalité. Les deux sens
+    échouent : porte fermée alors qu'on la voulait ouverte, et l'inverse.
+    """
+    texte = (Path(__file__).resolve().parents[2] / "deploy" / "install.sh").read_text(encoding="utf-8")
+    assert "acces_sans_cle" in texte, "l'installateur ignore le réglage qu'il doit vérifier"
+    assert "ACCES=${ACCES:-non}" in texte, "sans valeur lue, le défaut doit être la porte FERMÉE"
+    # Les deux erreurs possibles sont attrapées, pas seulement l'une des deux.
+    assert "la porte devrait être fermée" in texte
+    assert "la porte devrait être ouverte" in texte
+
+
+def test_every_shipped_profile_declares_a_door_the_installer_understands() -> None:
+    """Contre-épreuve : un profil avec une valeur inconnue ferait échouer l'installation.
+
+    Le test lit les profils réellement livrés plutôt qu'une liste écrite à la main, qui se
+    désynchroniserait au premier profil ajouté.
+    """
+    import yaml
+
+    racine = Path(__file__).resolve().parents[2]
+    profils = sorted((racine / "configs").glob("*.yaml"))
+    assert profils, "aucun profil trouvé : ce test ne vérifierait rien"
+    for chemin in profils:
+        document = yaml.safe_load(chemin.read_text(encoding="utf-8")) or {}
+        valeur = (document.get("api") or {}).get("acces_sans_cle", "non")
+        assert valeur in ("non", "lecture", "total"), f"{chemin.name} : valeur inconnue {valeur!r}"
