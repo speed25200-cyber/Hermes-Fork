@@ -1,0 +1,12 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#public-data-rest-api-get-limit-price",
+  "_verified_at": "2026-09-18",
+  "_note": "GET /api/v5/public/price-limit?instId=BTC-USDT-SWAP : bornes de prix acceptées par l'exchange (buyLmt / sellLmt) ; enabled = false quand la limite est désactivée.",
+  "response": {
+    "code": "0",
+    "msg": "",
+    "data": [
+      { "instType": "SWAP", "instId": "BTC-USDT-SWAP", "buyLmt": "66300.5", "sellLmt": "63700.5", "ts": "1789732800000", "enabled": true }
+    ]
+  }
+}

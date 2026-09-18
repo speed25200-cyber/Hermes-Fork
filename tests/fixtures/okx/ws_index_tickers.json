@@ -1,0 +1,20 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#public-data-websocket-index-tickers-channel",
+  "_verified_at": "2026-09-18",
+  "_note": "Canal index-tickers : instId est le NOM D'INDICE (BTC-USDT), pas l'identifiant du swap ; idxPx en USDT.",
+  "message": {
+    "arg": { "channel": "index-tickers", "instId": "BTC-USDT" },
+    "data": [
+      {
+        "instId": "BTC-USDT",
+        "idxPx": "64999.95",
+        "high24h": "66000",
+        "low24h": "64000",
+        "open24h": "65500",
+        "sodUtc0": "65200",
+        "sodUtc8": "65100",
+        "ts": "1789732800300"
+      }
+    ]
+  }
+}

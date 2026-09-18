@@ -1,0 +1,7 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#error-code-rest-api",
+  "_verified_at": "2026-09-18",
+  "_note": "Erreur métier REST : statut HTTP 200 mais code != '0'. Le client doit lever ExchangeError avec ce code, jamais retourner data vide comme un succès.",
+  "response": { "code": "51001", "msg": "Instrument ID does not exist", "data": [] },
+  "rate_limited": { "code": "50011", "msg": "Rate limit reached. Please refer to API documentation and throttle requests accordingly", "data": [] }
+}

@@ -1,0 +1,14 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#public-data-rest-api-get-funding-rate-history",
+  "_verified_at": "2026-09-18",
+  "_note": "GET /api/v5/public/funding-rate-history?instId=BTC-USDT-SWAP : du plus récent au plus ancien ; realizedRate = taux effectivement réglé à fundingTime ; pagination par after/before (horodatages). Règlements toutes les 8 h.",
+  "response": {
+    "code": "0",
+    "msg": "",
+    "data": [
+      { "instType": "SWAP", "instId": "BTC-USDT-SWAP", "fundingRate": "0.00012", "realizedRate": "0.00012", "fundingTime": "1789718400000", "method": "current_period", "formulaType": "withRate" },
+      { "instType": "SWAP", "instId": "BTC-USDT-SWAP", "fundingRate": "0.00009", "realizedRate": "0.00009", "fundingTime": "1789689600000", "method": "current_period", "formulaType": "withRate" },
+      { "instType": "SWAP", "instId": "BTC-USDT-SWAP", "fundingRate": "-0.00003", "realizedRate": "-0.00003", "fundingTime": "1789660800000", "method": "current_period", "formulaType": "withRate" }
+    ]
+  }
+}

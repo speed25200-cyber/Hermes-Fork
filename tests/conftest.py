@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -101,3 +103,22 @@ def pg_url() -> str:
     if not url:
         pytest.skip("OKXQ_TEST_DATABASE_URL absent : test PostgreSQL NOT_RUN")
     return url
+
+
+@pytest.fixture
+def okx_fixture() -> Callable[[str], dict[str, Any]]:
+    """Charge un fichier de ``tests/fixtures/okx/`` (formes documentées OKX, avec ``_source_url``/``_verified_at``)."""
+
+    def _load(name: str) -> dict[str, Any]:
+        loaded: dict[str, Any] = json.loads((FIXTURES / "okx" / name).read_text(encoding="utf-8"))
+        assert loaded.get("_source_url", "").startswith("https://app.okx.com/docs-v5/en/"), name
+        assert loaded.get("_verified_at"), name
+        return loaded
+
+    return _load
+
+
+@pytest.fixture
+def golden_dir() -> Path:
+    """Dossier golden (``manifest.json`` + ``events.jsonl``) produit par ``scripts/build_golden_dataset.py``."""
+    return FIXTURES / "golden"
