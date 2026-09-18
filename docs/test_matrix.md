@@ -3,7 +3,7 @@
 <!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute
      correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->
 
-Source : `reports/junit.xml` — 538 cas collectés, 538 verts, 0 échecs, 0 erreurs, 0 sautés.
+Source : `reports/junit.xml` — 557 cas collectés, 557 verts, 0 échecs, 0 erreurs, 0 sautés.
 
 Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests `integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais `PASS`.
 
@@ -57,7 +57,7 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T37 | Réponse partiellement réussie | Traitement item par item | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T38 | Rejet de reduce-only | Pas de retry sans cette protection | unit | `test_virtual_exchange::test_T38_reduce_only_without_position_is_refused` | **PASS** | 1 cas vert |
 | T39 | Passage long -> short | Clôture et nouvelle ouverture distinguées, risques revérifiés | unit | `test_domain_positions::test_T39_long_to_short_flip_splits_close_and_open` | **PASS** | 1 cas vert |
-| T40 | Rounding casse la neutralité/marge | Candidat corrigé sous contraintes ou rejeté | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T40 | Rounding casse la neutralité/marge | Candidat corrigé sous contraintes ou rejeté | unit | `test_portfolio_rounding::test_T40_rounding_that_breaks_neutrality_is_repaired_under_constraints`<br>`test_portfolio_rounding::test_T40_an_admissible_rounded_candidate_passes_untouched`<br>`test_portfolio_rounding::test_T40_rounding_that_breaks_the_exact_margin_is_repaired_under_constraints`<br>… (+8) | **PASS** | 11 cas verts |
 | T41 | Solveur timeout/infeasible/NaN | Aucune stratégie de secours non validée | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T42 | Une seule jambe d'un basket est exécutée | Risque transitoire plafonné et réconciliation | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T43 | Ordres opposés/UNKNOWN en attente | Exposition pessimiste prise en compte | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
@@ -84,7 +84,7 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T64 | LIVE sans approbations complètes | Refus avant connexion privée de trading | unit | `test_config::test_T64_live_without_manifest_is_refused`<br>`test_config::test_T64_live_manifest_must_be_signed_complete_and_unexpired` | **PASS** | 2 cas verts |
 | T65 | Action UI non autorisée/CSRF | Aucun effet et événement d'audit | unit | `test_api_csrf_and_roles::test_T65_an_anonymous_command_is_refused_and_writes_nothing`<br>`test_api_csrf_and_roles::test_T65_a_reader_cannot_request_a_flatten_and_writes_nothing`<br>`test_api_csrf_and_roles::test_T65_an_operator_can_request_a_flatten_and_it_is_only_a_request`<br>… (+6) | **PASS** | 9 cas verts |
 | T66 | Secret dans logs/artefacts/image | Test de sécurité échoué et livraison bloquée | unit | `test_logging_secrets::test_T66_injected_secret_never_appears_in_structlog_output`<br>`test_logging_secrets::test_T66_stdlib_logs_from_uvicorn_are_masked_too`<br>`test_logging_secrets::test_T66_secret_inside_exception_text_is_masked`<br>… (+1) | **PASS** | 4 cas verts |
-| T67 | Restauration de sauvegarde | Données restaurées et réconciliation avant reprise | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T67 | Restauration de sauvegarde | Données restaurées et réconciliation avant reprise | unit | `test_backup_restore_gates::test_T67_a_sound_archive_is_declared_usable_and_writes_nothing`<br>`test_backup_restore_gates::test_T67_verification_does_not_require_the_full_stack`<br>`test_backup_restore_gates::test_T67_a_single_flipped_byte_is_refused_before_any_write`<br>… (+5) | **PASS** | 8 cas verts |
 | T68 | Saturation disque/queue/CPU | Backpressure/arrêt contrôlé, pas de perte silencieuse critique | unit | `test_saturation_backpressure::test_T68_the_queue_never_grows_beyond_its_bound`<br>`test_saturation_backpressure::test_T68_dropped_messages_are_counted_and_attributed`<br>`test_saturation_backpressure::test_T68_publishing_never_blocks_on_a_full_queue`<br>… (+5) | **PASS** | 8 cas verts |
 | T69 | Tests hors ligne sans réseau | Parcours complet sur fixtures reproductible | unit | `test_normalizer_archive::test_T69_golden_dataset_replays_offline_with_verified_checksum` | **PASS** | 1 cas vert |
 | T70 | Même dataset/config/seed | Résultat identique dans la tolérance documentée | unit | `test_jev_ablation::test_T70_lablation_est_reproductible`<br>`test_research_stacking::test_T70_meme_graine_memes_predictions_de_meta_modele`<br>`test_research_training::test_T70_meme_jeu_meme_graine_memes_resultats` | **PASS** | 3 cas verts |
@@ -94,12 +94,12 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | Statut | Nombre sur 70 |
 |---|---|
 | `FAIL` | 0 |
-| `NOT_RUN` | 18 |
-| `PASS` | 52 |
+| `NOT_RUN` | 16 |
+| `PASS` | 54 |
 
 Aucune exigence en échec dans cette exécution.
 
-**Exigences non exécutées (18)** : T23, T24, T25, T26, T36, T37, T40, T41, T42, T43, T45, T46, T47, T48, T50, T51, T63, T67.
+**Exigences non exécutées (16)** : T23, T24, T25, T26, T36, T37, T41, T42, T43, T45, T46, T47, T48, T50, T51, T63.
 
 Chacune reste bloquante pour la capacité qu'elle devait valider (§71.1) : rien ici n'est présenté comme couvert par autre chose.
 

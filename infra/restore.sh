@@ -53,9 +53,15 @@ done
 ENVDIR="$DIR/env"
 OUT=${OKXQ_BACKUP_DIR:-$DIR/backups}
 
-command -v docker >/dev/null 2>&1 || { echo "!! docker absent" >&2; exit 1; }
-docker compose version >/dev/null 2>&1 || { echo "!! docker compose absent" >&2; exit 1; }
-[ -f "$DIR/compose.yaml" ] || { echo "!! $DIR/compose.yaml introuvable" >&2; exit 1; }
+# Docker n'est exigé que pour ÉCRIRE. Vérifier qu'une archive est exploitable (`--verify-only`) ne
+# touche à aucune base et doit donc marcher partout : sur un poste, sur une machine de secours, dans
+# la CI. Une sauvegarde qu'on ne peut contrôler qu'avec la pile complète est une sauvegarde qu'on
+# contrôle moins souvent — et une sauvegarde jamais restaurée n'est pas une sauvegarde.
+if [ "$VERIFY_ONLY" != "1" ]; then
+  command -v docker >/dev/null 2>&1 || { echo "!! docker absent" >&2; exit 1; }
+  docker compose version >/dev/null 2>&1 || { echo "!! docker compose absent" >&2; exit 1; }
+  [ -f "$DIR/compose.yaml" ] || { echo "!! $DIR/compose.yaml introuvable" >&2; exit 1; }
+fi
 cd "$DIR"
 
 if [ "$LATEST" = "1" ]; then
