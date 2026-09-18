@@ -132,3 +132,24 @@ class LedgerError(OkxqError):
 
 class ReconciliationError(OkxqError):
     code = "RECONCILIATION_MISMATCH"
+
+
+# --- ajouts P4 (features et recherche) : classes additives, aucune existante n'est modifiée --------------
+
+
+class LeakageError(DataQualityError):
+    """Fuite temporelle détectée : transformateur ajusté sur le test, feature future, label prématuré (T14, T17, T20)."""
+
+    code = "LEAKAGE_DETECTED"
+
+
+class ArtifactIntegrityError(OkxqError):
+    """Artefact de modèle dont le hash ne correspond pas au manifeste : chargement refusé (§56)."""
+
+    code = "ARTIFACT_INTEGRITY"
+
+
+class ProtocolViolationError(OkxqError):
+    """Violation du protocole statistique (§39) : split aléatoire, période finale consultée, promotion sans preuve."""
+
+    code = "PROTOCOL_VIOLATION"
