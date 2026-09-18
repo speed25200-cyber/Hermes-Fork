@@ -43,7 +43,25 @@ __all__ = ["create_app"]
 _log = get_logger("okxq.api")
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_FRONTEND = ROOT / "frontend"
+
+#: Variable d'environnement qui DÉCLARE où vit l'interface. L'image la pose ; en copie de travail,
+#: elle est absente et on retombe sur l'arborescence du dépôt.
+FRONTEND_DIR_ENV = "OKXQ_FRONTEND_DIR"
+
+
+def default_frontend() -> Path:
+    """Emplacement de l'interface, déclaré par l'environnement plutôt que deviné.
+
+    `ROOT / "frontend"` reposait sur `parents[3]`, c'est-à-dire sur « trois niveaux au-dessus de ce
+    module, c'est la racine du dépôt ». Vrai depuis `src/`, faux depuis `site-packages/` : trois
+    niveaux au-dessus d'un module installé désignent `.../lib/python3.12`. En conteneur, l'interface
+    n'était donc jamais trouvée — et l'API répondait poliment « API sans interface servie » au lieu
+    de servir le tableau de bord. La même erreur que pour le manifeste de capacités, au même endroit
+    du raisonnement.
+    """
+    declare = os.environ.get(FRONTEND_DIR_ENV, "").strip()
+    return Path(declare) if declare else ROOT / "frontend"
+
 
 #: Composants dont l'état conditionne l'aptitude de CE processus (l'API n'envoie aucun ordre).
 API_REQUIRED_COMPONENTS = frozenset({DATABASE})
@@ -114,7 +132,7 @@ def create_app(
         poller=JournalPoller(readmodel, bus),
         frontend_dir=frontend_dir
         if frontend_dir is not None
-        else (DEFAULT_FRONTEND if cfg.api.serve_frontend else None),
+        else (default_frontend() if cfg.api.serve_frontend else None),
         synthetic_data=bool(synthetic_data) if synthetic_data is not None else cfg.project.fixture_only,
         code_commit=os.environ.get("OKXQ_CODE_COMMIT"),
         started_at_iso=ensure_utc(the_clock.now_utc()).isoformat(),
@@ -161,6 +179,18 @@ def create_app(
         if not c.cfg.api.metrics_enabled:
             return JSONResponse({"ok": False, "error": "METRIQUES_DESACTIVEES"}, status_code=404)
         return PlainTextResponse(c.metrics.render().decode(), media_type="text/plain; version=0.0.4")
+
+    if ctx.frontend_dir is not None and not ctx.frontend_dir.exists():
+        # Une interface DEMANDÉE mais introuvable doit être bruyante. Elle ne l'était pas : l'API
+        # répondait « API sans interface servie » avec `ok: true`, ce qui se lit comme une
+        # configuration délibérée. L'exploitant, lui, ouvrait son tableau de bord et recevait du
+        # JSON. Une dégradation silencieuse qui se présente comme un succès est le pire des deux.
+        _log.error(
+            "interface_introuvable",
+            chemin=str(ctx.frontend_dir),
+            variable=FRONTEND_DIR_ENV,
+            effet="l'API répond du JSON à la racine ; le tableau de bord n'est PAS servi",
+        )
 
     if ctx.frontend_dir is not None and ctx.frontend_dir.exists():
         index = ctx.frontend_dir / "index.html"

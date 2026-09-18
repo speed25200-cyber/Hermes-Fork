@@ -171,5 +171,24 @@ case "$ACCES" in
     echo "  !! acces_sans_cle inconnu dans la configuration : $ACCES"; exit 1
     ;;
 esac
+
+# Un 200 ne dit PAS qu'on sert le tableau de bord. L'API répondait « API sans interface servie » en
+# JSON, avec `ok: true` et un code 200 : le contrôle passait, et l'exploitant recevait du JSON dans
+# son navigateur. Vérifier le CODE sans vérifier ce qui est SERVI, c'est valider une porte qui ouvre
+# sur un mur.
+if [ "$ACCES" != "non" ]; then
+  TYPE=$(curl -s -o /dev/null -w "%{content_type}" --max-time 4 "http://127.0.0.1:${PORT}/" || echo "")
+  case "$TYPE" in
+    text/html*)
+      echo "  interface : servie ($TYPE)"
+      ;;
+    *)
+      echo "  !! / renvoie « $TYPE » et non du HTML : l'interface n'est PAS servie"
+      echo "     vérifier OKXQ_FRONTEND_DIR dans l'image et la présence de index.html"
+      docker compose --profile "$PROFILE" logs --tail=30 api 2>/dev/null | grep -i "interface_introuvable" || true
+      exit 1
+      ;;
+  esac
+fi
 docker compose --profile "$PROFILE" ps
 echo "install: OK — mode $(echo "$PROFILE" | tr '[:lower:]' '[:upper:]'), LIVE désactivé"

@@ -89,11 +89,19 @@ RUN groupadd --gid 10001 okxq \
 # compose, jamais sur la racine en lecture seule.
 # OKXQ_OFFLINE n'est PAS positionné : l'exploitation a besoin du réseau ; ce sont les tests qui sont
 # hermétiques.
+# `OKXQ_FRONTEND_DIR` : l'image DÉCLARE où elle a mis l'interface, au lieu de laisser le code la
+# deviner à partir de sa propre position. Le paquet est installé sous `site-packages/`, d'où remonter
+# de trois niveaux désigne `.../lib/python3.12` et non la racine de l'application : l'interface
+# n'était jamais trouvée, et l'API répondait du JSON à la racine du site.
+#
+# Le commentaire est AVANT le bloc, pas à l'intérieur : une ligne de commentaire au milieu d'une
+# continuation `\` est un terrain à surprises qu'il n'y a aucune raison de fouler ici.
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONFAULTHANDLER=1 \
-    HOME=/tmp
+    HOME=/tmp \
+    OKXQ_FRONTEND_DIR=/app/frontend
 
 WORKDIR /app
 
