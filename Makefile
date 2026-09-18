@@ -13,16 +13,20 @@ help:
 setup: ## Installe l'environnement verrouillé (uv.lock) et les navigateurs de test UI si demandé
 	$(UV) sync --python 3.12 --all-groups --extra ui-test --frozen
 
-lint: ## Ruff (lint + format --check)
-	$(PY) ruff check src tests scripts
+lint: ## Ruff (lint + format --check) — sans cache, pour ne jamais diverger de la CI
+# `--no-cache` n'est pas une précaution de style. Une entrée de cache périmée a déjà rendu un
+# « All checks passed » local alors que la CI refusait deux fichiers : le garde-fou affirmait le
+# contraire de la vérité, ce qui est pire que pas de garde-fou. On paie une seconde de calcul pour
+# que le verdict local soit le verdict de la CI.
+	$(PY) ruff check --no-cache src tests scripts
 	$(PY) ruff format --check src tests scripts
 
 format: ## Applique ruff format et les corrections automatiques
 	$(PY) ruff format src tests scripts
 	$(PY) ruff check --fix src tests scripts
 
-typecheck: ## mypy strict sur src/okxq
-	$(PY) mypy
+typecheck: ## mypy strict sur src/okxq (sans cache incrémental, même raison que lint)
+	$(PY) mypy --no-incremental
 
 test: ## Tests hermétiques (unit + property + contract + e2e + chaos), sans réseau
 	$(PY) pytest -q -m "not integration and not connected" --cov=okxq --cov-report=term-missing:skip-covered --cov-report=xml

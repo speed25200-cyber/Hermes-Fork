@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from okxq.domain.clocks import SimulatedClock
 from okxq.runtime.health import GATEWAY, HealthRegistry, Status
 from okxq.runtime.metrics import METRIC_NAMES, Metrics, bounded_label
-
-from okxq.domain.clocks import SimulatedClock
 
 
 def test_liveness_is_always_alive_but_readiness_requires_components(clock: SimulatedClock) -> None:
