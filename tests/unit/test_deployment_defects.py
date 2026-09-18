@@ -341,3 +341,29 @@ def test_the_rotation_verifies_the_new_key_instead_of_assuming_it() -> None:
     etape = texte[debut : debut + 3000]
     assert "Authorization: Bearer" in etape, "la vérification doit présenter la nouvelle clé"
     assert 'if [ "$CODE" != "200" ]' in etape, "l'étape doit ÉCHOUER si la nouvelle clé est refusée"
+
+
+def test_recreating_a_service_does_not_drag_its_dependencies_along() -> None:
+    """Recréer `api` recréait aussi PostgreSQL et rejouait les migrations.
+
+    La rotation de clé a ainsi laissé l'API indisponible plus d'une minute, et sa vérification a
+    conclu — à tort sur la cause, à raison sur le fait — que la nouvelle clé était refusée.
+
+    Seul le service dont le fichier d'environnement a changé doit être recréé : ses dépendances
+    tournent déjà et n'ont rien à relire. D'où `--no-deps`.
+
+    Et l'échec ne doit plus être avalé : `>/dev/null 2>&1 || true` est précisément ce qui a permis
+    à un service de rester à l'arrêt sans que l'étape s'en aperçoive.
+    """
+    racine = Path(__file__).resolve().parents[2]
+    texte = (racine / ".github" / "workflows" / "vps-status.yml").read_text(encoding="utf-8")
+    # Les lignes de COMMENTAIRE citent l'option ; seules les commandes comptent.
+    lignes = [
+        ligne.strip()
+        for ligne in texte.splitlines()
+        if "--force-recreate" in ligne and "docker compose" in ligne
+    ]
+    assert lignes, "aucune recréation trouvée : ce test ne vérifierait rien"
+    for ligne in lignes:
+        assert "--no-deps" in ligne, f"recréation qui entraîne ses dépendances : {ligne}"
+        assert "|| true" not in ligne, f"échec avalé sur une commande dont la suite dépend : {ligne}"
