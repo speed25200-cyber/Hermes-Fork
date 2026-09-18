@@ -314,7 +314,16 @@ def _assignment_pattern() -> re.Pattern[str]:
     # arrête aussi la capture, car un « \\n » écrit dans du code source n'est pas un blanc : sans cette
     # borne, `OKX_API_KEY=\\nAUTRE_VAR=` serait lu comme une valeur de vingt caractères. Aucun secret
     # d'OKX ou de TypeSafe ne contient d'antislash (hexadécimal, UUID ou base64).
-    return re.compile(rf"\b(?P<name>{names})\b\s*[:=]\s*[\"']?(?P<value>[^\s\"'#\\]*)", re.IGNORECASE)
+    # Un espace APRÈS le séparateur n'est toléré que pour `:` (YAML). Avec `=`, un shell comme un
+    # fichier .env affectent une valeur VIDE dès qu'un blanc suit : `FOO= bar` ne met rien dans FOO.
+    # Traiter ce qui suit l'espace comme la valeur produisait de faux positifs sur des lignes
+    # parfaitement anodines — `grep ^OPERATOR_AUTH_SECRET= /opt/okxq/env/api.env` faisait passer un
+    # CHEMIN pour un secret de 21 caractères. Un garde-fou qui crie sur du code sain finit par être
+    # désactivé, et c'est ainsi qu'on cesse de voir les vrais.
+    return re.compile(
+        rf"\b(?P<name>{names})\b(?:\s*:\s*|\s*=)[\"']?(?P<value>[^\s\"'#\\]*)",
+        re.IGNORECASE,
+    )
 
 
 SECRET_ASSIGNMENT = _assignment_pattern()

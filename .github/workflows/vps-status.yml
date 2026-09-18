@@ -14,6 +14,10 @@ on:
         description: "oui : poser TYPESAFE_API_KEY (secret du dépôt) dans env/jev-worker.env et redémarrer jev-worker"
         required: false
         default: ""
+      tourner_cle_operateur:
+        description: "oui : RÉVOQUER la clé opérateur en place et en générer une neuve (toutes les clés dérivées changent)"
+        required: false
+        default: ""
 
 jobs:
   status:
@@ -68,6 +72,29 @@ jobs:
             sed -i "/^TYPESAFE_API_KEY=/d" "$F"; echo "TYPESAFE_API_KEY=$T" >> "$F"
             cd /opt/okxq && docker compose restart jev-worker >/dev/null 2>&1 || true
             echo "  clé TypeSafe posée dans env/jev-worker.env, jev-worker redémarré"
+          '
+
+      - name: Tourner la clé opérateur
+        if: ${{ inputs.tourner_cle_operateur == 'oui' }}
+        run: |
+          # Toutes les clés d'accès sont dérivées de `OPERATOR_AUTH_SECRET` par HMAC : changer ce
+          # secret révoque d'un coup les clés reader, operator et admin. À faire dès qu'une clé a pu
+          # être vue — un journal recopié, une capture d'écran, un lien partagé.
+          #
+          # La nouvelle valeur est engendrée SUR LA MACHINE et n'est jamais imprimée ici : le journal
+          # de ce run est public. Son propriétaire la relit sur le serveur.
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
+            F=/opt/okxq/env/api.env
+            [ -f "$F" ] || { echo "::error::/opt/okxq/env/api.env absent : plateforme non installée"; exit 1; }
+            NEUF=$(openssl rand -hex 32)
+            sed -i "/^OPERATOR_AUTH_SECRET=/d" "$F"
+            printf "OPERATOR_AUTH_SECRET=%s\n" "$NEUF" >> "$F"
+            chmod 600 "$F"
+            cd /opt/okxq && docker compose restart api >/dev/null 2>&1 || true
+            echo "  clé opérateur renouvelée ; toutes les clés dérivées précédentes sont révoquées"
+            echo "  la lire (sur CETTE machine) :"
+            echo "      S=\$(grep ^OPERATOR_AUTH_SECRET= /opt/okxq/env/api.env | cut -d= -f2-)"
+            echo "      printf okxq-ui-key:v1:admin | openssl dgst -sha256 -hmac \"\$S\" -r | cut -d\" \" -f1"
           '
 
       - name: Status report
