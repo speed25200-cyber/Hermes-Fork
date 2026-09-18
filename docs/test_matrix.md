@@ -3,7 +3,7 @@
 <!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute
      correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->
 
-Source : `reports/junit.xml` — 530 cas collectés, 530 verts, 0 échecs, 0 erreurs, 0 sautés.
+Source : `reports/junit.xml` — 538 cas collectés, 538 verts, 0 échecs, 0 erreurs, 0 sautés.
 
 Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests `integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais `PASS`.
 
@@ -85,7 +85,7 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T65 | Action UI non autorisée/CSRF | Aucun effet et événement d'audit | unit | `test_api_csrf_and_roles::test_T65_an_anonymous_command_is_refused_and_writes_nothing`<br>`test_api_csrf_and_roles::test_T65_a_reader_cannot_request_a_flatten_and_writes_nothing`<br>`test_api_csrf_and_roles::test_T65_an_operator_can_request_a_flatten_and_it_is_only_a_request`<br>… (+6) | **PASS** | 9 cas verts |
 | T66 | Secret dans logs/artefacts/image | Test de sécurité échoué et livraison bloquée | unit | `test_logging_secrets::test_T66_injected_secret_never_appears_in_structlog_output`<br>`test_logging_secrets::test_T66_stdlib_logs_from_uvicorn_are_masked_too`<br>`test_logging_secrets::test_T66_secret_inside_exception_text_is_masked`<br>… (+1) | **PASS** | 4 cas verts |
 | T67 | Restauration de sauvegarde | Données restaurées et réconciliation avant reprise | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T68 | Saturation disque/queue/CPU | Backpressure/arrêt contrôlé, pas de perte silencieuse critique | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T68 | Saturation disque/queue/CPU | Backpressure/arrêt contrôlé, pas de perte silencieuse critique | unit | `test_saturation_backpressure::test_T68_the_queue_never_grows_beyond_its_bound`<br>`test_saturation_backpressure::test_T68_dropped_messages_are_counted_and_attributed`<br>`test_saturation_backpressure::test_T68_publishing_never_blocks_on_a_full_queue`<br>… (+5) | **PASS** | 8 cas verts |
 | T69 | Tests hors ligne sans réseau | Parcours complet sur fixtures reproductible | unit | `test_normalizer_archive::test_T69_golden_dataset_replays_offline_with_verified_checksum` | **PASS** | 1 cas vert |
 | T70 | Même dataset/config/seed | Résultat identique dans la tolérance documentée | unit | `test_jev_ablation::test_T70_lablation_est_reproductible`<br>`test_research_stacking::test_T70_meme_graine_memes_predictions_de_meta_modele`<br>`test_research_training::test_T70_meme_jeu_meme_graine_memes_resultats` | **PASS** | 3 cas verts |
 
@@ -94,12 +94,12 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | Statut | Nombre sur 70 |
 |---|---|
 | `FAIL` | 0 |
-| `NOT_RUN` | 19 |
-| `PASS` | 51 |
+| `NOT_RUN` | 18 |
+| `PASS` | 52 |
 
 Aucune exigence en échec dans cette exécution.
 
-**Exigences non exécutées (19)** : T23, T24, T25, T26, T36, T37, T40, T41, T42, T43, T45, T46, T47, T48, T50, T51, T63, T67, T68.
+**Exigences non exécutées (18)** : T23, T24, T25, T26, T36, T37, T40, T41, T42, T43, T45, T46, T47, T48, T50, T51, T63, T67.
 
 Chacune reste bloquante pour la capacité qu'elle devait valider (§71.1) : rien ici n'est présenté comme couvert par autre chose.
 
