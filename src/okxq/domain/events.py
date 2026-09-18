@@ -398,6 +398,9 @@ class SourceDocument(Contract):
     raw_text_hash: NonEmptyStr
     deduplication_id: NonEmptyStr
     asset_mapping: list[AssetMapping] = Field(default_factory=list)
+    # Qualité explicite du mapping d'entités (§50.2, T54) : ``ok``, ``ambiguous``, ``ticker_only``,
+    # ``none`` ; ``None`` quand aucun mapping n'a été tenté. Additif, sans effet sur les autres champs.
+    mapping_quality: str | None = None
     title: str = ""
     text: str = ""
 
@@ -405,6 +408,8 @@ class SourceDocument(Contract):
     def _causal(self) -> SourceDocument:
         if self.received_at < self.first_seen_at:
             raise ValueError("received_at < first_seen_at")
+        if self.parsed_at is not None and self.parsed_at < self.received_at:
+            raise ValueError("parsed_at < received_at")
         return self
 
 
@@ -447,6 +452,23 @@ class JevEvaluation(Contract):
     usage: dict[str, Any] = Field(default_factory=dict)
     status: JevStatus
     error: str | None = None
+    # Instrument évalué (une évaluation par actif pour un document multi-actifs). Additif.
+    inst_id: str | None = None
+
+    @model_validator(mode="after")
+    def _never_backdated(self) -> JevEvaluation:
+        """Une évaluation n'est jamais antidatée (§49, T51) : chaque instant suit le précédent."""
+        if self.completed_at is not None and self.completed_at < self.requested_at:
+            raise ValueError("completed_at < requested_at")
+        if self.inference_completed_at is not None and self.inference_completed_at < self.requested_at:
+            raise ValueError("inference_completed_at < requested_at")
+        if self.features_committed_at is not None:
+            floor = self.inference_completed_at or self.completed_at or self.requested_at
+            if self.features_committed_at < floor:
+                raise ValueError("features_committed_at antérieur à la fin de l'inférence")
+        if self.status is JevStatus.OK and self.features_committed_at is None:
+            raise ValueError("une évaluation ok porte features_committed_at")
+        return self
 
 
 class PortfolioInputs(Contract):
