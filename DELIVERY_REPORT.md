@@ -16,15 +16,16 @@ est conservée puis étendue.
 
 | Contrôle | Commande | Résultat |
 | --- | --- | --- |
-| Tests hermétiques | `pytest -m "not integration and not connected"` | **493 verts**, 0 échec, 0 sauté |
+| Tests hermétiques | `pytest -m "not integration and not connected"` | **507 verts**, 0 échec, 0 sauté |
 | Matrice §64 | `scripts/test_matrix_status.py` | **48 / 70 identifiants PASS**, 22 NOT_RUN, **0 FAIL** |
-| Lint et format | `ruff check` + `ruff format --check` | propres sur 208 fichiers |
+| Lint et format | `ruff check` + `ruff format --check` | propres sur 211 fichiers |
 | Types | `mypy` (strict, `src/okxq`) | propre sur 156 modules |
 | Interface (navigateur) | `pytest tests/e2e/test_ui_smoke.py -m e2e` | **1 vert** dans Chromium, 0 erreur JavaScript |
 | Interface (dictionnaire, contrats) | `node --test "frontend/tests/*.test.js"` | 8 verts |
 | Contrat interface ↔ API | `pytest tests/contract -m contract` | 11 verts, sans navigateur |
+| Commandes de `compose.yaml` | `pytest tests/unit/test_compose_commands.py` | analysées par la vraie CLI |
 | Parcours complet hors ligne | `make smoke-offline` | 21 contrôles, 4 régimes × 2 scénarios, reproductibilité bit à bit |
-| Sécurité du dépôt | `scripts/security_check.py` | aucune anomalie sur 321 fichiers indexés |
+| Sécurité du dépôt | `scripts/security_check.py` | aucune anomalie sur les fichiers indexés |
 | Scripts de déploiement | `bash -n` sur `deploy/*.sh`, `infra/*.sh` | syntaxe valide |
 | Compose | `docker compose config` | valide ; séparation des secrets prouvée service par service |
 
@@ -104,6 +105,19 @@ significatifs :
    échouaient en silence.
 6. Une réservation de profondeur était libérée trop tôt, permettant à deux ordres de consommer la
    même liquidité affichée.
+7. Le service de migration de `compose.yaml` portait `okxq db upgrade head`. `head` est une option,
+   pas un positionnel : la CLI rejetait la commande, donc la migration échouait à chaque démarrage.
+   Comme les cinq rôles écrivains attendent sa terminaison réussie, **aucun ne démarrait jamais** —
+   seule l'API montait, donnant une console vivante devant un système mort. Une erreur d'une ligne,
+   invisible sans déployer. Un test soumet désormais chaque commande de `compose.yaml` à l'analyseur
+   d'arguments de la vraie CLI ; deux versions antérieures de ce test étaient elles-mêmes vacuoles
+   (l'aide court-circuite l'analyse ; Typer embarque sa propre copie de Click, ce qui rendait les
+   tests de type toujours faux) et le commentaire du test le documente.
+8. Le chemin de prix des labels était échantillonné sur l'horodatage brut du premier événement,
+   décalé de la latence d'ingestion, alors que les décisions sont alignées sur la minute. Aucun point
+   ne tombait dans la fenêtre d'entrée et **100 % des labels sortaient NO_ENTRY** : le jeu
+   d'entraînement était vide sans que rien ne le signale, ce qui est plus dangereux qu'une erreur —
+   l'entraînement « réussit » et le modèle n'a rien appris.
 
 Chaque correctif a été vérifié en le retirant : les tests correspondants échouent alors.
 

@@ -119,6 +119,15 @@ class LabelSpec:
             raise ValueError("horizon_s, entry_window_s > 0 et entry_delay_s ≥ 0 requis")
         if self.entry_delay_s >= self.entry_window_s:
             raise ValueError("entry_delay_s doit être inférieur à entry_window_s")
+        # L'horizon se mesure depuis la DÉCISION, pas depuis l'entrée. Un horizon qui ne dépasse pas
+        # la fenêtre d'entrée ne laisse donc aucune durée de détention : l'entrée et la sortie
+        # tombent sur le même point, et chaque ligne sort NO_ENTRY. Refuser la combinaison ici la
+        # rend impossible à déclarer, au lieu de produire un jeu de données silencieusement vide.
+        if self.horizon_s <= self.entry_window_s:
+            raise ValueError(
+                "horizon_s doit dépasser entry_window_s : sinon aucune durée de détention ne reste "
+                f"après l'entrée (horizon_s={self.horizon_s}, entry_window_s={self.entry_window_s})"
+            )
         if (self.take_profit is None) != (self.stop_loss is None):
             raise ValueError("take_profit et stop_loss se configurent ensemble")
         if self.take_profit is not None and (self.take_profit <= 0 or (self.stop_loss or 0) <= 0):

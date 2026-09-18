@@ -3,7 +3,7 @@
 <!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute
      correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->
 
-Source : `reports/junit.xml` — 493 cas collectés, 493 verts, 0 échecs, 0 erreurs, 0 sautés.
+Source : `reports/junit.xml` — 507 cas collectés, 507 verts, 0 échecs, 0 erreurs, 0 sautés.
 
 Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests `integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais `PASS`.
 

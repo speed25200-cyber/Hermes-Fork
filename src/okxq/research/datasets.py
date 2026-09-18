@@ -47,8 +47,13 @@ from okxq.research.synthetic import (
 )
 
 DEFAULT_WARMUP_S = 3660
+#: Horizons de label par défaut.
+#:
+#: L'horizon de 60 s a été retiré : le chemin de prix des labels est échantillonné au pas de décision
+#: (60 s), donc la fenêtre d'entrée ne peut pas être plus courte, et un horizon de 60 s ne laisserait
+#: aucune durée de détention entre l'entrée et la sortie. Il produisait une ligne NO_ENTRY par
+#: coupure — un tiers du jeu de données en pur bruit. `LabelSpec` refuse désormais cette combinaison.
 DEFAULT_LABEL_SPECS: tuple[LabelSpec, ...] = (
-    LabelSpec(horizon_s=60),
     LabelSpec(horizon_s=300, take_profit=0.002, stop_loss=0.002),
     LabelSpec(horizon_s=900, take_profit=0.004, stop_loss=0.004),
 )
@@ -246,8 +251,15 @@ def build_dataset(
     )
     label_frames: list[pl.DataFrame] = []
     path_end = builder.last_available_at + timedelta(seconds=max(s.horizon_s for s in spec.label_specs))
+    # Le chemin de prix DOIT être échantillonné sur la même horloge que les décisions. Il partait de
+    # `builder.first_available_at`, c'est-à-dire l'horodatage brut du premier événement — décalé de la
+    # latence d'ingestion (150 ms sur les jeux synthétiques) — alors que les coupures sont alignées sur
+    # l'intervalle. Aucun point du chemin ne tombait donc dans la fenêtre d'entrée
+    # ``(coupure + délai, coupure + fenêtre]``, et TOUS les labels sortaient NO_ENTRY : le jeu
+    # d'entraînement était vide sans que rien ne le signale.
+    path_start = floor_to_interval(builder.first_available_at, spec.cutoff_interval_s)
     for inst in instruments:
-        path = builder.price_path(inst, builder.first_available_at, path_end, step_s=spec.cutoff_interval_s)
+        path = builder.price_path(inst, path_start, path_end, step_s=spec.cutoff_interval_s)
         for ls in spec.label_specs:
             label_frames.append(compute_labels(path, cutoffs, ls, instrument_id=inst, cost_fn=cost))
     labels = pl.concat(label_frames)

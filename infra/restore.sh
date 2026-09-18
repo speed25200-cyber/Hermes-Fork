@@ -211,7 +211,18 @@ Les services applicatifs restent ARRÊTÉS. Ce n'est pas un oubli (§62).
 AVANT toute reprise :
   1. RÉCONCILIER avec l'exchange. La base décrit l'état d'avant la sauvegarde ; le compte réel a pu
      bouger depuis. Une restauration de disque ne rétablit pas la position réelle du compte.
-       okxq risk reconcile --config configs/paper.yaml
+     Il n'existe PAS de réconciliation à la demande : elle est déclenchée par la séquence de
+     démarrage du gateway (étape `bootstrap_reconcile`), et tout ordre envoyé sans résultat persisté
+     y devient UNKNOWN avant qu'aucune entrée ne soit autorisée. On l'observe ensuite :
+       okxq risk status --config configs/paper.yaml
+       okxq reports risk --config configs/paper.yaml
+       curl -s -H "Authorization: Bearer <cle>" http://127.0.0.1:8899/api/v1/system/status
+       curl -s -H "Authorization: Bearer <cle>" http://127.0.0.1:8899/api/v1/orders?state=UNKNOWN
+     Tant que des ordres restent UNKNOWN, `/health/ready` répond 503 : c'est le bon comportement.
+  1bis. REPOSER LE HALT s'il y en avait un après la sauvegarde. Une base restaurée peut RESSUSCITER
+     une autorisation d'entrer en effaçant un halt postérieur à l'instantané. À faire AVANT de
+     redémarrer les écrivains :
+       okxq control pause --config configs/paper.yaml --reason "post-restauration" --actor <vous>
   2. Vérifier le high-water mark et la perte journalière : leurs seuils ont une frontière UTC déclarée
      et un redémarrage ne remet jamais les pertes à zéro (§38).
   3. Contrôler les ordres ouverts et les protections chez OKX avant de réactiver le gateway.

@@ -16,11 +16,19 @@ features:
   version: features-v1
 labels:
   target: future_mid_return
-  horizons_seconds: [60, 300, 900]
+  # L'horizon de 60 s est retiré : le chemin de prix des labels est échantillonné au pas de décision
+  # (60 s), la fenêtre d'entrée ne peut donc pas être plus courte, et un horizon de 60 s ne laisse
+  # aucune durée de détention entre l'entrée et la sortie. `LabelSpec` refuse la combinaison.
+  horizons_seconds: [300, 900]
   cost_basis: MID
 model:
   family: linear
-  candidates: [ridge, logistic]
+  # `target: future_mid_return` est une RÉGRESSION : les candidats doivent être des régresseurs.
+  # `logistic` était un classifieur — une probabilité n'est pas un rendement, et la CLI l'écartait en
+  # le signalant dans ses notes plutôt que de réinterpréter le plan en silence.
+  # Candidats de RÉGRESSION effectivement implémentés (voir research.training.REGRESSION_CANDIDATES) ;
+  # `flat` est le témoin « ne rien faire », contre lequel tout le reste doit se comparer.
+  candidates: [flat, ridge, momentum, mean_reversion]
   max_trials: 30
 splits:
   scheme: nested_walk_forward

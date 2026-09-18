@@ -131,7 +131,11 @@ services:
         required: false
       - path: env/migrate.env
         required: false
-    command: ["okxq", "db", "upgrade", "head"]
+    # `head` est une OPTION, pas un positionnel : `okxq db upgrade head` est rejeté par la CLI
+    # (« Got unexpected extra argument(s) »). Le service échouait donc à chaque démarrage, et
+    # comme les cinq rôles écrivains attendent `service_completed_successfully`, aucun ne
+    # démarrait jamais — seule l'API montait, donnant une console vivante devant un système mort.
+    command: ["okxq", "db", "upgrade", "--revision", "head"]
     restart: "no"
     depends_on:
       postgres:
