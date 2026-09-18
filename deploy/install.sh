@@ -136,9 +136,18 @@ echo "  /health/ready : $ready (503 tant que la réconciliation/les données ne 
 #
 # On lit donc l'attendu dans la configuration effective, et on vérifie l'égalité — pas une valeur
 # choisie d'avance. Absent du fichier, le défaut est `non` : porte fermée.
-ACCES=$(grep -E "^[[:space:]]*acces_sans_cle:" "/app/configs/${PROFILE}.yaml" 2>/dev/null \
+# Le chemin est celui de l'HÔTE (`$DIR`), pas celui du conteneur. Écrit en `/app/...`, le fichier
+# était introuvable, la valeur retombait sur le défaut `non`, et l'installation refusait la porte
+# ouverte qu'elle venait elle-même de mettre en place. Un défaut silencieux sur une lecture ratée
+# transforme une erreur de chemin en verdict erroné : on lit donc, et on VÉRIFIE qu'on a lu.
+CONFIG="$DIR/configs/${PROFILE}.yaml"
+if [ ! -f "$CONFIG" ]; then
+  echo "  !! configuration introuvable : $CONFIG"; exit 1
+fi
+ACCES=$(grep -E "^[[:space:]]*acces_sans_cle:" "$CONFIG" 2>/dev/null \
   | tail -1 | sed "s/.*acces_sans_cle:[[:space:]]*//" | tr -d "\"' " )
 ACCES=${ACCES:-non}
+echo "  acces_sans_cle (depuis $CONFIG) : $ACCES"
 root=$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "http://127.0.0.1:${PORT}/" || echo 000)
 case "$ACCES" in
   non)
