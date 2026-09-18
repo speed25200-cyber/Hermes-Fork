@@ -189,9 +189,7 @@ def evaluate_scenarios(
     jump = max((p.worst_directional(prm.price_jump) for p in pos), default=ZERO)
     add("price_jump", jump, jump=str(prm.price_jump), note="saut sans exécution possible du stop")
     minutes = Decimal(prm.disconnection_minutes)
-    disconnection = sum(
-        (p.worst_abs * p.vol_per_minute * minutes.sqrt() * Z_CRISIS for p in pos), ZERO
-    )
+    disconnection = sum((p.worst_abs * p.vol_per_minute * minutes.sqrt() * Z_CRISIS for p in pos), ZERO)
     add(
         "disconnection",
         disconnection,
@@ -216,7 +214,9 @@ def evaluate_scenarios(
         if distance is None:
             distance = prm.price_jump  # sans stop ni liquidation connus : hypothèse de saut
         risked += p.worst_abs * (
-            dec(distance) + p.slippage_fraction * prm.liquidity_collapse_multiplier + (p.spread_fraction / 2) * prm.spread_multiplier
+            dec(distance)
+            + p.slippage_fraction * prm.liquidity_collapse_multiplier
+            + (p.spread_fraction / 2) * prm.spread_multiplier
         )
     worst = max(losses, key=lambda item: (item.loss.amount, item.name))
     return ScenarioReport(

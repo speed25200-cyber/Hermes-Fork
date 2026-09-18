@@ -41,7 +41,9 @@ def _state_dict(state: RiskStateRecord | None, scope: str) -> dict[str, Any]:
             if not state.day_start_equity
             else format(state.day_realized_loss / state.day_start_equity, "f")
         ),
-        "high_water_mark_unit": None if state.high_water_mark_unit is None else format(state.high_water_mark_unit, "f"),
+        "high_water_mark_unit": None
+        if state.high_water_mark_unit is None
+        else format(state.high_water_mark_unit, "f"),
         "high_water_mark_equity": (
             None if state.high_water_mark_equity is None else format(state.high_water_mark_equity, "f")
         ),
@@ -54,7 +56,9 @@ def _state_dict(state: RiskStateRecord | None, scope: str) -> dict[str, Any]:
 @app.command("status")
 def status(
     config: Path = typer.Option(..., "--config", exists=True, dir_okay=False),
-    actions: int = typer.Option(5, "--actions", min=0, max=100, help="Dernières actions opérateur à afficher."),
+    actions: int = typer.Option(
+        5, "--actions", min=0, max=100, help="Dernières actions opérateur à afficher."
+    ),
 ) -> None:
     """Affiche halts, pertes journalières, high-water mark et limites (versionnées) du compte configuré."""
     cfg = load_or_exit(config)

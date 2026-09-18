@@ -303,9 +303,16 @@ class RiskEngine:
         max_order_contracts = (lim.max_order_equity_multiple * ctx.equity.amount) / unit_notional
         if intent.contracts > max_order_contracts:
             out.append(Finding(ReasonCode.ORDER_TOO_LARGE, Severity.WARN, cap_contracts=max_order_contracts))
-        if mq.max_contracts_by_participation is not None and intent.contracts > mq.max_contracts_by_participation:
+        if (
+            mq.max_contracts_by_participation is not None
+            and intent.contracts > mq.max_contracts_by_participation
+        ):
             out.append(
-                Finding(ReasonCode.PARTICIPATION_LIMIT, Severity.WARN, cap_contracts=mq.max_contracts_by_participation)
+                Finding(
+                    ReasonCode.PARTICIPATION_LIMIT,
+                    Severity.WARN,
+                    cap_contracts=mq.max_contracts_by_participation,
+                )
             )
         # 11. budgets et marge sur l'exposition pessimiste
         cap = self._budget_cap(intent, ctx, spec)
@@ -378,7 +385,9 @@ class RiskEngine:
             used = sum(
                 (
                     initial_margin_estimate(
-                        abs(p.signed_contracts) * ctx.specs[k].base_units_per_contract * dec(ctx.reference_prices[k]),
+                        abs(p.signed_contracts)
+                        * ctx.specs[k].base_units_per_contract
+                        * dec(ctx.reference_prices[k]),
                         ctx.leverages.get(k, p.leverage),
                     )
                     for k, p in ctx.positions.items()
@@ -448,4 +457,3 @@ def reduced_intent(intent: OrderIntent, decision: RiskDecision) -> OrderIntent:
     if candidate.payload_hash() != decision.allowed_payload_hash:
         raise ValueError("l'intention réduite ne correspond pas au hash autorisé")
     return candidate
-

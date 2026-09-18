@@ -350,7 +350,11 @@ class KillSwitch:
 
         if target.rank > previous.rank:
             state = replace(state, halt_level=target, halt_reason=reason, halt_since=now)
-            events.append(self._event(Severity.CRITICAL if target.is_critical else Severity.WARN, target, reason or "", now))
+            events.append(
+                self._event(
+                    Severity.CRITICAL if target.is_critical else Severity.WARN, target, reason or "", now
+                )
+            )
         elif (
             previous is HaltLevel.SOFT_HALT
             and not triggers
@@ -360,7 +364,9 @@ class KillSwitch:
             events.append(self._event(Severity.INFO, HaltLevel.NONE, "auto_resume_after_soft_halt", now))
         elif previous.is_critical and not triggers and stable_for >= self._cfg.resume_stability_seconds:
             # auto_resume_after_critical_halt est False par construction (Literal[False]) : reprise opérateur.
-            events.append(self._event(Severity.WARN, previous, ReasonCode.OPERATOR_ACTION_REQUIRED.value, now))
+            events.append(
+                self._event(Severity.WARN, previous, ReasonCode.OPERATOR_ACTION_REQUIRED.value, now)
+            )
 
         state = replace(state, updated_at=now)
         self._state = self._store.save(state)
@@ -374,7 +380,9 @@ class KillSwitch:
             events=events,
         )
 
-    def _roll_day_and_marks(self, state: RiskStateRecord, signals: HealthSignals, now: datetime) -> RiskStateRecord:
+    def _roll_day_and_marks(
+        self, state: RiskStateRecord, signals: HealthSignals, now: datetime
+    ) -> RiskStateRecord:
         if signals.equity is None:
             return state
         equity = dec(signals.equity)
@@ -424,7 +432,9 @@ class KillSwitch:
         return out
 
     @staticmethod
-    def drawdown_from(state: RiskStateRecord, equity: Decimal | None, unit_value: Decimal | None) -> Decimal | None:
+    def drawdown_from(
+        state: RiskStateRecord, equity: Decimal | None, unit_value: Decimal | None
+    ) -> Decimal | None:
         if unit_value is not None and state.high_water_mark_unit:
             return max(state.high_water_mark_unit - dec(unit_value), ZERO) / state.high_water_mark_unit
         if equity is not None and state.high_water_mark_equity:
@@ -433,7 +443,9 @@ class KillSwitch:
 
     # --- actions ---------------------------------------------------------------------------------------
 
-    def request(self, level: HaltLevel, reason: str, *, operator: OperatorRequest | None = None) -> RiskStateRecord:
+    def request(
+        self, level: HaltLevel, reason: str, *, operator: OperatorRequest | None = None
+    ) -> RiskStateRecord:
         """Escalade manuelle (pause, demande de flatten). Ne descend jamais le niveau."""
         now = self._clock.now_utc()
         if level.rank <= self._state.halt_level.rank:
@@ -470,7 +482,11 @@ class KillSwitch:
         if self._state.halt_level is HaltLevel.NONE:
             return self._state
         if request.role not in AUTHORIZED_RESUME_ROLES:
-            raise HaltError("rôle non autorisé à lever un halt", code=ReasonCode.OPERATOR_ACTION_REQUIRED.value, role=request.role)
+            raise HaltError(
+                "rôle non autorisé à lever un halt",
+                code=ReasonCode.OPERATOR_ACTION_REQUIRED.value,
+                role=request.role,
+            )
         problems = self.resume_preconditions(signals)
         if problems:
             raise HaltError(

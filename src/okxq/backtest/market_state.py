@@ -246,10 +246,10 @@ class MarketState:
             book = self.books.setdefault(inst_id, OrderBook(inst_id))
             return Applied(kind, inst_id, tuple(book.apply_snapshot(p)))
         if kind == "book.update":
-            book = self.books.get(inst_id)
-            if book is None:
+            existing = self.books.get(inst_id)
+            if existing is None:
                 raise SequenceGapError("update sans snapshot préalable", inst_id=inst_id)
-            return Applied(kind, inst_id, tuple(book.apply_update(p)))
+            return Applied(kind, inst_id, tuple(existing.apply_update(p)))
         if kind == "trade":
             trade = Trade(
                 inst_id=inst_id,

@@ -60,7 +60,10 @@ class WatchdogVerdict:
 
 
 NORMAL_POLICY = SafetyPolicy(
-    allow_new_entries=True, cancel_orphan_entries=False, keep_position_supervision=True, requested_halt=HaltLevel.NONE
+    allow_new_entries=True,
+    cancel_orphan_entries=False,
+    keep_position_supervision=True,
+    requested_halt=HaltLevel.NONE,
 )
 
 
@@ -99,7 +102,9 @@ class Watchdog:
         self._last_accepted[component] = (now, observed)
         return HeartbeatResult(True, ReasonCode.OK)
 
-    def _component_health(self, component: str, o: ObservedState, now: datetime) -> tuple[bool, ReasonCode, str]:
+    def _component_health(
+        self, component: str, o: ObservedState, now: datetime
+    ) -> tuple[bool, ReasonCode, str]:
         if component == "strategy":
             if o.strategy_alive is None or o.strategy_last_decision_at is None:
                 return False, ReasonCode.HEARTBEAT_UNCONDITIONED, "état de la stratégie non fourni"

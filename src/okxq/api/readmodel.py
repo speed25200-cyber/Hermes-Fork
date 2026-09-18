@@ -204,7 +204,9 @@ class ReadModel:
 
     # --- ordres et fills ----------------------------------------------------------------------------------
 
-    def orders(self, limit: int = 100, state: str | None = None, inst_id: str | None = None) -> list[OrderRow]:
+    def orders(
+        self, limit: int = 100, state: str | None = None, inst_id: str | None = None
+    ) -> list[OrderRow]:
         with self.session() as s:
             q = select(OrderRow).where(OrderRow.account_scope == self.account_scope)
             if state:
@@ -225,7 +227,9 @@ class ReadModel:
                 ).scalars()
             )
 
-    def fills(self, limit: int = 100, since: datetime | None = None, inst_id: str | None = None) -> list[FillRow]:
+    def fills(
+        self, limit: int = 100, since: datetime | None = None, inst_id: str | None = None
+    ) -> list[FillRow]:
         with self.session() as s:
             q = select(FillRow).where(FillRow.account_scope == self.account_scope)
             if since is not None:
@@ -306,7 +310,9 @@ class ReadModel:
     def portfolio_targets(self, decision_id: str) -> list[PortfolioTargetRow]:
         with self.session() as s:
             return list(
-                s.execute(select(PortfolioTargetRow).where(PortfolioTargetRow.decision_id == decision_id)).scalars()
+                s.execute(
+                    select(PortfolioTargetRow).where(PortfolioTargetRow.decision_id == decision_id)
+                ).scalars()
             )
 
     # --- risque et qualité des données ----------------------------------------------------------------
@@ -326,7 +332,9 @@ class ReadModel:
     def data_quality_events(self, limit: int = 100) -> list[DataQualityEvent]:
         with self.session() as s:
             return list(
-                s.execute(select(DataQualityEvent).order_by(DataQualityEvent.occurred_at.desc()).limit(limit)).scalars()
+                s.execute(
+                    select(DataQualityEvent).order_by(DataQualityEvent.occurred_at.desc()).limit(limit)
+                ).scalars()
             )
 
     # --- recherche ----------------------------------------------------------------------------------------
@@ -334,7 +342,9 @@ class ReadModel:
     def experiments(self, limit: int = 50) -> list[ExperimentRun]:
         with self.session() as s:
             return list(
-                s.execute(select(ExperimentRun).order_by(ExperimentRun.started_at.desc()).limit(limit)).scalars()
+                s.execute(
+                    select(ExperimentRun).order_by(ExperimentRun.started_at.desc()).limit(limit)
+                ).scalars()
             )
 
     def experiment(self, run_id: str) -> ExperimentRun | None:
@@ -351,7 +361,11 @@ class ReadModel:
 
     def models(self, limit: int = 100) -> list[ModelVersion]:
         with self.session() as s:
-            return list(s.execute(select(ModelVersion).order_by(ModelVersion.created_at.desc()).limit(limit)).scalars())
+            return list(
+                s.execute(
+                    select(ModelVersion).order_by(ModelVersion.created_at.desc()).limit(limit)
+                ).scalars()
+            )
 
     # --- JEV -------------------------------------------------------------------------------------------------
 
@@ -412,12 +426,16 @@ class ReadModel:
     def outbox_pending(self) -> int:
         with self.session() as s:
             return int(
-                s.execute(select(func.count(OutboxEvent.id)).where(OutboxEvent.status == "PENDING")).scalar_one()
+                s.execute(
+                    select(func.count(OutboxEvent.id)).where(OutboxEvent.status == "PENDING")
+                ).scalar_one()
             )
 
     def latest_decision(self) -> Decision | None:
         with self.session() as s:
-            return s.execute(select(Decision).order_by(Decision.started_at.desc()).limit(1)).scalar_one_or_none()
+            return s.execute(
+                select(Decision).order_by(Decision.started_at.desc()).limit(1)
+            ).scalar_one_or_none()
 
     def latest_partition_written_at(self) -> datetime | None:
         with self.session() as s:
@@ -512,7 +530,10 @@ class ReadModel:
         else:
             age = now - last.started_at
             if age <= 2 * interval:
-                out["strategy"] = (Status.OK, f"dernière décision {last.outcome} il y a {int(age.total_seconds())} s")
+                out["strategy"] = (
+                    Status.OK,
+                    f"dernière décision {last.outcome} il y a {int(age.total_seconds())} s",
+                )
             else:
                 out["strategy"] = (Status.WARN, f"aucune décision depuis {int(age.total_seconds())} s")
         rs = self.risk_state()
@@ -523,7 +544,10 @@ class ReadModel:
             if rs.halt_level != "NONE":
                 out["risk"] = (Status.WARN, f"halt {rs.halt_level} : {rs.halt_reason or ''}".strip())
             elif age > 5 * interval:
-                out["risk"] = (Status.WARN, f"état de risque non rafraîchi depuis {int(age.total_seconds())} s")
+                out["risk"] = (
+                    Status.WARN,
+                    f"état de risque non rafraîchi depuis {int(age.total_seconds())} s",
+                )
             else:
                 out["risk"] = (Status.OK, f"halt NONE · limites {rs.limits_version}")
         leases = {lease.lease_name: lease for lease in self.leases()}
@@ -558,5 +582,8 @@ class ReadModel:
             elif errors * 4 > total:
                 out["jev"] = (Status.WARN, f"{errors}/{total} évaluations en erreur sur 24 h")
             else:
-                out["jev"] = (Status.OK, f"{total} évaluations sur 24 h · {counts['pending_requests']} en attente")
+                out["jev"] = (
+                    Status.OK,
+                    f"{total} évaluations sur 24 h · {counts['pending_requests']} en attente",
+                )
         return out

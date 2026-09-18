@@ -7,7 +7,6 @@ import json
 import logging
 
 import pytest
-
 from okxq.runtime.logging import (
     MASK,
     SecretMasker,

@@ -15,7 +15,8 @@ router = APIRouter(tags=["santé"])
 
 @router.get("/health/live", summary="Vivacité : le processus répond")
 def live(request: Request) -> dict[str, Any]:
-    return get_ctx(request).health.liveness()
+    result: dict[str, Any] = get_ctx(request).health.liveness()
+    return result
 
 
 @router.get("/health/ready", summary="Disponibilité réelle (503 si un composant requis n'est pas prêt)")

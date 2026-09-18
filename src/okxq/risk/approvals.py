@@ -255,7 +255,10 @@ def recheck_at_send(
     if now >= intent.expires_at:
         reasons.append(ReasonCode.INTENT_EXPIRED.value)
     sent = dict(payload) if payload is not None else intent.normalized_payload()
-    if payload_hash(sent) != decision.allowed_payload_hash or approved.payload_hash != decision.allowed_payload_hash:
+    if (
+        payload_hash(sent) != decision.allowed_payload_hash
+        or approved.payload_hash != decision.allowed_payload_hash
+    ):
         reasons.append(ReasonCode.PAYLOAD_HASH_MISMATCH.value)
     if decision.action is RiskAction.REDUCE and decision.allowed_contracts is not None:
         if dec(str(sent.get("contracts", "0"))) != decision.allowed_contracts:
@@ -310,7 +313,9 @@ class SendAuthorization:
 
     def __post_init__(self) -> None:
         if self._token is not _SEND_TOKEN:
-            raise ApprovalError("SendAuthorization ne se construit que par authorize_send", code=ReasonCode.NO_APPROVAL.value)
+            raise ApprovalError(
+                "SendAuthorization ne se construit que par authorize_send", code=ReasonCode.NO_APPROVAL.value
+            )
 
 
 def authorize_send(

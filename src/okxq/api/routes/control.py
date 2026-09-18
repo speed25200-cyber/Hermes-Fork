@@ -131,7 +131,9 @@ def track(
     ctx = get_ctx(request)
     row = ctx.readmodel.operator_action(request_id)
     if row is None:
-        raise HTTPException(status_code=404, detail={"ok": False, "error": "DEMANDE_INCONNUE", "message": request_id})
+        raise HTTPException(
+            status_code=404, detail={"ok": False, "error": "DEMANDE_INCONNUE", "message": request_id}
+        )
     residuals = [
         {
             "inst_id": p.inst_id,
@@ -144,7 +146,8 @@ def track(
     open_orders = [
         {"order_id": o.order_id, "inst_id": o.inst_id, "observed_state": o.observed_state}
         for o in ctx.readmodel.orders(limit=200)
-        if o.observed_state in ("SUBMITTED", "ACKNOWLEDGED", "PARTIALLY_FILLED", "CANCEL_REQUESTED", "UNKNOWN")
+        if o.observed_state
+        in ("SUBMITTED", "ACKNOWLEDGED", "PARTIALLY_FILLED", "CANCEL_REQUESTED", "UNKNOWN")
     ]
     return {
         "ok": True,

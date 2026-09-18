@@ -72,18 +72,21 @@ def _run(cfg: AppConfig, action: str, request: OperatorRequest, apply: Any) -> N
     factory = session_factory_from_env()
     store = SqlRiskStateStore(factory)
     with factory() as session:
-        row = record_operator_action(session, action=action, scope=cfg.account.scope, request=request, status=STATUS_REQUESTED)
+        record_operator_action(
+            session, action=action, scope=cfg.account.scope, request=request, status=STATUS_REQUESTED
+        )
         session.commit()
     ks = _kill_switch(cfg, store)
     status, result = apply(ks)
     with factory() as session:
         from okxq.persistence.models import OperatorAction
 
-        row = session.get(OperatorAction, request.request_id)
-        assert row is not None
-        row.status = status
-        row.observed_result = result
-        row.completed_at = datetime.now(tz=UTC)
+        stored = session.get(OperatorAction, request.request_id)
+        if stored is None:  # écrite juste au-dessus dans la même base : une absence est une incohérence
+            raise RuntimeError("action opérateur introuvable après écriture : base incohérente")
+        stored.status = status
+        stored.observed_result = result
+        stored.completed_at = datetime.now(tz=UTC)
         session.commit()
     emit(
         {
@@ -120,7 +123,9 @@ def pause(config: Path = _CONFIG, reason: str = _REASON, actor: str = _ACTOR, ro
 
 
 @app.command("request-flatten")
-def request_flatten(config: Path = _CONFIG, reason: str = _REASON, actor: str = _ACTOR, role: str = _ROLE) -> None:
+def request_flatten(
+    config: Path = _CONFIG, reason: str = _REASON, actor: str = _ACTOR, role: str = _ROLE
+) -> None:
     """EMERGENCY_FLATTEN : demande de sortie contrôlée ; les résidus restent exposés et rapportés."""
     cfg = load_or_exit(config)
     req = _request(actor, role, reason)
@@ -134,7 +139,9 @@ def request_flatten(config: Path = _CONFIG, reason: str = _REASON, actor: str = 
 
 
 @app.command("cancel-entry-orders")
-def cancel_entry_orders(config: Path = _CONFIG, reason: str = _REASON, actor: str = _ACTOR, role: str = _ROLE) -> None:
+def cancel_entry_orders(
+    config: Path = _CONFIG, reason: str = _REASON, actor: str = _ACTOR, role: str = _ROLE
+) -> None:
     """Demande l'annulation des ordres d'entrée ouverts (consommée par le gateway) et passe en HARD_HALT."""
     cfg = load_or_exit(config)
     req = _request(actor, role, reason)
@@ -163,7 +170,12 @@ def resume(config: Path = _CONFIG, reason: str = _REASON, actor: str = _ACTOR, r
         try:
             ks.operator_resume(req, signals)
         except HaltError as exc:
-            return STATUS_REJECTED, {"before": before.value, "after": ks.level.value, "error": str(exc), **exc.context}
+            return STATUS_REJECTED, {
+                "before": before.value,
+                "after": ks.level.value,
+                "error": str(exc),
+                **exc.context,
+            }
         return STATUS_APPLIED, {"before": before.value, "after": ks.level.value}
 
     _run(cfg, ACTION_RESUME, req, apply)

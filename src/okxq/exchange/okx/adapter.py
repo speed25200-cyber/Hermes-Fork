@@ -24,7 +24,7 @@ from okxq.config.live_guard import LiveAuthorization
 from okxq.config.modes import Mode
 from okxq.config.schema import AppConfig
 from okxq.domain.clocks import Clock
-from okxq.domain.errors import ConfigError, ExchangeAmbiguousError, ExchangeError, LiveGuardError
+from okxq.domain.errors import ConfigError, ExchangeAmbiguousError, ExchangeError, LiveGuardError, OkxqError
 from okxq.domain.events import Fill, Liquidity
 from okxq.domain.instruments import InstrumentSpec, spec_from_okx_instrument
 from okxq.domain.money import Side, dec
@@ -172,6 +172,9 @@ class OkxExchangeAdapter:
         )
         if self._rest.demo != self._demo:
             raise ConfigError("client REST incohérent avec le mode de l'adaptateur")
+        # Instruments écartés à la lecture des métadonnées, comptés par motif : exposé dans la santé,
+        # jamais silencieux (une divergence de contrat fournisseur doit se voir).
+        self._skipped_instruments: dict[str, int] = {}
         if ws is None:
             if ws_connector is None:
                 raise ConfigError("un connecteur WebSocket est requis (aucune socket implicite)")
@@ -242,10 +245,15 @@ class OkxExchangeAdapter:
         specs: list[InstrumentSpec] = []
         for item in resp.data:
             try:
-                specs.append(spec_from_okx_instrument(item, observed_at=now, provenance=f"okx:{self.profile.name}"))
-            except ExchangeError:  # pragma: no cover - défensif
-                continue
-            except Exception:  # instruments non supportés (inverse, options…) : ignorés, jamais convertis
+                specs.append(
+                    spec_from_okx_instrument(item, observed_at=now, provenance=f"okx:{self.profile.name}")
+                )
+            except (ExchangeError, OkxqError, ValueError) as exc:
+                # Instruments non supportés (inverse, options, ctMult≠1…) : ignorés, jamais convertis.
+                # Le motif est compté et nommé : un rejet silencieux masquerait une divergence de contrat.
+                self._skipped_instruments[type(exc).__name__] = (
+                    self._skipped_instruments.get(type(exc).__name__, 0) + 1
+                )
                 continue
         return specs
 
@@ -325,7 +333,9 @@ class OkxExchangeAdapter:
             )
         except ExchangeAmbiguousError as exc:
             return [
-                PlaceResponse(PlaceOutcome.UNKNOWN, r.client_order_id, code=exc.code, message=str(exc), sent_at=sent_at)
+                PlaceResponse(
+                    PlaceOutcome.UNKNOWN, r.client_order_id, code=exc.code, message=str(exc), sent_at=sent_at
+                )
                 for r in requests
             ]
         by_cl = {str(d.get("clOrdId", "")): d for d in resp.data}
@@ -334,12 +344,20 @@ class OkxExchangeAdapter:
             item = by_cl.get(r.client_order_id)
             if item is None:
                 out.append(
-                    PlaceResponse(PlaceOutcome.UNKNOWN, r.client_order_id, code=resp.code, message="item absent", sent_at=sent_at)
+                    PlaceResponse(
+                        PlaceOutcome.UNKNOWN,
+                        r.client_order_id,
+                        code=resp.code,
+                        message="item absent",
+                        sent_at=sent_at,
+                    )
                 )
                 continue
             out.append(
                 self._interpret_place(
-                    OkxResponse(resp.http_status, "0" if item_code(item)[0] == "0" else resp.code, resp.msg, [item]),
+                    OkxResponse(
+                        resp.http_status, "0" if item_code(item)[0] == "0" else resp.code, resp.msg, [item]
+                    ),
                     r.client_order_id,
                     sent_at,
                 )
@@ -361,7 +379,10 @@ class OkxExchangeAdapter:
         if resp.ok and s_code == "0":
             return CancelResponse(PlaceOutcome.ACK, client_order_id, code="0", message=s_msg)
         return CancelResponse(
-            PlaceOutcome.REJECTED, client_order_id, code=s_code if s_code != "0" else resp.code, message=s_msg or resp.msg
+            PlaceOutcome.REJECTED,
+            client_order_id,
+            code=s_code if s_code != "0" else resp.code,
+            message=s_msg or resp.msg,
         )
 
     async def cancel_all_after(self, timeout_seconds: int) -> bool:
@@ -444,7 +465,11 @@ class OkxExchangeAdapter:
             fee_ccy=str(item.get("feeCcy") or "USDT"),
             fill_at=_ms(item.get("ts")) or receive_ts,
             receive_ts=receive_ts,
-            liquidity=Liquidity.MAKER if exec_type == "M" else Liquidity.TAKER if exec_type == "T" else Liquidity.UNKNOWN,
+            liquidity=Liquidity.MAKER
+            if exec_type == "M"
+            else Liquidity.TAKER
+            if exec_type == "T"
+            else Liquidity.UNKNOWN,
         )
 
     # --- compte -------------------------------------------------------------------------------------------
@@ -453,7 +478,11 @@ class OkxExchangeAdapter:
         self._check_scope(account_scope)
         resp = await self._rest.request("positions", params={"instType": "SWAP"})
         now = self._clock.now_utc()
-        return [parse_position_message(d, receive_ts=now) for d in resp.data if str(d.get("pos", "0")) not in ("", "0")]
+        return [
+            parse_position_message(d, receive_ts=now)
+            for d in resp.data
+            if str(d.get("pos", "0")) not in ("", "0")
+        ]
 
     async def balance(self, account_scope: str) -> BalanceStatus:
         self._check_scope(account_scope)
@@ -482,10 +511,18 @@ class OkxExchangeAdapter:
         try:
             resp = await self._rest.request("place_algo", body=body, scope_id=request.inst_id)
         except ExchangeAmbiguousError:
-            return ProtectionStatus(request.client_algo_id, None, "unknown", request.trigger_price, request.contracts, now)
+            return ProtectionStatus(
+                request.client_algo_id, None, "unknown", request.trigger_price, request.contracts, now
+            )
         except ExchangeError as exc:
             return ProtectionStatus(
-                request.client_algo_id, None, "rejected", request.trigger_price, request.contracts, now, raw={"error": str(exc)}
+                request.client_algo_id,
+                None,
+                "rejected",
+                request.trigger_price,
+                request.contracts,
+                now,
+                raw={"error": str(exc)},
             )
         item = resp.data[0] if resp.data else {}
         s_code, s_msg = item_code(item)
@@ -500,7 +537,9 @@ class OkxExchangeAdapter:
             raw={"sCode": s_code, "sMsg": s_msg, "code": resp.code},
         )
 
-    async def cancel_protection(self, account_scope: str, client_algo_id: str, inst_id: str) -> ProtectionStatus:
+    async def cancel_protection(
+        self, account_scope: str, client_algo_id: str, inst_id: str
+    ) -> ProtectionStatus:
         self._check_scope(account_scope)
         now = self._clock.now_utc()
         try:
@@ -512,7 +551,12 @@ class OkxExchangeAdapter:
         item = resp.data[0] if resp.data else {}
         s_code, _ = item_code(item)
         return ProtectionStatus(
-            client_algo_id, str(item.get("algoId", "")) or None, "canceled" if s_code == "0" else "unknown", None, None, now
+            client_algo_id,
+            str(item.get("algoId", "")) or None,
+            "canceled" if s_code == "0" else "unknown",
+            None,
+            None,
+            now,
         )
 
     async def protections(self, account_scope: str) -> list[ProtectionStatus]:
@@ -532,7 +576,9 @@ class OkxExchangeAdapter:
             except ExchangeError:
                 raise
             except Exception as exc:
-                yield ExchangeEvent(kind="disconnect", receive_ts=self._clock.now_utc(), raw={"error": str(exc)})
+                yield ExchangeEvent(
+                    kind="disconnect", receive_ts=self._clock.now_utc(), raw={"error": str(exc)}
+                )
                 await self._ws.reconnect()
                 continue
             for event in batch:

@@ -19,10 +19,10 @@ from okxq.domain.money import ZERO, Side, dec
 from okxq.domain.reasons import ReasonCode
 
 __all__ = [
+    "POST_ONLY_WOULD_CROSS",
     "AggressiveResult",
     "DepthReservation",
     "LevelFill",
-    "POST_ONLY_WOULD_CROSS",
     "book_side_for",
     "match_aggressive",
     "post_only_would_cross",

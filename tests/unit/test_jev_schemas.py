@@ -58,7 +58,12 @@ def test_state_accepts_only_asset_document_prior_documents():
     with pytest.raises(ValidationError):
         JevDocumentState(title="t", text="x", api_secret="s")
     with pytest.raises(ValidationError):
-        JevRequest(model="jev-1.13.0", state=JevState(asset=asset, document=doc), questions=QUESTIONS.questions, account="x")
+        JevRequest(
+            model="jev-1.13.0",
+            state=JevState(asset=asset, document=doc),
+            questions=QUESTIONS.questions,
+            account="x",
+        )
 
 
 def test_reference_request_matches_question_set_and_is_strict():
@@ -80,7 +85,9 @@ def test_question_set_hash_is_stable_and_content_sensitive():
     assert mutated.question_set_hash == QUESTIONS.question_set_hash  # les notes ne font pas partie du contrat
     changed = {**QUESTIONS.questions}
     changed["asset_relevance"] = changed["asset_relevance"].model_copy(update={"instructions": "Different."})
-    assert QUESTIONS.model_copy(update={"questions": changed}).question_set_hash != QUESTIONS.question_set_hash
+    assert (
+        QUESTIONS.model_copy(update={"questions": changed}).question_set_hash != QUESTIONS.question_set_hash
+    )
 
 
 def test_truncate_and_build_request_bounds_document():

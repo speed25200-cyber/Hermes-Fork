@@ -109,7 +109,9 @@ def experiment_detail(
     ctx = get_ctx(request)
     e = ctx.readmodel.experiment(run_id)
     if e is None:
-        raise HTTPException(status_code=404, detail={"ok": False, "error": "EXPERIENCE_INCONNUE", "message": run_id})
+        raise HTTPException(
+            status_code=404, detail={"ok": False, "error": "EXPERIENCE_INCONNUE", "message": run_id}
+        )
     return {"ok": True, "experiment": experiment_to_dict(e, ctx.readmodel.evaluation_reports(run_id))}
 
 

@@ -200,7 +200,13 @@ class AuditTrail:
         if self._bus is not None:
             self._bus.publish(
                 "ai-log",
-                {"ts": now.isoformat(), "event": f"AUDIT_{status}", "action": action, "scope": scope, "actor": actor},
+                {
+                    "ts": now.isoformat(),
+                    "event": f"AUDIT_{status}",
+                    "action": action,
+                    "scope": scope,
+                    "actor": actor,
+                },
             )
         return rid
 
@@ -359,7 +365,9 @@ class AuthMiddleware:
 
         # Clé acceptée sur la page : elle ne reste pas dans l'URL (historique, référents).
         if set_cookies and request.method == "GET" and path in HTML_PAGES:
-            params = [(k, v) for k, v in parse_qsl(request.url.query, keep_blank_values=True) if k != QUERY_KEY]
+            params = [
+                (k, v) for k, v in parse_qsl(request.url.query, keep_blank_values=True) if k != QUERY_KEY
+            ]
             target = path + (f"?{urlencode(params)}" if params else "")
             response = RedirectResponse(target, status_code=303)
             for cookie in set_cookies:

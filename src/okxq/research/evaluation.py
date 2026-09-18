@@ -101,8 +101,13 @@ def simulate_pnl(
     spread = cost - fee
     net = gross - cost
     per_row = rows.select(["decision_at", "instrument"]).with_columns(
-        pl.Series("gross", gross), pl.Series("cost", cost), pl.Series("net", net),
-        pl.Series("fee", fee), pl.Series("spread", spread), pl.Series("abs_w", np.abs(w)), pl.Series("w", w),
+        pl.Series("gross", gross),
+        pl.Series("cost", cost),
+        pl.Series("net", net),
+        pl.Series("fee", fee),
+        pl.Series("spread", spread),
+        pl.Series("abs_w", np.abs(w)),
+        pl.Series("w", w),
     )
     n_inst = per_row["instrument"].n_unique()
     per_t = (
@@ -146,17 +151,21 @@ def simulate_pnl(
     )
     sharpe: float | None = None
     if daily.height >= MIN_DAYS_FOR_SHARPE:
-        d = daily["net"].to_numpy().astype(float)
-        sd = float(np.std(d, ddof=1))
-        sharpe = float(np.mean(d) / sd * np.sqrt(SHARPE_PERIODS_PER_YEAR)) if sd > 0 else None
+        daily_net = daily["net"].to_numpy().astype(float)
+        sd = float(np.std(daily_net, ddof=1))
+        sharpe = float(np.mean(daily_net) / sd * np.sqrt(SHARPE_PERIODS_PER_YEAR)) if sd > 0 else None
     else:
         notes.append(
             f"sharpe non calculé : {daily.height} jour(s) < {MIN_DAYS_FOR_SHARPE} (convention 365 j, pas d'extrapolation)"
         )
     by_inst = per_row.group_by("instrument").agg(pl.col("gross").abs().sum().alias("g"))
-    g = by_inst["g"].to_numpy().astype(float)
-    hhi_inst = float(np.sum((g / g.sum()) ** 2)) if g.sum() > 0 else None
-    by_day = per_t.with_columns(pl.col("decision_at").dt.truncate("1d").alias("day")).group_by("day").agg(pl.col("gross").abs().sum().alias("g"))
+    gross_by_inst: np.ndarray = by_inst["g"].to_numpy().astype(float)
+    hhi_inst = float(np.sum((gross_by_inst / gross_by_inst.sum()) ** 2)) if gross_by_inst.sum() > 0 else None
+    by_day = (
+        per_t.with_columns(pl.col("decision_at").dt.truncate("1d").alias("day"))
+        .group_by("day")
+        .agg(pl.col("gross").abs().sum().alias("g"))
+    )
     gd = by_day["g"].to_numpy().astype(float)
     hhi_day = float(np.sum((gd / gd.sum()) ** 2)) if gd.sum() > 0 else None
     capacity: float | None = None
@@ -175,15 +184,20 @@ def simulate_pnl(
         "overlap_factor": overlap,
         "n_effective": float(rows.height / overlap),
         "net_pnl": float(np.sum(net_series)),
-        "gross_pnl": float(per_t["gross"].sum()),
-        "total_costs": float(per_t["cost"].sum()),
-        "cost_breakdown": {"fees": float(per_t["fee"].sum()), "spread": float(per_t["spread"].sum())},
+        "gross_pnl": float(per_t["gross"].to_numpy().astype(float).sum()),
+        "total_costs": float(per_t["cost"].to_numpy().astype(float).sum()),
+        "cost_breakdown": {
+            "fees": float(per_t["fee"].to_numpy().astype(float).sum()),
+            "spread": float(per_t["spread"].to_numpy().astype(float).sum()),
+        },
         "cost_multiplier": cost_multiplier,
         "max_drawdown": max_dd,
         "expected_shortfall_5": es,
         "turnover_per_interval": turnover_per_interval,
         "profit_factor": profit_factor,
-        "fraction_time_exposed": float(per_t["exposure"].mean()) if per_t.height else 0.0,
+        "fraction_time_exposed": float(per_t["exposure"].to_numpy().astype(float).mean())
+        if per_t.height
+        else 0.0,
         "capacity_estimate_usdt": capacity,
         "concentration_hhi_instrument": hhi_inst,
         "concentration_hhi_day": hhi_day,
@@ -199,14 +213,21 @@ def simulate_pnl(
 
 
 def _panel(per_row: pl.DataFrame, value_col: str) -> tuple[np.ndarray, list[datetime]]:
-    pivot = per_row.pivot(on="instrument", index="decision_at", values=value_col, aggregate_function="sum").sort("decision_at")
+    pivot = per_row.pivot(
+        on="instrument", index="decision_at", values=value_col, aggregate_function="sum"
+    ).sort("decision_at")
     times = pivot["decision_at"].to_list()
     mat = pivot.drop("decision_at").to_numpy().astype(float)
     return np.nan_to_num(mat, nan=0.0), times
 
 
 def block_bootstrap(
-    matrix: np.ndarray, *, block_len: int, n_boot: int = 500, seed: int = 0, stat: Callable[[np.ndarray], float] | None = None
+    matrix: np.ndarray,
+    *,
+    block_len: int,
+    n_boot: int = 500,
+    seed: int = 0,
+    stat: Callable[[np.ndarray], float] | None = None,
 ) -> dict[str, float]:
     """Bootstrap par blocs circulaires sur l'axe temps ; les mêmes blocs s'appliquent à toutes les colonnes."""
     if matrix.ndim == 1:
@@ -233,11 +254,22 @@ def block_bootstrap(
     }
 
 
-def bootstrap_sensitivity(matrix: np.ndarray, *, block_lens: Sequence[int] = DEFAULT_BLOCK_LENS, n_boot: int = 300, seed: int = 0) -> list[dict[str, float]]:
+def bootstrap_sensitivity(
+    matrix: np.ndarray, *, block_lens: Sequence[int] = DEFAULT_BLOCK_LENS, n_boot: int = 300, seed: int = 0
+) -> list[dict[str, float]]:
     return [block_bootstrap(matrix, block_len=b, n_boot=n_boot, seed=seed) for b in block_lens]
 
 
-def panel_bootstrap(frame: pl.DataFrame, *, weight_col: str = "weight", return_col: str = "future_mid_return", cost_col: str = "round_trip_cost", block_lens: Sequence[int] = DEFAULT_BLOCK_LENS, n_boot: int = 300, seed: int = 0) -> dict[str, Any]:
+def panel_bootstrap(
+    frame: pl.DataFrame,
+    *,
+    weight_col: str = "weight",
+    return_col: str = "future_mid_return",
+    cost_col: str = "round_trip_cost",
+    block_lens: Sequence[int] = DEFAULT_BLOCK_LENS,
+    n_boot: int = 300,
+    seed: int = 0,
+) -> dict[str, Any]:
     rows = frame.filter(pl.col(return_col).is_not_null() & pl.col(cost_col).is_not_null())
     w = rows[weight_col].to_numpy().astype(float)
     net = w * rows[return_col].to_numpy().astype(float) - np.abs(w) * rows[cost_col].to_numpy().astype(float)
@@ -248,23 +280,31 @@ def panel_bootstrap(frame: pl.DataFrame, *, weight_col: str = "weight", return_c
     return {
         "instruments": n_inst,
         "intervals": mat.shape[0],
-        "by_block_len": [block_bootstrap(mat, block_len=b, n_boot=n_boot, seed=seed, stat=stat) for b in block_lens],
+        "by_block_len": [
+            block_bootstrap(mat, block_len=b, n_boot=n_boot, seed=seed, stat=stat) for b in block_lens
+        ],
     }
 
 
 # --- contrôles négatifs -------------------------------------------------------------------------------------
 
 
-def assert_features_precede_decisions(feature_available_at: Sequence[datetime], decision_at: Sequence[datetime]) -> None:
+def assert_features_precede_decisions(
+    feature_available_at: Sequence[datetime], decision_at: Sequence[datetime]
+) -> None:
     """T14 : une feature disponible après la décision est une fuite structurelle."""
     for fa, d in zip(feature_available_at, decision_at, strict=True):
         if ensure_utc(fa) > ensure_utc(d):
             raise LeakageError(
-                "feature disponible après la décision", available_at=ensure_utc(fa).isoformat(), decision_at=ensure_utc(d).isoformat()
+                "feature disponible après la décision",
+                available_at=ensure_utc(fa).isoformat(),
+                decision_at=ensure_utc(d).isoformat(),
             )
 
 
-def future_feature_screen(x: np.ndarray, y: np.ndarray, feature_names: Sequence[str], *, threshold: float = IMPLAUSIBLE_IC) -> dict[str, Any]:
+def future_feature_screen(
+    x: np.ndarray, y: np.ndarray, feature_names: Sequence[str], *, threshold: float = IMPLAUSIBLE_IC
+) -> dict[str, Any]:
     """Corrélation feature/cible implausible (|IC| > seuil) → la feature contient probablement le futur."""
     flagged: dict[str, float] = {}
     ics: dict[str, float] = {}
@@ -283,7 +323,17 @@ def future_feature_screen(x: np.ndarray, y: np.ndarray, feature_names: Sequence[
 FitPredict = Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]
 
 
-def shuffled_label_control(fit_predict: FitPredict, x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_test: np.ndarray, *, seed: int, n_rep: int = 5, threshold: float = SHUFFLED_IC_THRESHOLD) -> dict[str, Any]:
+def shuffled_label_control(
+    fit_predict: FitPredict,
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_test: np.ndarray,
+    y_test: np.ndarray,
+    *,
+    seed: int,
+    n_rep: int = 5,
+    threshold: float = SHUFFLED_IC_THRESHOLD,
+) -> dict[str, Any]:
     """Avec des labels mélangés, aucun pipeline honnête ne garde de pouvoir prédictif hors échantillon.
 
     Un IC hors échantillon resté élevé signale une contamination (test dans l'entraînement, transformateur
@@ -304,25 +354,53 @@ def shuffled_label_control(fit_predict: FitPredict, x_train: np.ndarray, y_train
     }
 
 
-def cost_stress(frame: pl.DataFrame, *, cutoff_interval_s: int, multipliers: Sequence[float] = (1.0, 1.5, 2.0), fee_rate: float | None = None) -> list[dict[str, Any]]:
+def cost_stress(
+    frame: pl.DataFrame,
+    *,
+    cutoff_interval_s: int,
+    multipliers: Sequence[float] = (1.0, 1.5, 2.0),
+    fee_rate: float | None = None,
+) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for m in multipliers:
         res = simulate_pnl(frame, cutoff_interval_s=cutoff_interval_s, cost_multiplier=m, fee_rate=fee_rate)
-        out.append({"multiplier": m, "net_pnl": res.metrics["net_pnl"], "max_drawdown": res.metrics["max_drawdown"], "profit_factor": res.metrics["profit_factor"]})
+        out.append(
+            {
+                "multiplier": m,
+                "net_pnl": res.metrics["net_pnl"],
+                "max_drawdown": res.metrics["max_drawdown"],
+                "profit_factor": res.metrics["profit_factor"],
+            }
+        )
     return out
 
 
-def latency_stress(frame: pl.DataFrame, *, cutoff_interval_s: int, degraded_return_col: str, fee_rate: float | None = None) -> dict[str, Any]:
+def latency_stress(
+    frame: pl.DataFrame, *, cutoff_interval_s: int, degraded_return_col: str, fee_rate: float | None = None
+) -> dict[str, Any]:
     """Délais dégradés : la colonne ``degraded_return_col`` contient le rendement relabellisé avec une entrée retardée."""
     base = simulate_pnl(frame, cutoff_interval_s=cutoff_interval_s, fee_rate=fee_rate)
-    degraded = simulate_pnl(frame, cutoff_interval_s=cutoff_interval_s, fee_rate=fee_rate, return_col=degraded_return_col)
-    return {"base_net_pnl": base.metrics["net_pnl"], "degraded_net_pnl": degraded.metrics["net_pnl"], "degradation": base.metrics["net_pnl"] - degraded.metrics["net_pnl"]}
+    degraded = simulate_pnl(
+        frame, cutoff_interval_s=cutoff_interval_s, fee_rate=fee_rate, return_col=degraded_return_col
+    )
+    return {
+        "base_net_pnl": base.metrics["net_pnl"],
+        "degraded_net_pnl": degraded.metrics["net_pnl"],
+        "degradation": base.metrics["net_pnl"] - degraded.metrics["net_pnl"],
+    }
 
 
 # --- benchmarks §39.4 --------------------------------------------------------------------------------------
 
 
-def benchmark_weights(frame: pl.DataFrame, *, kind: str, seed: int = 0, momentum_col: str = "ret_15m", turnover_like: np.ndarray | None = None) -> np.ndarray:
+def benchmark_weights(
+    frame: pl.DataFrame,
+    *,
+    kind: str,
+    seed: int = 0,
+    momentum_col: str = "ret_15m",
+    turnover_like: np.ndarray | None = None,
+) -> np.ndarray:
     n = frame.height
     if kind == "flat":
         return np.zeros(n)
@@ -343,7 +421,14 @@ def benchmark_weights(frame: pl.DataFrame, *, kind: str, seed: int = 0, momentum
     raise ValueError(f"benchmark inconnu : {kind}")
 
 
-def benchmark_suite(frame: pl.DataFrame, *, cutoff_interval_s: int, strategy_weights: np.ndarray, seed: int = 0, fee_rate: float | None = None) -> dict[str, dict[str, Any]]:
+def benchmark_suite(
+    frame: pl.DataFrame,
+    *,
+    cutoff_interval_s: int,
+    strategy_weights: np.ndarray,
+    seed: int = 0,
+    fee_rate: float | None = None,
+) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for kind in ("flat", "buy_and_hold", "momentum_sign", "random_sign"):
         try:
@@ -351,6 +436,17 @@ def benchmark_suite(frame: pl.DataFrame, *, cutoff_interval_s: int, strategy_wei
         except ValueError as exc:
             out[kind] = {"error": str(exc)}
             continue
-        res = simulate_pnl(frame.with_columns(pl.Series("weight", w)), cutoff_interval_s=cutoff_interval_s, fee_rate=fee_rate)
-        out[kind] = {k: res.metrics[k] for k in ("net_pnl", "max_drawdown", "turnover_per_interval", "fraction_time_exposed", "profit_factor")}
+        res = simulate_pnl(
+            frame.with_columns(pl.Series("weight", w)), cutoff_interval_s=cutoff_interval_s, fee_rate=fee_rate
+        )
+        out[kind] = {
+            k: res.metrics[k]
+            for k in (
+                "net_pnl",
+                "max_drawdown",
+                "turnover_per_interval",
+                "fraction_time_exposed",
+                "profit_factor",
+            )
+        }
     return out

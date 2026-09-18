@@ -88,7 +88,12 @@ def orders(
 ) -> dict[str, Any]:
     ctx = get_ctx(request)
     rows = ctx.readmodel.orders(limit=clamp(limit), state=state, inst_id=inst_id)
-    return {"ok": True, "mode": ctx.cfg.mode.value, "count": len(rows), "items": [order_to_dict(r) for r in rows]}
+    return {
+        "ok": True,
+        "mode": ctx.cfg.mode.value,
+        "count": len(rows),
+        "items": [order_to_dict(r) for r in rows],
+    }
 
 
 @router.get("/api/v1/orders/{order_id}", summary="Un ordre et ses événements")
@@ -98,7 +103,9 @@ def order_detail(
     ctx = get_ctx(request)
     rows = [r for r in ctx.readmodel.orders(limit=500) if r.order_id == order_id]
     if not rows:
-        raise HTTPException(status_code=404, detail={"ok": False, "error": "ORDRE_INCONNU", "message": order_id})
+        raise HTTPException(
+            status_code=404, detail={"ok": False, "error": "ORDRE_INCONNU", "message": order_id}
+        )
     return {
         "ok": True,
         "order": order_to_dict(rows[0]),
@@ -116,4 +123,9 @@ def fills(
 ) -> dict[str, Any]:
     ctx = get_ctx(request)
     rows = ctx.readmodel.fills(limit=clamp(limit), since=since, inst_id=inst_id)
-    return {"ok": True, "mode": ctx.cfg.mode.value, "count": len(rows), "items": [fill_to_dict(r) for r in rows]}
+    return {
+        "ok": True,
+        "mode": ctx.cfg.mode.value,
+        "count": len(rows),
+        "items": [fill_to_dict(r) for r in rows],
+    }

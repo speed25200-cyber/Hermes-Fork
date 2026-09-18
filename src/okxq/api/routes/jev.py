@@ -36,7 +36,9 @@ def _delay_ms(a: datetime | None, b: datetime | None) -> int | None:
     return int((b - a).total_seconds() * 1000)
 
 
-def jev_event_to_dict(now: datetime, r: JevResult, dv: DocumentVersion, sd: SourceDocumentRow) -> dict[str, Any]:
+def jev_event_to_dict(
+    now: datetime, r: JevResult, dv: DocumentVersion, sd: SourceDocumentRow
+) -> dict[str, Any]:
     return {
         "evaluation_id": r.evaluation_id,
         "request_id": r.request_id,
@@ -74,7 +76,9 @@ def jev_status_payload(ctx: ApiContext) -> dict[str, Any]:
     counts = rm.jev_counts(now - timedelta(hours=24))
     results = rm.jev_results(limit=50)
     latencies = [
-        (r.completed_at - r.requested_at).total_seconds() * 1000 for r, _, _ in results if r.completed_at is not None
+        (r.completed_at - r.requested_at).total_seconds() * 1000
+        for r, _, _ in results
+        if r.completed_at is not None
     ]
     evaluated = sum(v for k, v in counts.items() if k != "pending_requests")
     ok = counts.get("ok", 0)
@@ -113,4 +117,8 @@ def jev_events(
     ctx = get_ctx(request)
     now = ctx.clock.now_utc()
     rows = ctx.readmodel.jev_results(limit=clamp(limit, 50))
-    return {"ok": True, "count": len(rows), "items": [jev_event_to_dict(now, r, dv, sd) for r, dv, sd in rows]}
+    return {
+        "ok": True,
+        "count": len(rows),
+        "items": [jev_event_to_dict(now, r, dv, sd) for r, dv, sd in rows],
+    }

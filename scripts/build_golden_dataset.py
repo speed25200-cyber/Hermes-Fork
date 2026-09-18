@@ -21,6 +21,7 @@ from typing import Any
 
 from okxq.data.archive import write_jsonl_dataset
 from okxq.data.normalizer import Normalizer
+
 from okxq.domain.clocks import SimulatedClock
 from okxq.domain.events import EventEnvelope
 
@@ -110,7 +111,16 @@ class _BookSim:
         return {
             "arg": {"channel": "books", "instId": self.inst_id},
             "action": "update",
-            "data": [{"asks": [], "bids": [], "ts": str(ts_ms), "checksum": 0, "prevSeqId": self.seq, "seqId": self.seq}],
+            "data": [
+                {
+                    "asks": [],
+                    "bids": [],
+                    "ts": str(ts_ms),
+                    "checksum": 0,
+                    "prevSeqId": self.seq,
+                    "seqId": self.seq,
+                }
+            ],
         }
 
 
@@ -134,7 +144,7 @@ def build(out_dir: Path) -> dict[str, Any]:
     minute_trades: dict[str, list[tuple[Decimal, Decimal]]] = {inst: [] for inst in INSTRUMENTS}
     vol_ccy_24h = {inst: Decimal(20_000) for inst in INSTRUMENTS}
     funding_rate = Decimal("0.0001")
-    for inst, sim in books.items():
+    for sim in books.values():
         push(sim.snapshot(T0_MS), T0_MS)
     for second in range(1, DURATION_S + 1):
         ts = T0_MS + second * 1000
@@ -153,19 +163,46 @@ def build(out_dir: Path) -> dict[str, Any]:
                     {
                         "arg": {"channel": "trades", "instId": inst},
                         "data": [
-                            {"instId": inst, "tradeId": str(trade_id), "px": format(px, "f"), "sz": format(sz, "f"), "side": side, "ts": str(ts + 123), "count": "1"}
+                            {
+                                "instId": inst,
+                                "tradeId": str(trade_id),
+                                "px": format(px, "f"),
+                                "sz": format(sz, "f"),
+                                "side": side,
+                                "ts": str(ts + 123),
+                                "count": "1",
+                            }
                         ],
                     },
                     ts + 123,
                 )
             if second % 5 == 0:
                 push(
-                    {"arg": {"channel": "mark-price", "instId": inst}, "data": [{"instType": "SWAP", "instId": inst, "markPx": format(sim.mid, "f"), "ts": str(ts + 200)}]},
+                    {
+                        "arg": {"channel": "mark-price", "instId": inst},
+                        "data": [
+                            {
+                                "instType": "SWAP",
+                                "instId": inst,
+                                "markPx": format(sim.mid, "f"),
+                                "ts": str(ts + 200),
+                            }
+                        ],
+                    },
                     ts + 200,
                 )
                 index_id = inst.removesuffix("-SWAP")
                 push(
-                    {"arg": {"channel": "index-tickers", "instId": index_id}, "data": [{"instId": index_id, "idxPx": format(sim.mid - sim.tick / 2, "f"), "ts": str(ts + 300)}]},
+                    {
+                        "arg": {"channel": "index-tickers", "instId": index_id},
+                        "data": [
+                            {
+                                "instId": index_id,
+                                "idxPx": format(sim.mid - sim.tick / 2, "f"),
+                                "ts": str(ts + 300),
+                            }
+                        ],
+                    },
                     ts + 300,
                 )
             if second % 10 == 0:
@@ -199,7 +236,19 @@ def build(out_dir: Path) -> dict[str, Any]:
             if second % 30 == 0:
                 oi = Decimal(1_000_000 + rng.randint(-5000, 5000))
                 push(
-                    {"arg": {"channel": "open-interest", "instId": inst}, "data": [{"instType": "SWAP", "instId": inst, "oi": format(oi, "f"), "oiCcy": format(oi * spec["ct_val"], "f"), "oiUsd": format(oi * spec["ct_val"] * sim.mid, "f"), "ts": str(ts + 500)}]},
+                    {
+                        "arg": {"channel": "open-interest", "instId": inst},
+                        "data": [
+                            {
+                                "instType": "SWAP",
+                                "instId": inst,
+                                "oi": format(oi, "f"),
+                                "oiCcy": format(oi * spec["ct_val"], "f"),
+                                "oiUsd": format(oi * spec["ct_val"] * sim.mid, "f"),
+                                "ts": str(ts + 500),
+                            }
+                        ],
+                    },
                     ts + 500,
                 )
             if second % 60 == 30 or second % 60 == 0:
@@ -217,7 +266,19 @@ def build(out_dir: Path) -> dict[str, Any]:
                 push(
                     {
                         "arg": {"channel": "candle1m", "instId": inst},
-                        "data": [[str(open_ts), format(o, "f"), format(h, "f"), format(lo, "f"), format(c, "f"), format(vol, "f"), format(vol * spec["ct_val"], "f"), format(vol_quote, "f"), confirm]],
+                        "data": [
+                            [
+                                str(open_ts),
+                                format(o, "f"),
+                                format(h, "f"),
+                                format(lo, "f"),
+                                format(c, "f"),
+                                format(vol, "f"),
+                                format(vol * spec["ct_val"], "f"),
+                                format(vol_quote, "f"),
+                                confirm,
+                            ]
+                        ],
                     },
                     ts + 600,
                 )

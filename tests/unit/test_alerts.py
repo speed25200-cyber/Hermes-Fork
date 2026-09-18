@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-from okxq.domain.clocks import SimulatedClock
 from okxq.runtime.alerts import (
     DEFAULT_RULES,
     AlertManager,
@@ -19,6 +17,8 @@ from okxq.runtime.alerts import (
     WebhookSink,
     build_default_manager,
 )
+
+from okxq.domain.clocks import SimulatedClock
 
 
 class MemorySink:

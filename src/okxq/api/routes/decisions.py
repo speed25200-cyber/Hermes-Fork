@@ -89,7 +89,9 @@ def decisions(
     instrument: str | None = Query(None),
 ) -> dict[str, Any]:
     ctx = get_ctx(request)
-    rows = ctx.readmodel.decisions(limit=clamp(limit, 60), since=since, outcome=outcome, instrument=instrument)
+    rows = ctx.readmodel.decisions(
+        limit=clamp(limit, 60), since=since, outcome=outcome, instrument=instrument
+    )
     links = ctx.readmodel.decision_links([d.decision_id for d in rows])
     return {
         "ok": True,
@@ -107,7 +109,9 @@ def decision_detail(
     ctx = get_ctx(request)
     d = ctx.readmodel.decision(decision_id)
     if d is None:
-        raise HTTPException(status_code=404, detail={"ok": False, "error": "DECISION_INCONNUE", "message": decision_id})
+        raise HTTPException(
+            status_code=404, detail={"ok": False, "error": "DECISION_INCONNUE", "message": decision_id}
+        )
     links = ctx.readmodel.decision_links([decision_id])[decision_id]
     targets = [
         {

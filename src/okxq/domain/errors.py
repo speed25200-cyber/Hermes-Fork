@@ -163,6 +163,7 @@ class DoubleCountingError(CostModelError):
 
     code = "COST_DOUBLE_COUNTED"
 
+
 # --- ajouts P4 (features et recherche) : classes additives, aucune existante n'est modifiée --------------
 
 

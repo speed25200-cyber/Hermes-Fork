@@ -93,7 +93,12 @@ class LimitSet:
 
     @classmethod
     def from_sections(
-        cls, risk: RiskCfg, execution: ExecutionCfg, market_data: MarketDataCfg, runtime: RuntimeCfg, universe: UniverseCfg
+        cls,
+        risk: RiskCfg,
+        execution: ExecutionCfg,
+        market_data: MarketDataCfg,
+        runtime: RuntimeCfg,
+        universe: UniverseCfg,
     ) -> LimitSet:
         def f(x: float) -> Decimal:
             return dec_from_float(float(x), FRACTION_PLACES)
@@ -389,7 +394,12 @@ def evaluate_budgets(
     for inst in snapshot.per_instrument:
         check(LimitLevel.INSTRUMENT, f"asset:{inst}", snapshot.asset(inst), limits.max_asset_equity_multiple)
     for name, members in (clusters or {}).items():
-        check(LimitLevel.CLUSTER, f"cluster:{name}", snapshot.cluster(members), limits.max_cluster_gross_equity_multiple)
+        check(
+            LimitLevel.CLUSTER,
+            f"cluster:{name}",
+            snapshot.cluster(members),
+            limits.max_cluster_gross_equity_multiple,
+        )
     if betas_btc:
         check(LimitLevel.PORTFOLIO, "beta_btc", snapshot.beta(betas_btc), limits.max_abs_btc_beta_exposure)
     if betas_eth:

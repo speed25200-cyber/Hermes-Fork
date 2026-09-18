@@ -41,7 +41,9 @@ def ok_response(_request=None) -> httpx.Response:
     return httpx.Response(200, json=RESPONSE)
 
 
-def make_client(clock: SimulatedClock, handler, *, api_key=KEY, timeout_total_ms=1500, max_retry=1, sleeps=None):
+def make_client(
+    clock: SimulatedClock, handler, *, api_key=KEY, timeout_total_ms=1500, max_retry=1, sleeps=None
+):
     async def fake_sleep(seconds: float) -> None:
         if sleeps is not None:
             sleeps.append(seconds)
@@ -73,7 +75,11 @@ async def test_success_reports_effective_model_usage_and_sends_only_the_strict_s
     assert rec.requests[0].headers["Authorization"] == f"Bearer {KEY}"
     assert rec.requests[0].url == httpx.URL(ENDPOINT)
     ok_events = [e for e in logs if e["event"] == "jev_call_ok"]
-    assert ok_events and ok_events[0]["model_effective"] == "jev-1.13.0" and ok_events[0]["usage"]["input_tokens"] == 812
+    assert (
+        ok_events
+        and ok_events[0]["model_effective"] == "jev-1.13.0"
+        and ok_events[0]["usage"]["input_tokens"] == 812
+    )
 
 
 async def test_api_key_never_appears_in_logs_errors_or_repr(clock):
@@ -82,7 +88,9 @@ async def test_api_key_never_appears_in_logs_errors_or_repr(clock):
     with capture_logs() as logs, pytest.raises(JevError) as info:
         await client.evaluate(REQUEST, QUESTIONS.questions)
     assert info.value.code == "JEV_AUTH_REJECTED" and rec.calls == 1
-    haystack = " ".join([str(info.value), repr(info.value.context), repr(client), json.dumps(logs, default=str)])
+    haystack = " ".join(
+        [str(info.value), repr(info.value.context), repr(client), json.dumps(logs, default=str)]
+    )
     assert KEY not in haystack
     assert "Bearer" not in haystack
 
@@ -182,7 +190,13 @@ async def test_request_model_must_match_client_model(clock):
 
 def test_client_refuses_insecure_or_absurd_configuration(clock):
     with pytest.raises(JevError):
-        JevClient(endpoint="http://api.typesafe.ai/v1/systemone", api_key=KEY, model="m", timeout_total_ms=10, max_retry_attempts=0)
+        JevClient(
+            endpoint="http://api.typesafe.ai/v1/systemone",
+            api_key=KEY,
+            model="m",
+            timeout_total_ms=10,
+            max_retry_attempts=0,
+        )
     with pytest.raises(JevError):
         JevClient(endpoint=ENDPOINT, api_key=KEY, model="m", timeout_total_ms=0, max_retry_attempts=0)
 
