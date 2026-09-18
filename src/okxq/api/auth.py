@@ -374,8 +374,17 @@ class AuthMiddleware:
         scope.setdefault("state", {})
         scope["state"]["principal"] = principal
 
-        # Clé acceptée sur la page : elle ne reste pas dans l'URL (historique, référents).
-        if set_cookies and request.method == "GET" and path in HTML_PAGES:
+        # Clé acceptée DANS L'URL sur une page : on redirige pour l'en retirer (historique, référents).
+        #
+        # La condition portait sur `set_cookies`, c'est-à-dire sur « une clé a été acceptée », sans
+        # regarder d'OÙ elle venait. Une clé présentée par l'en-tête `Authorization` déclenchait donc
+        # une redirection vers la même adresse — qui la représentait, qui redirigeait encore : boucle
+        # infinie sur toute page HTML consultée avec un en-tête plutôt qu'un paramètre d'URL.
+        #
+        # Rediriger n'a de sens que s'il y a quelque chose à retirer. C'est la présence du paramètre
+        # qui décide, pas le fait d'avoir authentifié.
+        cle_dans_url = request.query_params.get(QUERY_KEY) is not None
+        if set_cookies and cle_dans_url and request.method == "GET" and path in HTML_PAGES:
             params = [
                 (k, v) for k, v in parse_qsl(request.url.query, keep_blank_values=True) if k != QUERY_KEY
             ]
