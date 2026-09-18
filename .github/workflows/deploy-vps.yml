@@ -1,0 +1,155 @@
+# Déploiement de okx-quant-jev sur le VPS, depuis un runner GitHub, par SSH (mot de passe root :
+# secret VPS_PASSWORD ou entrée root_password ; le VPS est vars.VPS_HOST ou l'adresse par défaut).
+#
+# Mode « migrer » : retire l'ancien Hermes (Node/systemd) et EFFACE ses données, puis installe la
+# plateforme sous /opt/okxq en Docker Compose (profil PAPER : aucune clé OKX requise, LIVE désactivé).
+# Deux gardes : l'entrée confirmer doit valoir exactement EFFACER, et le relevé préalable refuse de
+# continuer si des positions sont ouvertes sur l'ancien moteur, sauf positions_ouvertes=accepter.
+#
+# Les entrées se lisent dans le fichier d'événement du runner (jamais interpolées dans le script) ; les
+# secrets voyagent par l'entrée standard jusqu'au serveur, jamais en argument ni dans le journal.
+#
+# Rappel GitHub : un workflow_dispatch n'apparaît que s'il existe sur la branche par défaut.
+
+name: Deploy okx-quant-jev to VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_password:
+        description: "Mot de passe root (optionnel si le secret VPS_PASSWORD est posé)"
+        required: false
+      migrer:
+        description: "Retirer l'ancien Hermes et effacer ses données avant d'installer (true/false)"
+        required: false
+        default: "false"
+      confirmer:
+        description: "Taper EFFACER pour autoriser l'effacement (requis si migrer=true)"
+        required: false
+        default: ""
+      positions_ouvertes:
+        description: "refuser (défaut) ou accepter : migrer même si l'ancien moteur a des positions ouvertes"
+        required: false
+        default: "refuser"
+      jeton:
+        description: "Clé opérateur CONNUE à poser (masquée ; vide = conserver celle en place ou reprendre l'ancienne clé de console)"
+        required: false
+        default: ""
+      profil:
+        description: "Profil compose : paper (défaut) ou demo"
+        required: false
+        default: "paper"
+
+concurrency:
+  group: vps-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VPS: ${{ vars.VPS_HOST || '178.104.191.79' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: La garde
+        run: |
+          M=$(jq -r '.inputs.migrer // "false"' "$GITHUB_EVENT_PATH")
+          C=$(jq -r '.inputs.confirmer // empty' "$GITHUB_EVENT_PATH")
+          if [ "$M" = "true" ] && [ "$C" != "EFFACER" ]; then
+            echo "::error::migrer=true exige confirmer=EFFACER — rien n'a été fait"; exit 1
+          fi
+          P=$(jq -r '.inputs.profil // "paper"' "$GITHUB_EVENT_PATH")
+          case "$P" in paper|demo) ;; *) echo "::error::profil inconnu : $P (paper|demo)"; exit 1 ;; esac
+          echo "OKXQ_PROFILE=$P" >> "$GITHUB_ENV"
+
+      - name: Install ssh tooling
+        run: sudo apt-get update -qq && sudo apt-get -y -qq install sshpass rsync
+
+      - name: Resolve SSH access
+        env:
+          PW_SECRET: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          PW_INPUT=$(jq -r '.inputs.root_password // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$PW_INPUT" ]; then echo "::add-mask::$PW_INPUT"; fi
+          PW="${PW_INPUT:-$PW_SECRET}"
+          [ -z "$PW" ] && { echo "::error::no credentials"; exit 1; }
+          ALT="${PW}.Hermes1"
+          echo "::add-mask::$PW"; echo "::add-mask::$ALT"
+          SSHOPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+          try() { timeout 25 sshpass -p "$1" ssh $SSHOPTS "root@$VPS" "echo __ok__" 2>/dev/null | grep -q __ok__; }
+          if try "$PW"; then CUR="$PW"; elif try "$ALT"; then CUR="$ALT"; else
+            echo "::error::cannot authenticate to $VPS"; exit 1; fi
+          echo "SSHPASS=$CUR" >> "$GITHUB_ENV"
+
+      - name: 1. Relevé préalable (positions ouvertes, services, disque)
+        if: ${{ inputs.migrer == 'true' }}
+        run: |
+          OUT=$(sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" bash -s < deploy/preflight.sh 2>&1) || true
+          echo "$OUT"
+          N=$(echo "$OUT" | grep -o 'PREFLIGHT_POSITIONS=[0-9]*' | tail -1 | cut -d= -f2)
+          N=${N:-0}
+          ACC=$(jq -r '.inputs.positions_ouvertes // "refuser"' "$GITHUB_EVENT_PATH")
+          if [ "$N" != "0" ] && [ "$ACC" != "accepter" ]; then
+            echo "::error::$N position(s) ouverte(s) sur l'ancien moteur : migration refusée. Fermez-les, ou relancez avec positions_ouvertes=accepter (les positions resteraient ouvertes sur OKX sans supervision par l'ancien moteur)."
+            exit 1
+          fi
+
+      - name: 2. Reprendre l'ancienne clé de console (jamais imprimée)
+        if: ${{ inputs.migrer == 'true' }}
+        run: |
+          # La clé du tableau de bord Hermes que le propriétaire connaît devient la clé opérateur de la
+          # nouvelle interface : son lien continue de fonctionner. Elle voyage de la machine vers la
+          # machine ; le runner ne la voit pas.
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
+            mkdir -p /opt/okxq/env && chmod 700 /opt/okxq/env
+            if [ -f /root/hermes/.env ] && ! grep -q "^OPERATOR_AUTH_SECRET=.\+" /opt/okxq/env/api.env 2>/dev/null; then
+              T=$(grep "^HERMES_DASH_TOKEN=" /root/hermes/.env | tail -1 | cut -d= -f2-)
+              if [ -n "$T" ]; then touch /opt/okxq/env/api.env; chmod 600 /opt/okxq/env/api.env; echo "OPERATOR_AUTH_SECRET=$T" >> /opt/okxq/env/api.env; echo "  ancienne clé de console reprise comme clé opérateur"; fi
+            fi
+          '
+
+      - name: 3. Copier le dépôt
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" \
+            "command -v rsync >/dev/null || (apt-get update -qq && apt-get -y -qq install rsync); mkdir -p /opt/okxq"
+          # /env (secrets par service), /data, /reports, /artifacts vivent sur la machine seulement.
+          sshpass -e rsync -az --delete \
+            --exclude '/.git' --exclude '/.venv' --exclude '/env' --exclude '/data' \
+            --exclude '/reports' --exclude '/artifacts' --exclude '/frontend/node_modules' \
+            --exclude '/.env' --exclude '/.env.*' \
+            -e "ssh -o StrictHostKeyChecking=accept-new" \
+            ./ "root@$VPS:/opt/okxq/"
+
+      - name: 4. Installer Docker et construire l'image (l'ancien moteur tourne encore)
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" '
+            set -e
+            if ! command -v docker >/dev/null 2>&1; then
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq && apt-get -y -qq install ca-certificates curl gnupg
+              curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh >/dev/null 2>&1 && rm -f /tmp/get-docker.sh
+            fi
+            systemctl enable --now docker >/dev/null 2>&1 || true
+            cd /opt/okxq && docker compose --profile '"$OKXQ_PROFILE"' build 2>&1 | tail -15
+          '
+
+      - name: 5. Retirer l'ancien Hermes et effacer ses données
+        if: ${{ inputs.migrer == 'true' }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" "OKXQ_CONFIRM_WIPE=EFFACER bash -s" < deploy/uninstall_hermes.sh
+
+      - name: 6. Installer et démarrer (profil ${{ inputs.profil }})
+        run: |
+          JETON=$(jq -r '.inputs.jeton // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$JETON" ]; then echo "::add-mask::$JETON"; fi
+          printf '%s\n' "$JETON" | sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" \
+            'IFS= read -r J; OKXQ_OPERATOR_KEY_POSE="$J" OKXQ_PROFILE='"$OKXQ_PROFILE"' bash /opt/okxq/deploy/install.sh'
+
+      - name: État final
+        if: always()
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" bash -s < deploy/etat.sh || true
+          echo
+          echo "Adresse de l'interface : http://$VPS:8899/?key=<votre clé opérateur>"

@@ -39,3 +39,6 @@ frontend/test-results/
 # Divers
 .DS_Store
 *.swp
+
+# Worktrees et état local des agents
+.claude/

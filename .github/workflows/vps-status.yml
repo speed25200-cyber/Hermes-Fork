@@ -1,0 +1,77 @@
+# État de la plateforme sur le VPS, et pose des clés par service (jamais dans le dépôt, jamais imprimées).
+name: VPS status
+
+on:
+  workflow_dispatch:
+    inputs:
+      root_password:
+        description: "Mot de passe root (optionnel si VPS_PASSWORD est posé)"
+        required: false
+      poser_cles_okx:
+        description: "oui : poser OKX_API_KEY/SECRET/PASSPHRASE (secrets du dépôt) dans env/gateway.env et redémarrer le gateway"
+        required: false
+        default: ""
+      poser_cle_typesafe:
+        description: "oui : poser TYPESAFE_API_KEY (secret du dépôt) dans env/jev-worker.env et redémarrer jev-worker"
+        required: false
+        default: ""
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VPS: ${{ vars.VPS_HOST || '178.104.191.79' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ssh tooling
+        run: sudo apt-get update -qq && sudo apt-get -y -qq install sshpass
+      - name: Resolve SSH access
+        env:
+          PW_SECRET: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          PW_INPUT=$(jq -r '.inputs.root_password // empty' "$GITHUB_EVENT_PATH")
+          if [ -n "$PW_INPUT" ]; then echo "::add-mask::$PW_INPUT"; fi
+          PW="${PW_INPUT:-$PW_SECRET}"
+          [ -z "$PW" ] && { echo "::error::no credentials"; exit 1; }
+          ALT="${PW}.Hermes1"
+          echo "::add-mask::$PW"; echo "::add-mask::$ALT"
+          SSHOPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+          try() { sshpass -p "$1" ssh $SSHOPTS "root@$VPS" "echo __ok__" 2>/dev/null | grep -q __ok__; }
+          if try "$PW"; then CUR="$PW"; elif try "$ALT"; then CUR="$ALT"; else echo "::error::cannot authenticate"; exit 1; fi
+          echo "SSHPASS=$CUR" >> "$GITHUB_ENV"
+
+      - name: Poser les clés OKX (gateway seulement)
+        if: ${{ inputs.poser_cles_okx == 'oui' }}
+        env:
+          K: ${{ secrets.OKX_API_KEY }}
+          S: ${{ secrets.OKX_API_SECRET }}
+          P: ${{ secrets.OKX_API_PASSPHRASE }}
+          R: ${{ secrets.OKX_ACCOUNT_REGION_PROFILE }}
+        run: |
+          [ -z "$K$S$P" ] && { echo "::error::secrets OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSPHRASE absents"; exit 1; }
+          printf '%s\n%s\n%s\n%s\n' "$K" "$S" "$P" "$R" | sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
+            IFS= read -r K; IFS= read -r S; IFS= read -r P; IFS= read -r R
+            F=/opt/okxq/env/gateway.env; touch "$F"; chmod 600 "$F"
+            for kv in "OKX_API_KEY=$K" "OKX_API_SECRET=$S" "OKX_API_PASSPHRASE=$P" "OKX_ACCOUNT_REGION_PROFILE=$R"; do
+              k=${kv%%=*}; sed -i "/^$k=/d" "$F"; echo "$kv" >> "$F"; done
+            cd /opt/okxq && docker compose restart gateway >/dev/null 2>&1 || true
+            echo "  clés OKX posées dans env/gateway.env (gateway seul), gateway redémarré"
+          '
+
+      - name: Poser la clé TypeSafe (jev-worker seulement)
+        if: ${{ inputs.poser_cle_typesafe == 'oui' }}
+        env:
+          T: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          [ -z "$T" ] && { echo "::error::secret TYPESAFE_API_KEY absent"; exit 1; }
+          printf '%s\n' "$T" | sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
+            IFS= read -r T; F=/opt/okxq/env/jev-worker.env; touch "$F"; chmod 600 "$F"
+            sed -i "/^TYPESAFE_API_KEY=/d" "$F"; echo "TYPESAFE_API_KEY=$T" >> "$F"
+            cd /opt/okxq && docker compose restart jev-worker >/dev/null 2>&1 || true
+            echo "  clé TypeSafe posée dans env/jev-worker.env, jev-worker redémarré"
+          '
+
+      - name: Status report
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" bash -s < deploy/etat.sh
