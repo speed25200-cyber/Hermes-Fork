@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -311,3 +312,220 @@ def test_T44_a_restart_never_resets_a_persisted_halt_or_daily_loss(cfg, factory)
     assert steps["validate_data"]["ok"] is True, "la donnée devait être considérée présente"
     assert steps["authorize_entries"]["ok"] is False
     assert "HARD_HALT" in str(steps["authorize_entries"]["detail"])
+
+
+def test_a_reached_daily_loss_makes_the_risk_engine_refuse_an_entry(cfg, factory) -> None:
+    """Contrôle de bout en bout du câblage : une perte journalière atteinte REFUSE une entrée."""
+    from okxq.domain.events import RiskAction
+    from okxq.domain.instruments import InstrumentSpec, InstrumentState
+    from okxq.domain.money import Money
+    from okxq.risk.approvals import InMemoryReservationStore
+    from okxq.risk.engine import RiskContext, RiskEngine
+    from tests.unit.test_composition_helpers import intent
+
+    limits = build_runtime(cfg, role="all", clock=SimulatedClock(T0), session_factory=factory).limits
+    engine = RiskEngine(limits=limits, clock=SimulatedClock(T0), reservations=InMemoryReservationStore())
+    ordre = intent()
+    spec = InstrumentSpec(
+        inst_id=ordre.inst_id,
+        valid_from=T0,
+        observed_at=T0,
+        settle_ccy="USDT",
+        base_ccy="BTC",
+        quote_ccy="USDT",
+        contract_type="linear",
+        base_units_per_contract=Decimal("0.01"),
+        tick_size=Decimal("0.1"),
+        lot_size=Decimal("1"),
+        min_size=Decimal("1"),
+        # `is_tradable` compare par IDENTITÉ à l'énumération : la chaîne « live » ne suffit pas.
+        state=InstrumentState.LIVE,
+        provenance="test",
+    )
+
+    def contexte(perte: Decimal | None) -> RiskContext:
+        return RiskContext(
+            now=T0,
+            account_scope=cfg.account.scope,
+            equity=Money(Decimal("10000"), "USDT"),
+            equity_version="eq_1",
+            position_version="pos_1",
+            positions={},
+            open_orders=[],
+            specs={ordre.inst_id: spec},
+            reference_prices={ordre.inst_id: Decimal("65000")},
+            market_quality={},
+            daily_loss_fraction=perte,
+        )
+
+    refus = engine.evaluate_sync(ordre, contexte(Decimal("0.90")))
+    assert refus.action is RiskAction.REJECT
+    assert "DAILY_LOSS_LIMIT" in refus.reason_codes
+
+    # La même intention, mesure ABSENTE : le contrôle est SAUTÉ. C'était l'état du runtime avant le
+    # câblage, et c'est ce que ce test empêche de revenir sans qu'on le remarque.
+    saute = engine.evaluate_sync(ordre, contexte(None))
+    assert "DAILY_LOSS_LIMIT" not in saute.reason_codes
+
+
+def test_the_kill_switch_is_actually_driven_and_can_fire_on_its_own(cfg, factory) -> None:
+    """La protection automatique doit pouvoir s'activer SANS commande opérateur.
+
+    Le kill switch n'était que LU par le runtime, jamais alimenté : la frontière de jour UTC n'était
+    jamais franchie, donc la perte journalière n'était jamais calculée, le sommet d'équité jamais mis
+    à jour, et aucun déclencheur ne pouvait se produire. La principale protection de la plateforme ne
+    s'activait que sur ordre humain — c'est-à-dire qu'elle n'était pas automatique.
+    """
+    from okxq.risk.kill_switch import HaltLevel
+    from okxq.runtime.composition import observe_health
+
+    rt = build_runtime(cfg, role="all", clock=SimulatedClock(T0), session_factory=factory)
+    assert rt.kill_switch.level is HaltLevel.NONE
+
+    # Aucune donnée de marché : la porte de données est un déclencheur, et il doit se produire seul.
+    verdict = observe_health(rt)
+    assert verdict.triggers, "aucun déclencheur alors que les données sont absentes"
+    assert any(t.name == "data_stale" for t in verdict.triggers)
+    assert rt.kill_switch.level is not HaltLevel.NONE, "le halt ne s'est pas produit tout seul"
+    assert verdict.changed is True
+
+    # Et l'observation renseigne les mesures que le Risk Engine consulte : c'est le même geste qui
+    # rend la perte journalière mesurable.
+    assert verdict.daily_loss_fraction is not None
+
+
+def test_observing_makes_the_daily_loss_measurable_for_the_risk_engine(cfg, factory) -> None:
+    """Contre-épreuve du câblage : après observation, le contexte porte des NOMBRES.
+
+    Avant observation, la perte du jour vaut `None` — ce qui est honnête (rien n'a été mesuré) mais
+    fait SAUTER le contrôle du Risk Engine. C'est l'observation qui la rend exploitable.
+    """
+    from okxq.runtime.composition import observe_health
+
+    rt = build_runtime(cfg, role="all", clock=SimulatedClock(T0), session_factory=factory)
+    build_decision_loop(rt, predictor=NoModelPredictor())
+    assert rt.risk_context is not None
+
+    avant = rt.risk_context()
+    assert avant.daily_loss_fraction is None, "rien n'a encore été observé : l'absence est honnête"
+
+    observe_health(rt)
+    apres = rt.risk_context()
+    assert apres.daily_loss_fraction is not None
+    assert isinstance(apres.daily_loss_fraction, Decimal)
+    # Compte neuf, aucune perte : zéro est une MESURE, pas une absence.
+    assert apres.daily_loss_fraction == Decimal(0)
+    assert apres.halt_level is rt.kill_switch.level
+
+
+def test_the_paper_account_is_funded_in_the_ledger_not_only_in_the_simulator(cfg, factory) -> None:
+    """Le capital initial doit exister AU GRAND LIVRE, seule source d'equity du système.
+
+    `VirtualExchange` recevait bien `initial_cash`, mais le grand livre démarrait à zéro. Toutes les
+    mesures qui en dépendent étaient donc mortes SANS le dire : `day_start_equity` valait 0, donc
+    `daily_loss_fraction` rendait `None`, et le Risk Engine SAUTE le contrôle dont la mesure est
+    absente. La limite de perte journalière ne pouvait pas se déclencher en PAPER — c'est-à-dire
+    dans le seul mode que la plateforme est autorisée à faire tourner.
+    """
+    rt = build_runtime(cfg, role="all", clock=SimulatedClock(T0), session_factory=factory)
+    view = rt.ledger.equity({})
+    assert view.equity == cfg.account.paper_initial_equity
+    assert view.external_cashflow_cum == cfg.account.paper_initial_equity
+
+
+def test_funding_the_paper_account_twice_does_not_double_the_capital(cfg, factory) -> None:
+    """Un redémarrage relit la même base : un second dépôt doublerait l'equity du compte."""
+    clock = SimulatedClock(T0)
+    build_runtime(cfg, role="all", clock=clock, session_factory=factory)
+    second = build_runtime(cfg, role="strategy", clock=clock, session_factory=factory)
+    assert second.ledger.equity({}).equity == cfg.account.paper_initial_equity
+
+
+def test_a_deposit_is_not_a_drawdown(cfg, factory) -> None:
+    """Contre-épreuve de la valeur de part : un virement n'est ni un gain ni une perte (T45).
+
+    Mesurer le drawdown sur l'equity brute ferait d'un dépôt un nouveau sommet — ce qui abaisse
+    artificiellement tous les drawdowns suivants — et d'un retrait une chute, qui déclencherait une
+    protection sans qu'aucune perte ait eu lieu. La valeur de part neutralise les deux.
+
+    Une approximation locale (`equity − flux + capital initial`) avait été écrite dans le runtime :
+    elle rendait bien 1 au départ, mais laissait la valeur de part FIGÉE à 1 pour toujours, puisque
+    tout gain augmentait son dénominateur autant que son numérateur. Le drawdown de surveillance
+    était donc identiquement nul, et son déclencheur inatteignable. Ce test échouerait avec elle.
+    """
+    from okxq.runtime.composition import advance_unit_value
+
+    clock = SimulatedClock(T0)
+    rt = build_runtime(cfg, role="all", clock=clock, session_factory=factory)
+    initial = cfg.account.paper_initial_equity
+
+    depart = advance_unit_value(rt, rt.ledger.equity({}), now=clock.now_utc())
+    assert depart == Decimal(1), "la valeur de part vaut 1 à l'ouverture du compte"
+
+    # Un gain de 10 % : la valeur de part DOIT bouger (c'est ce que l'approximation ne faisait pas).
+    rt.ledger.record_correction(
+        amount=initial / 10,
+        occurred_at=T0 + timedelta(minutes=1),
+        idempotency_key="gain-de-test",
+        description="gain simulé",
+    )
+    clock.set(T0 + timedelta(minutes=1))
+    apres_gain = advance_unit_value(rt, rt.ledger.equity({}), now=clock.now_utc())
+    assert apres_gain is not None
+    assert apres_gain == Decimal("1.1")
+
+    # Un dépôt du même montant que le capital initial : l'equity double, la valeur de part NE BOUGE
+    # PAS. Sans unitisation, ce virement serait devenu un nouveau sommet d'équité.
+    rt.ledger.record_external_cashflow(
+        amount=initial,
+        occurred_at=T0 + timedelta(minutes=2),
+        idempotency_key="depot-de-test",
+    )
+    clock.set(T0 + timedelta(minutes=2))
+    view = rt.ledger.equity({})
+    assert view.equity == initial * 2 + initial / 10
+    apres_depot = advance_unit_value(rt, view, now=clock.now_utc())
+    assert apres_depot == apres_gain, "un dépôt a changé la valeur de part"
+
+    # Et la protection n'y voit aucun drawdown : le sommet est resté à 1,1.
+    assert rt.kill_switch.drawdown_fraction(view.equity, apres_depot) in (None, Decimal(0))
+
+
+def test_the_watched_drawdown_and_the_reported_drawdown_are_the_same_measure(cfg, factory) -> None:
+    """La valeur de part du runtime doit être celle des rapports, au pas près.
+
+    Deux implémentations de « les parts se créent au dernier prix de part connu » auraient fini par
+    divergé, et le drawdown de surveillance aurait alors désigné autre chose que celui des rapports,
+    sous le même nom. `advance_unit_value` et `unitize` partagent donc `next_unit_point`.
+    """
+    from okxq.accounting.pnl import EquityPoint, unitize
+    from okxq.runtime.composition import advance_unit_value
+
+    clock = SimulatedClock(T0)
+    rt = build_runtime(cfg, role="all", clock=clock, session_factory=factory)
+    initial = cfg.account.paper_initial_equity
+    mouvements = [
+        ("gain", initial / 10, False),
+        ("depot", initial, True),
+        ("perte", -initial / 5, False),
+    ]
+    points = [EquityPoint(at=T0, equity=initial, external_cashflow_cum=initial)]
+    runtime_values = [advance_unit_value(rt, rt.ledger.equity({}), now=T0)]
+    for index, (nom, montant, externe) in enumerate(mouvements, start=1):
+        instant = T0 + timedelta(minutes=index)
+        if externe:
+            rt.ledger.record_external_cashflow(
+                amount=montant, occurred_at=instant, idempotency_key=f"{nom}-{index}"
+            )
+        else:
+            rt.ledger.record_correction(
+                amount=montant, occurred_at=instant, idempotency_key=f"{nom}-{index}", description=nom
+            )
+        view = rt.ledger.equity({})
+        clock.set(instant)
+        points.append(
+            EquityPoint(at=instant, equity=view.equity, external_cashflow_cum=view.external_cashflow_cum)
+        )
+        runtime_values.append(advance_unit_value(rt, view, now=instant))
+
+    assert runtime_values == [u.unit_value for u in unitize(points)]

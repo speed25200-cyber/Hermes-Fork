@@ -155,14 +155,14 @@ def settle_if_crossed(
     if contracts == 0:
         return None
     held_start = ensure_utc(held_from, field="held_from")
-    if observation.funding_time <= held_start:
-        # Règlement antérieur (ou simultané) à l'ouverture de la position : l'intervalle de détention
-        # (held_from, funding_time] est vide, donc le règlement n'est PAS traversé et ne produit aucun
-        # flux (T25). C'est le cas NORMAL « position ouverte après le règlement », y compris quand un
+    if observation.funding_time < held_start:
+        # Règlement ANTÉRIEUR à l'ouverture de la position : il n'est pas traversé, donc aucun flux
+        # (T25). C'est le cas NORMAL « position ouverte après le règlement », y compris quand un
         # événement ancien arrive tard (§52.2, T15) : il doit rendre None. Sans ce garde-fou,
         # ``settlements_crossed`` recevait un intervalle inversé et levait ``CausalityError`` pour une
         # situation licite — une erreur que l'appelant serait tenté d'attraper largement, ce qui
-        # masquerait les vraies violations de causalité.
+        # masquerait ensuite les vraies violations de causalité. La borne d'égalité, elle, reste
+        # tranchée par ``settlements_crossed`` : c'est lui qui porte la convention de l'intervalle.
         return None
     crossed = bool(
         settlements_crossed(

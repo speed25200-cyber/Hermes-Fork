@@ -29,6 +29,7 @@ from okxq.domain.clocks import ensure_utc
 from okxq.domain.errors import IdempotencyError, OrderStateError
 from okxq.domain.events import ApprovedOrder, Fill, OrderEvent, RiskDecision
 from okxq.domain.ids import payload_hash
+from okxq.domain.money import ZERO
 from okxq.domain.orders import OrderState, PendingOperation, is_terminal
 from okxq.persistence.db import make_session_factory
 from okxq.persistence.models import (
@@ -1017,6 +1018,8 @@ class SnapshotRepository:
         equity: Decimal,
         available_margin: Decimal | None = None,
         used_margin: Decimal | None = None,
+        external_cashflow_cum: Decimal = ZERO,
+        unit_value: Decimal | None = None,
         raw: Mapping[str, Any] | None = None,
     ) -> AccountSnapshot:
         row = AccountSnapshot(
@@ -1029,6 +1032,8 @@ class SnapshotRepository:
             equity=check_numeric_bounds(equity, kind="money"),
             available_margin=available_margin,
             used_margin=used_margin,
+            external_cashflow_cum=check_numeric_bounds(external_cashflow_cum, kind="money"),
+            unit_value=unit_value,
             raw=dict(raw or {}),
         )
         self._s.add(row)

@@ -365,10 +365,22 @@ class JevFeatureStore:
             ).all()
             out: list[JevFeatureRecord] = []
             for result, version, doc in rows:
-                mapped = result.inst_id == inst_id or any(
-                    m.get("inst_id") == inst_id for m in version.asset_mapping
-                )
-                if not mapped:
+                # L'évaluation ne sert QUE l'actif sur lequel elle a été demandée.
+                #
+                # Le rapprochement acceptait auparavant aussi une évaluation dont l'actif figurait
+                # simplement dans la cartographie de la version du document. Sur un document
+                # multi-actifs — « maintenance affectant BTC et ETH » — la cartographie porte les
+                # deux, si bien que l'évaluation de BTC était servie comme feature d'ETH, et
+                # réciproquement : les réponses d'un actif attribuées à un autre, et le nombre
+                # d'éléments probants doublé. Or `evaluate_all` fait précisément un appel PAR actif,
+                # avec `canonical_name` et `symbol` liés à celui-ci, parce que les réponses peuvent
+                # différer d'un actif à l'autre pour le même texte.
+                #
+                # Le repli était par ailleurs inatteignable pour son usage supposé : une évaluation
+                # sans `inst_id` provient du chemin local sans cartographie, qui ne renseigne jamais
+                # `features_committed_at` et ne porte jamais le statut `ok` — elle est donc déjà
+                # écartée par le filtre SQL ci-dessus.
+                if result.inst_id != inst_id:
                     continue
                 record = JevFeatureRecord(
                     evaluation=_evaluation_from_rows(result, version),

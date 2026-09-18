@@ -13,6 +13,8 @@ signal ``jev_unavailable`` est accepté et ignoré ici (il relève de la politiq
 
 Persistance : l'état vit dans ``risk_state`` (halt_level, raison, depuis, perte journalière avec
 frontière UTC déclarée, high-water mark). Un redémarrage recharge l'état et ne remet RIEN à zéro (T44).
+La perte du jour est un PLAFOND monotone à l'intérieur du jour UTC : ni une remontée d'equity ni un
+apport externe ne l'effacent (T45) ; seul le passage au jour UTC suivant la remet à zéro.
 Escalade seulement : le niveau ne descend jamais automatiquement au-dessus de SOFT_HALT ; SOFT_HALT se
 lève après ``resume_stability_seconds`` de signaux sains (hystérésis : le compteur repart à zéro au
 moindre signal). ``auto_resume_after_critical_halt=false`` → HARD/EMERGENCY ne se lèvent que par une
@@ -312,12 +314,16 @@ class KillSwitch:
         return True, ReasonCode.OK
 
     def daily_loss_fraction(self, equity: Decimal | None = None) -> Decimal | None:
+        """Fraction de perte du jour : la PIRE perte observée depuis la frontière UTC, pas l'écart
+        instantané. Rendre l'écart instantané sous-déclarerait une limite déjà atteinte dès que
+        l'equity remonte — notamment après un apport externe (T45)."""
         start = self._state.day_start_equity
         if start is None or start <= 0:
             return None
-        if equity is None:
-            return self._state.day_realized_loss / start
-        return max(start - dec(equity), ZERO) / start
+        worst = self._state.day_realized_loss
+        if equity is not None:
+            worst = max(worst, max(start - dec(equity), ZERO))
+        return worst / start
 
     def drawdown_fraction(self, equity: Decimal | None, unit_value: Decimal | None) -> Decimal | None:
         if unit_value is not None and self._state.high_water_mark_unit:
@@ -390,7 +396,15 @@ class KillSwitch:
         if state.utc_day is None or state.utc_day != day:
             state = replace(state, utc_day=day, day_start_equity=equity, day_realized_loss=ZERO)
         else:
-            state = replace(state, day_realized_loss=max((state.day_start_equity or equity) - equity, ZERO))
+            dip = max((state.day_start_equity or equity) - equity, ZERO)
+            # POURQUOI un maximum et non la valeur courante : la perte du jour est la PIRE perte
+            # observée depuis la frontière UTC déclarée. La recalculer à chaque observation
+            # l'effaçait dès que l'equity remontait — et un simple DÉPÔT externe suffisait à faire
+            # remonter l'equity au-dessus de son point de départ, ramenant la perte du jour à zéro
+            # (T45). Il suffisait alors d'un virement pour faire disparaître une limite journalière
+            # atteinte, donc pour rendre une reprise possible le jour même. Seule la frontière de
+            # jour UTC (branche au-dessus) remet ce plafond à zéro.
+            state = replace(state, day_realized_loss=max(state.day_realized_loss, dip))
         hwm_eq = state.high_water_mark_equity
         if hwm_eq is None or equity > hwm_eq:
             state = replace(state, high_water_mark_equity=equity)
@@ -421,10 +435,18 @@ class KillSwitch:
         if s.clock_unreliable:
             out.append(Trigger("clock_unreliable", p.clock_unreliable))
         start = state.day_start_equity
-        if s.equity is not None and start is not None and start > 0:
-            loss = max(start - dec(s.equity), ZERO) / start
-            if loss >= dec_frac(self._cfg.daily_loss_halt_fraction):
-                out.append(Trigger("daily_loss", p.daily_loss, {"fraction": format(loss, "f")}))
+        if start is not None and start > 0:
+            # On part de la perte du jour PERSISTÉE (déjà un plafond, voir ``_roll_day_and_marks``)
+            # et non du seul écart instantané : sinon une remontée d'equity ou un apport externe
+            # ferait disparaître le déclencheur d'une limite déjà atteinte, et l'opérateur pourrait
+            # lever le halt le jour même (T45). Le déclencheur survit aussi à un redémarrage sans
+            # equity observée, puisqu'il est lu dans l'état rechargé (T44).
+            loss = state.day_realized_loss
+            if s.equity is not None:
+                loss = max(loss, max(start - dec(s.equity), ZERO))
+            fraction = loss / start
+            if fraction >= dec_frac(self._cfg.daily_loss_halt_fraction):
+                out.append(Trigger("daily_loss", p.daily_loss, {"fraction": format(fraction, "f")}))
         dd = self.drawdown_from(state, s.equity, s.unit_value)
         if dd is not None and dd >= dec_frac(self._cfg.drawdown_review_fraction):
             out.append(Trigger("drawdown", p.drawdown, {"fraction": format(dd, "f")}))

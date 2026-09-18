@@ -228,7 +228,17 @@ def truncate_text(text: str, max_characters: int) -> tuple[str, bool]:
     if len(text) <= max_characters:
         return text, False
     marker = " […]"
-    return text[: max(1, max_characters - len(marker))] + marker, True
+    if max_characters <= len(marker):
+        # Budget trop petit pour porter la marque : on coupe NET, sans elle. L'ancienne écriture
+        # gardait au moins un caractère puis ajoutait la marque quand même, si bien qu'un budget de
+        # 1 rendait 5 caractères : une fonction nommée « tronquer à N » pouvait dépasser N. Le
+        # dépassement était de quatre caractères, donc inoffensif aux budgets d'exploitation — mais
+        # la borne est justement ce que cette fonction promet, et ce que l'appelant utilise pour ne
+        # pas se faire refuser une requête trop grosse (§49).
+        # La coupure reste SIGNALÉE par le drapeau, qui est ce que l'appelant enregistre ; la marque
+        # n'est qu'un indice de lecture.
+        return text[:max_characters], True
+    return text[: max_characters - len(marker)] + marker, True
 
 
 def build_request(

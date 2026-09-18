@@ -32,9 +32,11 @@ from decimal import Decimal
 from typing import Any
 
 import numpy as np
+from sqlalchemy import select
 
 from okxq import __version__
 from okxq.accounting.ledger import Ledger
+from okxq.accounting.pnl import EquityPoint, UnitPoint, next_unit_point
 from okxq.backtest.market_state import BookView, MarketState
 from okxq.backtest.virtual_exchange import FEE_TAKER_DEFAULT, VirtualExchange
 from okxq.config.modes import Mode
@@ -43,7 +45,14 @@ from okxq.data.collector import PublicCollector
 from okxq.data.normalizer import Normalizer
 from okxq.data.ws_client import connect_public
 from okxq.domain.clocks import Clock, SystemClock, ensure_utc
-from okxq.domain.errors import CausalityError, ConfigError, CostModelError, OkxqError
+from okxq.domain.errors import (
+    CausalityError,
+    ConfigError,
+    CostModelError,
+    IdempotencyError,
+    LedgerError,
+    OkxqError,
+)
 from okxq.domain.events import (
     ApprovedOrder,
     EdgeEstimate,
@@ -71,6 +80,7 @@ from okxq.exchange.okx.websocket_public import SubscriptionArg
 from okxq.features.incremental import IncrementalFeatureEngine
 from okxq.features.registry import FeatureEngine, default_registry
 from okxq.persistence.db import make_engine, make_session_factory
+from okxq.persistence.models import AccountSnapshot
 from okxq.persistence.repositories import UnitOfWorkFactory
 from okxq.portfolio.costs import ALL_COMPONENTS as ALL_COST_COMPONENTS
 from okxq.portfolio.costs import CostComponent, CostModel, FeeSchedule
@@ -83,7 +93,7 @@ from okxq.portfolio.rounding import IntentPolicy, RoundingContext, round_target
 from okxq.risk.approvals import SqlReservationStore
 from okxq.risk.budgets import LimitSet, PositionState
 from okxq.risk.engine import MarketQuality, RiskContext, RiskEngine
-from okxq.risk.kill_switch import HaltLevel, KillSwitch, SqlRiskStateStore
+from okxq.risk.kill_switch import HaltLevel, HealthSignals, KillSwitch, SqlRiskStateStore
 from okxq.runtime import health as health_names
 from okxq.runtime.alerts import Priority, build_default_manager
 from okxq.runtime.decision_loop import DecisionDeps, DecisionLoop, DecisionRecord
@@ -817,6 +827,10 @@ class Runtime:
     gateway: Any | None = None
     exchange: Any | None = None
     collector: Any | None = None
+    #: Fournisseur du contexte de risque, posé par ``build_decision_loop``. Exposé parce que ce
+    #: contexte EST ce que le Risk Engine regarde : pouvoir l'interroger permet de vérifier que
+    #: chaque mesure attendue est bien renseignée, plutôt que de le supposer.
+    risk_context: Callable[[], Any] | None = None
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 
     async def aclose(self) -> None:
@@ -887,6 +901,53 @@ def build_exchange_adapter(cfg: AppConfig, *, role: str, clock: Clock, market: M
     )
 
 
+PAPER_CAPITAL_KEY_PREFIX = "paper_initial_capital"
+
+
+def ensure_paper_capital(cfg: AppConfig, ledger: Ledger, clock: Clock) -> bool:
+    """Inscrit UNE FOIS le capital initial du compte papier au grand livre. Retourne True si posé.
+
+    POURQUOI c'est indispensable, et pas un détail de confort. Le grand livre est la seule source
+    d'equity du système : le Risk Engine dimensionne dessus, le kill switch en tire la perte
+    journalière et le drawdown. ``VirtualExchange`` recevait bien ``initial_cash``, mais personne ne
+    l'inscrivait au grand livre — lequel démarrait donc à zéro. Conséquences, toutes silencieuses :
+
+    * ``day_start_equity`` valait 0, donc ``daily_loss_fraction`` rendait ``None`` (division par
+      zéro impossible) ; le Risk Engine SAUTE un contrôle dont la mesure est absente. La limite de
+      perte journalière — la protection la plus élémentaire — ne pouvait donc jamais se déclencher
+      en PAPER, c'est-à-dire dans le seul mode que la plateforme est aujourd'hui autorisée à faire
+      tourner ;
+    * le sommet d'équité restait à 0, donc le drawdown aussi rendait ``None`` ;
+    * la valeur de part valait ``0 / capital = 0`` au lieu de 1.
+
+    L'écriture est un FLUX EXTERNE observé (un dépôt), pas une correction : c'est exactement ce
+    qu'est un apport de capital, et cela le neutralise dans le PnL de stratégie (§38).
+
+    La clé d'idempotence ne contient PAS le montant, volontairement. Si elle le contenait, changer
+    ``paper_initial_equity_usdt`` dans la configuration enregistrerait un SECOND dépôt par-dessus le
+    premier, et l'equity du compte doublerait sans que personne l'ait demandé. Sans le montant, un
+    compte déjà approvisionné garde son historique : on ne réécrit pas le passé d'un grand livre.
+    Pour repartir d'un autre capital, il faut un nouveau ``account.scope`` ou une base neuve.
+    """
+    if cfg.mode not in (Mode.PAPER, Mode.RESEARCH):
+        # DEMO et LIVE tirent leur equity de la réconciliation avec l'échange réel. Y injecter du
+        # capital fictif fabriquerait une equity qui n'existe pas, donc des tailles d'ordre fausses.
+        return False
+    amount = cfg.account.paper_initial_equity
+    if amount <= 0:
+        return False
+    key = f"{PAPER_CAPITAL_KEY_PREFIX}:{cfg.account.scope}"
+    if ledger.has_key(key):
+        return False
+    recorded = ledger.record_external_cashflow(
+        amount=amount,
+        occurred_at=clock.now_utc(),
+        idempotency_key=key,
+        description="capital initial du compte papier",
+    )
+    return recorded.applied
+
+
 def build_runtime(
     cfg: AppConfig,
     *,
@@ -922,6 +983,16 @@ def build_runtime(
         clock=the_clock,
         settle_ccy=cfg.account.settlement_currency,
     )
+    # Le capital initial du compte papier doit exister au grand livre AVANT que le kill switch ne
+    # charge son état : sans lui, la première observation fixerait `day_start_equity` à zéro et la
+    # perte journalière resterait à jamais non mesurable pour ce jour UTC.
+    if ensure_paper_capital(cfg, ledger, the_clock):
+        log.info(
+            "capital_papier_inscrit",
+            compte=cfg.account.scope,
+            montant=format(cfg.account.paper_initial_equity, "f"),
+            devise=cfg.account.settlement_currency,
+        )
     limits = LimitSet.from_config(cfg)
     kill_switch = KillSwitch(
         account_scope=cfg.account.scope,
@@ -1099,6 +1170,12 @@ def build_decision_loop(rt: Runtime, *, predictor: Any | None = None) -> Decisio
                 book_valid=book_view.valid,
                 relative_spread=_relative_spread(book_view),
             )
+        # La valeur de part est LUE, pas recalculée : `observe_health` l'a fait avancer et persistée
+        # juste avant cette décision. Le Risk Engine et le kill switch jugent ainsi sur le MÊME
+        # nombre ; deux calculs concurrents auraient pu refuser une intention pour un drawdown que
+        # la protection, elle, ne voyait pas.
+        last_unit = latest_unit_point(rt)
+        unit_value = None if last_unit is None else last_unit.unit_value
         return RiskContext(
             now=now,
             account_scope=cfg.account.scope,
@@ -1111,9 +1188,18 @@ def build_decision_loop(rt: Runtime, *, predictor: Any | None = None) -> Decisio
             reference_prices=dict(rt.market.marks),
             market_quality=quality,
             equity_reconciled=True,
+            # Ces deux mesures étaient absentes, donc `None`, et le Risk Engine SAUTE ses contrôles
+            # de perte journalière et de drawdown quand elles valent `None` : deux limites écrites,
+            # testées, et jamais évaluées en exploitation. Le kill switch les calculait déjà ; il
+            # suffisait de les lui demander. Le kill switch garde son propre contrôle : ce n'est pas
+            # une redondance inutile, c'est la défense en profondeur exigée (il arrête le système,
+            # le Risk Engine refuse une intention).
+            daily_loss_fraction=rt.kill_switch.daily_loss_fraction(view.equity),
+            drawdown_fraction=rt.kill_switch.drawdown_fraction(view.equity, unit_value),
             halt_level=rt.kill_switch.level,
         )
 
+    rt.risk_context = risk_context
     risk_engine = RiskEngine(
         limits=rt.limits,
         clock=rt.clock,
@@ -1263,6 +1349,141 @@ async def start_collection(rt: Runtime) -> dict[str, Any]:
     return {"ok": True, "instruments": len(specs), "url": profile.ws_public_url}
 
 
+#: Source déclarée des instantanés de compte produits par le grand livre (par opposition à ceux que
+#: la réconciliation tire de l'échange réel).
+LEDGER_SNAPSHOT_SOURCE = "ledger"
+
+
+def _snapshot_version(view: Any) -> str:
+    """Empreinte de l'état COMPTABLE, sans l'heure.
+
+    Volontairement sans horodatage : deux frontières successives sans aucun mouvement produisent la
+    même empreinte, la contrainte d'unicité rejette le doublon, et la table ne grossit pas d'une
+    ligne par minute pour dire « rien n'a changé ». À equity et flux externes cumulés identiques, le
+    nombre de parts est identique lui aussi (il ne bouge QUE sur un flux externe), donc la valeur de
+    part est la même : ne pas réécrire la ligne ne perd aucune information.
+    """
+    material = "|".join(
+        (
+            format(view.equity, "f"),
+            format(view.cash_collateral, "f"),
+            format(view.unrealized_pnl, "f"),
+            format(view.external_cashflow_cum, "f"),
+        )
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+
+
+def latest_unit_point(rt: Runtime) -> UnitPoint | None:
+    """Dernier point d'unitisation persisté, ou ``None`` si le compte n'en a pas encore."""
+    with rt.session_factory() as session:
+        row = session.scalars(
+            select(AccountSnapshot)
+            .where(
+                AccountSnapshot.account_scope == rt.cfg.account.scope,
+                AccountSnapshot.source == LEDGER_SNAPSHOT_SOURCE,
+                AccountSnapshot.unit_value.is_not(None),
+            )
+            .order_by(AccountSnapshot.as_of.desc(), AccountSnapshot.id.desc())
+            .limit(1)
+        ).first()
+    if row is None or row.unit_value is None or row.unit_value <= 0:
+        return None
+    return UnitPoint(
+        at=ensure_utc(row.as_of),
+        equity=row.equity,
+        units=row.equity / row.unit_value,
+        unit_value=row.unit_value,
+        external_flow=ZERO,
+        external_cashflow_cum=row.external_cashflow_cum,
+    )
+
+
+def advance_unit_value(rt: Runtime, view: Any, *, now: datetime) -> Decimal | None:
+    """Fait avancer la valeur de part d'UN pas et la persiste ; rend la valeur courante.
+
+    POURQUOI une valeur de part et non l'equity brute : c'est la seule série comparable dans le temps
+    quand le capital bouge. Un dépôt augmente l'equity sans que la stratégie ait rien gagné, et un
+    retrait la diminue sans qu'elle ait rien perdu. Mesurer le drawdown sur l'equity ferait donc
+    d'un simple virement soit un nouveau sommet (qui abaisse artificiellement les drawdowns futurs),
+    soit une chute (qui déclencherait une protection sans qu'aucune perte ait eu lieu).
+
+    Le calcul est celui de ``next_unit_point`` — le MÊME que celui des rapports, à un pas près. Une
+    approximation locale avait été écrite ici (``equity − flux + capital initial``) : elle donnait
+    bien 1 au départ, mais laissait la valeur de part figée à 1 pour toujours, puisque tout gain
+    augmentait le dénominateur autant que le numérateur. Le drawdown de surveillance était donc
+    identiquement nul, et son déclencheur inatteignable.
+    """
+    point = EquityPoint(at=now, equity=view.equity, external_cashflow_cum=view.external_cashflow_cum)
+    previous = latest_unit_point(rt)
+    try:
+        current = next_unit_point(point, previous)
+    except LedgerError:
+        # Equity nulle ou négative, ou parts épuisées par un retrait total : la valeur de part n'est
+        # pas définie. `None` est la réponse honnête ; le kill switch retombe alors sur l'equity.
+        return None
+    try:
+        with rt.uow_factory.transaction() as uow:
+            uow.snapshots.record_account(
+                account_scope=rt.cfg.account.scope,
+                equity_version=_snapshot_version(view),
+                as_of=now,
+                source=LEDGER_SNAPSHOT_SOURCE,
+                cash_collateral=view.cash_collateral,
+                unrealized_pnl=view.unrealized_pnl,
+                equity=view.equity,
+                external_cashflow_cum=view.external_cashflow_cum,
+                unit_value=current.unit_value,
+            )
+    except IdempotencyError:
+        # État comptable inchangé depuis le dernier instantané : rien à réécrire (voir
+        # `_snapshot_version`). La valeur de part calculée est identique à celle déjà persistée.
+        pass
+    return current.unit_value
+
+
+def observe_health(rt: Runtime) -> Any:
+    """Fait OBSERVER l'état au kill switch, et rend son verdict.
+
+    C'est le geste qui rend la protection automatique réelle. Sans lui, le kill switch n'était que
+    LU (``rt.kill_switch.level``) et jamais alimenté : la frontière de jour UTC n'était jamais
+    franchie, donc la perte journalière n'était jamais calculée, le sommet d'équité jamais mis à
+    jour, et AUCUN déclencheur ne pouvait se produire. La principale protection automatique de la
+    plateforme ne pouvait s'activer que par une commande opérateur explicite — autrement dit, elle
+    n'était pas automatique.
+
+    Appelé à chaque frontière, AVANT de décider : une décision doit voir le halt que l'état courant
+    justifie, pas celui de la minute précédente.
+    """
+    now = rt.clock.now_utc()
+    view = rt.ledger.equity(dict(rt.market.marks))
+    last = rt.market.last_available_at
+    age_s = None if last is None else (now - ensure_utc(last)).total_seconds()
+    # Une donnée dont on ignore l'âge est traitée comme périmée : l'inconnu n'est pas de la fraîcheur.
+    data_stale = age_s is None or age_s > rt.cfg.market_data.max_quote_age_ms / 1000.0
+    books = [book.view() for book in rt.market.books.values()]
+    # Un carnet invalide suffit : on ne moyenne pas la validité.
+    book_invalid = any(not v.valid for v in books) if books else False
+    signals = HealthSignals(
+        now=now,
+        data_stale=data_stale,
+        book_invalid=book_invalid,
+        reconciliation_ok=not getattr(rt.gateway, "reconciliation_required", False),
+        equity=view.equity,
+        unit_value=advance_unit_value(rt, view, now=now),
+    )
+    verdict = rt.kill_switch.observe(signals)
+    if verdict.changed:
+        log.warning(
+            "halt_change",
+            avant=verdict.previous_level.value,
+            apres=verdict.level.value,
+            declencheurs=",".join(t.name for t in verdict.triggers),
+        )
+    rt.metrics.set_halt_state(verdict.level.value)
+    return verdict
+
+
 # --- exécution ----------------------------------------------------------------------------------------
 
 
@@ -1356,6 +1577,9 @@ def _boundary_callback(rt: Runtime) -> Callable[[datetime, datetime], Awaitable[
         if loop is None:
             return None
         rt.health.touch(health_names.STRATEGY)
+        # La protection automatique s'évalue AVANT la décision : décider d'abord, puis constater le
+        # halt, laisserait passer exactement une décision de trop.
+        observe_health(rt)
         record = await loop.run_once(boundary, deadline)
         log.info(
             "decision",

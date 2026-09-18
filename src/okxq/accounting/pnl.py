@@ -33,6 +33,7 @@ __all__ = [
     "drawdowns",
     "marked_and_liquidated_pnl",
     "max_drawdown",
+    "next_unit_point",
     "strategy_pnl",
     "unitize",
     "update_high_water_mark",
@@ -59,6 +60,10 @@ class UnitPoint:
     units: Decimal
     unit_value: Decimal
     external_flow: Decimal  # flux externe de la période (t_{i-1}, t_i]
+    #: Cumul des flux externes à cet instant. Nécessaire pour reprendre l'unitisation À PARTIR d'un
+    #: point déjà calculé : `external_flow` ne porte que la période, et un point isolé ne suffirait
+    #: donc pas à retrouver le flux de la période suivante.
+    external_cashflow_cum: Decimal = ZERO
 
 
 def strategy_pnl(start: EquityPoint, end: EquityPoint) -> Decimal:
@@ -68,30 +73,52 @@ def strategy_pnl(start: EquityPoint, end: EquityPoint) -> Decimal:
     return (end.equity - start.equity) - (end.external_cashflow_cum - start.external_cashflow_cum)
 
 
+def next_unit_point(
+    point: EquityPoint, previous: UnitPoint | None = None, *, initial_unit_value: Decimal = ONE
+) -> UnitPoint:
+    """UN pas d'unitisation, à partir du point précédent déjà calculé (T45).
+
+    C'est la forme incrémentale de ``unitize`` : le runtime ne dispose que du dernier point persisté
+    et de l'observation courante, jamais de la série entière. Les deux fonctions partagent donc ce
+    seul et même calcul — ``unitize`` n'est qu'un pliage de celui-ci. Deux implémentations parallèles
+    de la règle « les parts se créent au dernier prix de part connu » auraient fini par divergé ;
+    le drawdown de surveillance et le drawdown des rapports auraient alors désigné deux choses
+    différentes sous le même nom.
+    """
+    if previous is None:
+        unit_value = dec(initial_unit_value, field="initial_unit_value")
+        if unit_value <= 0:
+            raise LedgerError("valeur de part initiale non positive")
+        if point.equity <= 0:
+            raise LedgerError(
+                "equity initiale non positive : unitisation impossible", equity=str(point.equity)
+            )
+        return UnitPoint(
+            point.at,
+            point.equity,
+            point.equity / unit_value,
+            unit_value,
+            point.external_cashflow_cum,
+            point.external_cashflow_cum,
+        )
+    if point.at < previous.at:
+        raise LedgerError("série d'equity non ordonnée", at=point.at.isoformat())
+    flow = point.external_cashflow_cum - previous.external_cashflow_cum
+    units = previous.units
+    if flow != 0:
+        units += flow / previous.unit_value  # parts créées/détruites au dernier prix de part connu
+    if units <= 0:
+        raise LedgerError("nombre de parts non positif après retrait", at=point.at.isoformat())
+    return UnitPoint(point.at, point.equity, units, point.equity / units, flow, point.external_cashflow_cum)
+
+
 def unitize(points: Sequence[EquityPoint], *, initial_unit_value: Decimal = ONE) -> list[UnitPoint]:
     """Valeur de part neutralisant les apports/retraits (T45)."""
-    if not points:
-        return []
-    unit_value = dec(initial_unit_value, field="initial_unit_value")
-    if unit_value <= 0:
-        raise LedgerError("valeur de part initiale non positive")
-    first = points[0]
-    if first.equity <= 0:
-        raise LedgerError("equity initiale non positive : unitisation impossible", equity=str(first.equity))
-    units = first.equity / unit_value
-    out = [UnitPoint(first.at, first.equity, units, unit_value, first.external_cashflow_cum)]
-    prev = first
-    for p in points[1:]:
-        if p.at < prev.at:
-            raise LedgerError("série d'equity non ordonnée", at=p.at.isoformat())
-        flow = p.external_cashflow_cum - prev.external_cashflow_cum
-        if flow != 0:
-            units += flow / unit_value  # parts créées/détruites au dernier prix de part connu
-        if units <= 0:
-            raise LedgerError("nombre de parts non positif après retrait", at=p.at.isoformat())
-        unit_value = p.equity / units
-        out.append(UnitPoint(p.at, p.equity, units, unit_value, flow))
-        prev = p
+    out: list[UnitPoint] = []
+    previous: UnitPoint | None = None
+    for point in points:
+        previous = next_unit_point(point, previous, initial_unit_value=initial_unit_value)
+        out.append(previous)
     return out
 
 
