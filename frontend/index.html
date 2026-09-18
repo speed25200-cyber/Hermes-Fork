@@ -1293,9 +1293,11 @@ tbody tr:hover { background: var(--surface-2); }
       <path d="M8 4.6v4.2M8 11.1v.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
     </svg>
     <div><strong data-l="lecture.titre">Lecture seule.</strong>
-      <span data-l="lecture.texte">Cette page montre tout mais ne commande rien. Servi par le réseau,
-      Hermes se met en lecture seule par défaut — l'adresse d'écoute ne dit rien de qui se connecte.
-      Pour piloter&nbsp;: <code>HERMES_UI_MODE=full</code> dans l'environnement du service.</span></div>
+      <span data-l="lecture.texte">Cette page montre tout mais ne commande rien. Le droit d'agir vient
+      du rôle porté par votre clé d'accès, pas de l'adresse d'écoute&nbsp;: un lecteur voit tout et ne
+      peut rien demander. Pour piloter, ouvrez l'interface avec une clé de rôle <code>operator</code>.
+      Même alors, une commande n'est qu'une demande auditée&nbsp;: le runtime l'exécute sous
+      préconditions.</span></div>
   </div>
 
   <section class="tuiles" id="tuiles"></section>

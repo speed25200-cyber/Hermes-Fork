@@ -1,0 +1,423 @@
+# Exploitation : un conteneur par rôle (§41, §62), un fichier de secrets par service (§60, ADR-003).
+#
+# ══ LA RÈGLE QUI STRUCTURE TOUT CE FICHIER ══════════════════════════════════════════════════════════
+# Il n'y a AUCUN bloc d'environnement partagé et AUCUN `env_file` commun portant un secret. Chaque
+# service lit son propre `env/<son-nom>.env`. C'est une exigence, pas un style : §60 dit qu'« un secret
+# injecté globalement dans tous les conteneurs viole cette séparation ». Concrètement :
+#   • OKX_API_KEY / SECRET / PASSPHRASE n'existent que dans env/gateway.env    → seul `gateway` signe ;
+#   • TYPESAFE_API_KEY n'existe que dans env/jev-worker.env                    → seul JEV l'utilise ;
+#   • OPERATOR_AUTH_SECRET n'existe que dans env/api.env                       → seule l'API authentifie.
+# Seule exception assumée : le travail de migration, qui n'a besoin que d'une URL de base (aucune clé
+# de fournisseur) et retombe donc sur env/collector.env quand env/migrate.env n'est pas posé.
+# Un ancrage YAML qui porterait un secret serait développé par le parseur dans chaque service : c'est
+# précisément ce que `scripts/security_check.py` détecte, en lisant ce fichier après analyse.
+#
+# ══ LIVE ════════════════════════════════════════════════════════════════════════════════════════════
+# Rien ici n'active LIVE et il n'existe aucune option pour le faire. Les commandes lancent le mode du
+# profil (PAPER par défaut) ; LIVE exige en plus un manifeste d'approbation signé vérifié au démarrage
+# par le code (§71), hors de portée d'un fichier d'infrastructure.
+#
+# ══ NOMS DE SERVICES ════════════════════════════════════════════════════════════════════════════════
+# Le service de base de données s'appelle `postgres` : c'est le nom fixé par l'ADR-003, celui attendu
+# par `make db-up` et celui présent dans les DATABASE_URL écrites par deploy/install.sh
+# (`@postgres:5432`). L'alias réseau `db` est ajouté pour qu'une URL pointant sur `db` fonctionne aussi.
+#
+# ══ ARRÊT ═══════════════════════════════════════════════════════════════════════════════════════════
+# `docker compose down` n'est PAS une politique de position (§62). Il arrête des processus ; il ne
+# décide pas de conserver ou de fermer les positions. La procédure d'arrêt contrôlé passe par
+# `okxq control pause` puis `okxq control request-flatten` si telle est la politique retenue.
+#
+# Aucun `profiles:` n'est déclaré volontairement : les services sans profil démarrent avec
+# `docker compose --profile paper|demo up`, tel que deploy/install.sh l'invoque.
+
+name: okxq
+
+# ── Réglages communs NON SECRETS. Ils ne contiennent ni variable d'environnement, ni env_file : le
+#    partage s'arrête à l'infrastructure (image, journalisation, durcissement), jamais aux secrets.
+x-okxq-app: &okxq-app
+  build:
+    context: .
+    dockerfile: infra/Dockerfile
+  # Même étiquette que `make build` : les six rôles partagent un seul artefact, construit une fois.
+  image: okx-quant-jev:local
+  restart: unless-stopped
+  # init : un vrai PID 1 qui récupère les processus zombies et transmet SIGTERM — sinon l'arrêt propre
+  # dépend du bon vouloir du shell.
+  init: true
+  # Durcissement (§60, §62) : racine en lecture seule, aucune capacité, aucune élévation possible.
+  # Les seuls chemins inscriptibles sont /tmp (tmpfs) et les volumes nommés explicitement montés.
+  read_only: true
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  # Journaux bornés : un disque saturé arrête la collecte et la comptabilité (§61 disk_free_bytes).
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  postgres:
+    # PostgreSQL 16 (§41). Le journal financier vit ici : ordres, fills, comptabilité, approbations.
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Seul service branché au réseau interne uniquement : la base n'a aucune route vers Internet.
+    networks:
+      data:
+        aliases: ["db"]
+    # Un SEUL env_file, le sien. Le mot de passe est généré par deploy/install.sh et n'apparaît ni ici,
+    # ni dans l'image, ni dans les journaux. `db.env` est accepté en second pour ceux qui nomment le
+    # fichier d'après le rôle plutôt que d'après le moteur ; les deux sont optionnels afin que
+    # `docker compose config` fonctionne sur un dépôt fraîchement cloné, avant tout secret posé.
+    env_file:
+      - path: env/postgres.env
+        required: false
+      - path: env/db.env
+        required: false
+    environment:
+      # Non secret : localisation et somme de contrôle des pages. `POSTGRES_INITDB_ARGS` fixe
+      # l'encodage une fois pour toutes ; des collations divergentes rendraient les index incomparables
+      # entre une base restaurée et l'originale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: UTC
+    ports:
+      # Boucle locale SEULEMENT. §62 exige que PostgreSQL ne soit pas exposé publiquement ; 127.0.0.1
+      # n'est pas une exposition publique et rend `make test-integration` utilisable sur l'hôte.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Vraie sonde : la base accepte-t-elle des connexions pour l'utilisateur et la base attendus ?
+      # `pg_isready` sans arguments répondrait « oui » pour un serveur qui n'a pas encore créé la base.
+      test: ["CMD-SHELL", "pg_isready -q -U \"$${POSTGRES_USER:-okxq}\" -d \"$${POSTGRES_DB:-postgres}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 60s
+    # `no-new-privileges` oui, mais PAS `cap_drop: ALL` ni `read_only` : l'entrypoint de l'image
+    # PostgreSQL doit changer de propriétaire et d'utilisateur au démarrage, et le moteur doit écrire
+    # son répertoire de données. Durcir ici casserait la base au lieu de la protéger ; la protection
+    # vient de l'isolement réseau (réseau interne seul) et du port limité à la boucle locale.
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: "1.50", memory: 1024M }
+        reservations: { memory: 256M }
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  migrate:
+    <<: *okxq-app
+    # Travail à usage unique : applique les migrations Alembic puis s'arrête. `okxq db upgrade` localise
+    # les révisions DANS le paquet installé et exige une URL explicite — sans DATABASE_URL, il échoue
+    # au lieu de migrer une base que personne n'a désignée.
+    #
+    # POURQUOI UN TRAVAIL SÉPARÉ : six rôles qui migreraient chacun au démarrage se marcheraient dessus.
+    # Une migration est une opération unique, transactionnelle, et son échec doit être visible.
+    #
+    # Ce service ne reçoit aucun secret de fournisseur : il a besoin des droits DDL sur la base, rien
+    # d'autre. Il lit env/migrate.env quand ce fichier existe (rôle PostgreSQL dédié, droits minimaux
+    # — §60) et retombe sinon sur env/collector.env, qui ne porte lui non plus aucune clé. L'ordre
+    # compte : le dernier fichier lu gagne, donc migrate.env prime quand il est posé.
+    env_file:
+      - path: env/collector.env
+        required: false
+      - path: env/migrate.env
+        required: false
+    command: ["okxq", "db", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [data]
+    # Aucun volume : une migration touche le schéma, pas les fichiers.
+    volumes: []
+    # Pas de healthcheck : ce conteneur DOIT se terminer. Une sonde périodique sur un processus qui
+    # s'arrête normalement n'aurait aucun sens.
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits: { cpus: "1.00", memory: 512M, pids: 512 }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  collector:
+    <<: *okxq-app
+    # Données PUBLIQUES uniquement. Ce service ne reçoit aucune clé OKX : il n'en a pas besoin pour
+    # lire le carnet et les trades, et lui en donner une élargirait le rayon d'un vol de clé (§60).
+    env_file:
+      - path: env/collector.env
+        required: false
+    # `$$` échappe l'interpolation de compose : c'est le shell du conteneur qui lit ces variables, donc
+    # elles peuvent venir de env/collector.env. Défaut PAPER, profil `paper`.
+    command:
+      - sh
+      - -c
+      - exec okxq "$${OKXQ_MODE_CLI:-paper}" run --config "$${OKXQ_CONFIG:-configs/paper.yaml}" --role collector
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Le schéma doit exister AVANT d'écrire : un écrivain branché sur une base non migrée ne produit
+      # pas des données incomplètes, il produit un journal financier faux. Si la migration échoue, ce
+      # service ne démarre pas — c'est le comportement voulu, pas une panne à contourner.
+      migrate:
+        condition: service_completed_successfully
+    networks: [data, edge]
+    volumes:
+      - okxq-data:/app/data
+      - okxq-runtime:/app/runtime
+    healthcheck:
+      # Vivacité honnête (§61) : le processus du rôle tourne-t-il encore, et la base reste-t-elle
+      # joignable depuis CE conteneur ? On lit /proc/1/cmdline (jamais la ligne de commande de la sonde
+      # elle-même, sinon le test se validerait tout seul). Ce n'est PAS une readiness : prétendre
+      # « prêt » sans sonde de rôle serait un mensonge, et §61 distingue les deux.
+      test: ["CMD", "python", "-c", "import pathlib,socket,sys; sys.exit(0 if b'collector' in pathlib.Path('/proc/1/cmdline').read_bytes() and socket.create_connection(('postgres', 5432), 3) else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "1.00", memory: 768M, pids: 512 }
+        reservations: { memory: 192M }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  strategy:
+    <<: *okxq-app
+    # Recherche et inférence. Aucune clé d'échange : une sortie de modèle est une PROPOSITION, elle
+    # passe par le risque puis par le gateway (§25, §41). Sans clé, ce service ne peut pas contourner.
+    env_file:
+      - path: env/strategy.env
+        required: false
+    command:
+      - sh
+      - -c
+      - exec okxq "$${OKXQ_MODE_CLI:-paper}" run --config "$${OKXQ_CONFIG:-configs/paper.yaml}" --role strategy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Le schéma doit exister AVANT d'écrire : un écrivain branché sur une base non migrée ne produit
+      # pas des données incomplètes, il produit un journal financier faux. Si la migration échoue, ce
+      # service ne démarre pas — c'est le comportement voulu, pas une panne à contourner.
+      migrate:
+        condition: service_completed_successfully
+      collector:
+        condition: service_started
+    networks: [data, edge]
+    volumes:
+      # Données en LECTURE SEULE : la stratégie consomme l'archive, elle ne la réécrit pas — c'est la
+      # garantie mécanique qu'un entraînement ne peut pas corriger le passé d'une décision (§35).
+      - okxq-data:/app/data:ro
+      - okxq-artifacts:/app/artifacts
+      - okxq-reports:/app/reports
+      - okxq-runtime:/app/runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,socket,sys; sys.exit(0 if b'strategy' in pathlib.Path('/proc/1/cmdline').read_bytes() and socket.create_connection(('postgres', 5432), 3) else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 45s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        # Plafond volontairement distinct du collecteur : §62 demande de séparer collecte/trading des
+        # travaux de recherche pour qu'un entraînement ne sature pas CPU/RAM du chemin de décision.
+        limits: { cpus: "1.50", memory: 1536M, pids: 512 }
+        reservations: { memory: 256M }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  risk:
+    <<: *okxq-app
+    # Service de risque INDÉPENDANT du modèle (§25, §41). Il détient l'autorité finale et n'a donc,
+    # lui aussi, aucune clé d'échange : il autorise, il n'exécute pas.
+    env_file:
+      - path: env/risk.env
+        required: false
+    command:
+      - sh
+      - -c
+      - exec okxq "$${OKXQ_MODE_CLI:-paper}" run --config "$${OKXQ_CONFIG:-configs/paper.yaml}" --role risk
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Le schéma doit exister AVANT d'écrire : un écrivain branché sur une base non migrée ne produit
+      # pas des données incomplètes, il produit un journal financier faux. Si la migration échoue, ce
+      # service ne démarre pas — c'est le comportement voulu, pas une panne à contourner.
+      migrate:
+        condition: service_completed_successfully
+    networks: [data, edge]
+    volumes:
+      - okxq-reports:/app/reports
+      - okxq-runtime:/app/runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,socket,sys; sys.exit(0 if b'risk' in pathlib.Path('/proc/1/cmdline').read_bytes() and socket.create_connection(('postgres', 5432), 3) else 1)"]
+      interval: 15s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "0.75", memory: 512M, pids: 512 }
+        reservations: { memory: 128M }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  gateway:
+    <<: *okxq-app
+    # LE SEUL service qui signe et envoie des ordres, donc LE SEUL à recevoir les clés OKX (§60).
+    # env/gateway.env est le seul fichier du déploiement qui porte OKX_API_*.
+    env_file:
+      - path: env/gateway.env
+        required: false
+    command:
+      - sh
+      - -c
+      - exec okxq "$${OKXQ_MODE_CLI:-paper}" run --config "$${OKXQ_CONFIG:-configs/paper.yaml}" --role gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Le schéma doit exister AVANT d'écrire : un écrivain branché sur une base non migrée ne produit
+      # pas des données incomplètes, il produit un journal financier faux. Si la migration échoue, ce
+      # service ne démarre pas — c'est le comportement voulu, pas une panne à contourner.
+      migrate:
+        condition: service_completed_successfully
+      # Dépendance délibérément stricte : sans service de risque SAIN, pas d'exécution. Si le risque ne
+      # devient jamais sain, le gateway ne démarre pas — c'est le comportement voulu, pas une panne à
+      # contourner (§25 : le moteur ML ne peut jamais contourner le Risk Engine).
+      risk:
+        condition: service_healthy
+    networks: [data, edge]
+    volumes:
+      - okxq-runtime:/app/runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,socket,sys; sys.exit(0 if b'gateway' in pathlib.Path('/proc/1/cmdline').read_bytes() and socket.create_connection(('postgres', 5432), 3) else 1)"]
+      interval: 15s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+    # Plus long que les autres : §62 impose de traiter les intentions en attente et de confirmer les
+    # annulations/protections avant de s'arrêter. Couper le signataire en 10 s laisserait des ordres
+    # dont l'état est inconnu.
+    stop_grace_period: 120s
+    deploy:
+      resources:
+        limits: { cpus: "0.75", memory: 512M, pids: 512 }
+        reservations: { memory: 128M }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  jev-worker:
+    <<: *okxq-app
+    # Worker sémantique JEV / TypeSafe. Il reçoit SA clé et rien d'autre (§60) : pas de clé d'échange,
+    # pas de clé opérateur. Il ne monte ni /app/data ni /app/artifacts — donc ni prix privés, ni
+    # modèles, ni rapports : aucune position, aucune équité, aucune stratégie ne peut partir dans une
+    # requête. DATABASE_URL reste nécessaire (file d'attente durable et cache des réponses) ; il est
+    # recommandé de lui attribuer un rôle PostgreSQL aux droits minimaux (§60), restreint aux tables
+    # de documents et de réponses JEV.
+    env_file:
+      - path: env/jev-worker.env
+        required: false
+    command:
+      - sh
+      - -c
+      - exec okxq "$${OKXQ_MODE_CLI:-paper}" run --config "$${OKXQ_CONFIG:-configs/paper.yaml}" --role jev-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Le schéma doit exister AVANT d'écrire : un écrivain branché sur une base non migrée ne produit
+      # pas des données incomplètes, il produit un journal financier faux. Si la migration échoue, ce
+      # service ne démarre pas — c'est le comportement voulu, pas une panne à contourner.
+      migrate:
+        condition: service_completed_successfully
+    networks: [data, edge]
+    volumes:
+      - okxq-runtime:/app/runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,socket,sys; sys.exit(0 if b'jev-worker' in pathlib.Path('/proc/1/cmdline').read_bytes() and socket.create_connection(('postgres', 5432), 3) else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 512M, pids: 512 }
+        reservations: { memory: 128M }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  api:
+    <<: *okxq-app
+    # API opérateur + interface statique (§58, §59). Elle porte la clé opérateur, pas les clés OKX :
+    # l'interface demande des actions, le gateway seul les signe.
+    env_file:
+      - path: env/api.env
+        required: false
+    command:
+      - sh
+      - -c
+      - exec uvicorn okxq.api.app:app_factory --factory --host 0.0.0.0 --port 8000 --no-server-header --proxy-headers
+    # Pas de bloc `environment` ici, volontairement : uvicorn n'a pas d'option `--config`, il lit
+    # OKXQ_CONFIG, et cette variable vient de env/api.env comme pour les autres rôles. La fixer dans
+    # compose aurait été pire qu'inutile : `environment` PRIME sur `env_file`, donc changer de profil
+    # dans env/api.env n'aurait eu aucun effet et l'API aurait servi un mode différent des workers.
+    # Sans valeur, `app_factory` retombe sur configs/paper.yaml — le mode le moins dangereux.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # VOLONTAIREMENT sans attendre `migrate` : l'API est un modèle de LECTURE qui se dégrade
+      # proprement (« Non disponible » partout) et sert /health/live sans clé. Si une migration
+      # échoue, la console doit rester joignable pour qu'un opérateur PUISSE le constater. La bloquer
+      # aussi rendrait l'incident invisible au moment précis où il faut le voir.
+    networks: [data, edge]
+    ports:
+      # Port publié attendu par deploy/install.sh et deploy/etat.sh (8899). L'accès sans clé doit
+      # renvoyer 401/403 : l'authentification est le middleware le plus externe. En exposition
+      # publique, placer un terminateur TLS devant — ce port sert du HTTP en clair (§60, accès UI non
+      # autorisé).
+      - "${OKXQ_PORT:-8899}:8000"
+    volumes:
+      # Tout en lecture seule : l'API est un modèle de LECTURE. Les commandes de l'opérateur passent
+      # par la base et le gateway, jamais par un fichier que l'API réécrirait.
+      - okxq-reports:/app/reports:ro
+      - okxq-artifacts:/app/artifacts:ro
+      - okxq-runtime:/app/runtime:ro
+    healthcheck:
+      # Ici la sonde est réelle : /health/live est servi sans clé, exprès, pour les orchestrateurs.
+      test: ["CMD", "python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=4).status == 200 else 1)"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "0.75", memory: 512M, pids: 512 }
+        reservations: { memory: 128M }
+
+networks:
+  # `internal: true` : aucune passerelle vers Internet. PostgreSQL n'est attaché qu'à ce réseau, donc
+  # une dépendance compromise dans un conteneur applicatif ne peut pas exfiltrer la base directement
+  # depuis le moteur de base de données (§60, modèle de menace : dépendance compromise, SSRF).
+  data:
+    internal: true
+  # Réseau des appels sortants (OKX, TypeSafe) et des ports publiés. Les services applicatifs sont sur
+  # les deux ; la base sur aucun des deux sauf `data`.
+  edge:
+    driver: bridge
+
+volumes:
+  # Volumes NOMMÉS et non montages liés : ils héritent du propriétaire (UID 10001) des répertoires
+  # créés dans l'image, ce qu'un répertoire créé par Docker pour un bind mount ne fait pas — un
+  # conteneur non-root ne pourrait alors rien y écrire.
+  pgdata:
+  okxq-data:
+  okxq-runtime:
+  okxq-reports:
+  okxq-artifacts:

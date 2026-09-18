@@ -1,22 +1,38 @@
 #!/usr/bin/env python3
-"""Génère docs/test_matrix.md depuis les RÉSULTATS RÉELS de pytest (rapport JUnit).
+"""Génère `docs/test_matrix.md` depuis un rapport JUnit RÉELLEMENT produit par pytest (§64).
+
+Pourquoi ce script existe : une matrice de tests écrite à la main finit toujours par mentir. Elle est
+rédigée au moment où le test est écrit, puis le test est renommé, désactivé, ou jamais exécuté — et le
+tableau, lui, continue d'afficher « PASS ». Ici le tableau ne peut dire que ce que le rapport JUnit
+contient : chaque ligne est adossée à des cas de test nommés, avec leur résultat observé.
 
 Usage :
-  uv run pytest -q -m "not connected" --junitxml=reports/junit.xml
-  uv run python scripts/test_matrix_status.py reports/junit.xml > docs/test_matrix.md
+    python scripts/test_matrix_status.py --junit reports/junit.xml --out docs/test_matrix.md
 
-Un test absent du rapport est NOT_RUN ; un test sauté est SKIPPED (avec sa raison) ; jamais PASS par
-défaut. Les IDs T01–T70 et leurs libellés viennent du cahier des charges (§64).
+Règles de classement (elles sont le cœur de l'honnêteté du document) :
+
+* `PASS`    — au moins un cas de test porte l'identifiant et aucun n'a échoué ;
+* `FAIL`    — au moins un cas a échoué (`failure`) ou est tombé en erreur (`error`) ;
+* `NOT_RUN` — aucun cas ne porte l'identifiant, OU tous les cas qui le portent ont été sautés.
+
+Un test sauté n'est PAS un test qui passe : il n'a rien vérifié. Un identifiant sans test est un trou
+déclaré, jamais masqué. Les tests marqués `integration` (PostgreSQL) et `connected` (réseau + clés) ne
+sont pas dans la sélection hermétique : ils restent donc `NOT_RUN` faute d'accès, comme l'exige §64.
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ElementTree
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
+from xml.etree.ElementTree import Element
 
+# Libellés repris MOT POUR MOT de la matrice §64 du cahier des charges : la colonne « cas à tester » et
+# la colonne « résultat attendu » sont l'exigence, pas un résumé du test qui l'implémente.
 CASES: dict[str, tuple[str, str]] = {
     "T01": ("Conversion contrats/base/notionnel", "Unités et signe exacts sur fixtures linéaires"),
     "T02": ("Instrument inverse ou devise non supportée", "Rejet explicite avant modèle/ordre"),
@@ -78,7 +94,10 @@ CASES: dict[str, tuple[str, str]] = {
     "T52": ("Probabilités JEV invalides", "Rejet typé, sans ordre déclenché"),
     "T53": ("Version JEV inattendue", "Nouvelle validation requise"),
     "T54": ("Ticker ambigu ou source contradictoire", "Mapping non inventé, qualité explicite"),
-    "T55": ("Injection dans un document", "Aucune permission, aucun secret ni action arbitraire accessibles"),
+    "T55": (
+        "Injection dans un document",
+        "Aucune permission, aucun secret ni action arbitraire accessibles",
+    ),
     "T56": ("URL vers réseau privé ou redirection malveillante", "SSRF bloquée"),
     "T57": ("Document rejoué depuis cache", "Âge et provenance initiaux conservés"),
     "T58": ("Source ou publication manquante", "Absence explicitée, jamais timestamp inventé"),
@@ -97,81 +116,336 @@ CASES: dict[str, tuple[str, str]] = {
     "T65": ("Action UI non autorisée/CSRF", "Aucun effet et événement d'audit"),
     "T66": ("Secret dans logs/artefacts/image", "Test de sécurité échoué et livraison bloquée"),
     "T67": ("Restauration de sauvegarde", "Données restaurées et réconciliation avant reprise"),
-    "T68": ("Saturation disque/queue/CPU", "Backpressure/arrêt contrôlé, pas de perte silencieuse critique"),
+    "T68": (
+        "Saturation disque/queue/CPU",
+        "Backpressure/arrêt contrôlé, pas de perte silencieuse critique",
+    ),
     "T69": ("Tests hors ligne sans réseau", "Parcours complet sur fixtures reproductible"),
     "T70": ("Même dataset/config/seed", "Résultat identique dans la tolérance documentée"),
 }
 
-_ID_RE = re.compile(r"test_(T\d{2})")
+# Les tests du dépôt nomment leur identifiant : `test_T66_...`, `test_T27_T28_...`. Le caractère qui
+# précède ne doit pas être alphanumérique (sinon l'horodatage `2026-09-18T08:00:00Z` d'un identifiant
+# paramétré serait lu comme « T08 ») et le suivant ne doit pas être un chiffre (pour ne pas confondre
+# « T7 » d'un hypothétique « T700 »).
+ID_PATTERN = re.compile(r"(?<![A-Za-z0-9])T(\d{2})(?!\d)")
+
+# Niveau de test déduit du module : `tests/unit/...` → `unit`. Le niveau est une information de §64
+# (« exigence -> test -> niveau -> résultat ») et il n'est écrit nulle part ailleurs.
+LEVEL_PATTERN = re.compile(r"^tests[./]([a-z0-9_]+)")
+
+STATUS_PASS = "PASS"
+STATUS_FAIL = "FAIL"
+STATUS_NOT_RUN = "NOT_RUN"
+
+# Ordre d'affichage de la synthèse : les états qui bloquent une livraison d'abord.
+SUMMARY_ORDER = (STATUS_FAIL, STATUS_NOT_RUN, STATUS_PASS)
 
 
-def main(junit_path: str) -> int:
-    root = ET.parse(junit_path).getroot()
-    by_id: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
-    totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
-    for tc in root.iter("testcase"):
-        totals["tests"] += 1
-        name = tc.get("name", "")
-        classname = tc.get("classname", "")
-        status, detail = "PASS", ""
-        if tc.find("failure") is not None:
-            status, detail = "FAIL", (tc.find("failure").get("message") or "")[:120]
-            totals["failures"] += 1
-        elif tc.find("error") is not None:
-            status, detail = "ERROR", (tc.find("error").get("message") or "")[:120]
-            totals["errors"] += 1
-        elif tc.find("skipped") is not None:
-            status, detail = "SKIPPED", (tc.find("skipped").get("message") or "")[:120]
-            totals["skipped"] += 1
-        for m in _ID_RE.finditer(name):
-            by_id[m.group(1)].append((f"{classname}::{name}", status, detail))
-    lines = [
-        "# Matrice de tests (§64) — générée depuis les résultats réels",
-        "",
-        f"Source : `{Path(junit_path).name}` — {totals['tests']} tests exécutés, {totals['failures']} échecs, "
-        f"{totals['errors']} erreurs, {totals['skipped']} sautés. Un ID sans test exécuté est `NOT_RUN`.",
-        "",
-        "| ID | Cas à tester | Résultat attendu | Niveau | Tests | Statut |",
-        "|---|---|---|---|---|---|",
-    ]
-    summary: dict[str, int] = defaultdict(int)
-    for tid, (case, expected) in CASES.items():
-        tests = by_id.get(tid, [])
-        if not tests:
-            status = "NOT_RUN"
-            names = "—"
-            level = "—"
+@dataclass(frozen=True, slots=True)
+class TestCaseResult:
+    """Un cas de test tel que le rapport JUnit le décrit — jamais tel qu'on l'espérait."""
+
+    classname: str
+    name: str
+    outcome: str  # "passed" | "failed" | "error" | "skipped"
+    detail: str
+
+    @property
+    def level(self) -> str:
+        match = LEVEL_PATTERN.match(self.classname)
+        return match.group(1) if match else "?"
+
+    @property
+    def short_name(self) -> str:
+        """`tests.unit.test_orderbook::test_T06_...` → `test_orderbook::test_T06_...`.
+
+        Le module suffit pour retrouver le test ; le chemin complet rendrait la colonne illisible.
+        """
+        module = self.classname.rsplit(".", 1)[-1] if self.classname else "?"
+        return f"{module}::{self.name}"
+
+    @property
+    def function_name(self) -> str:
+        """Nom sans l'identifiant de paramétrage : `test_T56_x[169.254.169.254]` → `test_T56_x`."""
+        return self.name.split("[", 1)[0]
+
+
+@dataclass(frozen=True, slots=True)
+class Totals:
+    """Compteurs recalculés depuis les cas eux-mêmes, pas lus dans les attributs du rapport."""
+
+    collected: int = 0
+    passed: int = 0
+    failed: int = 0
+    errored: int = 0
+    skipped: int = 0
+
+
+def _first_text(case: Element, tag: str) -> str:
+    """Message d'un `failure`/`error`/`skipped`, tronqué : la matrice résume, le rapport détaille."""
+    node = case.find(tag)
+    if node is None:
+        return ""
+    message = node.get("message") or (node.text or "")
+    flattened = " ".join(message.split())
+    return flattened[:160]
+
+
+def parse_junit(path: Path) -> tuple[list[TestCaseResult], Totals]:
+    """Lit le rapport JUnit et rend les cas observés.
+
+    Le fichier est produit localement par notre propre pytest : c'est un artefact de confiance, d'où
+    la bibliothèque standard. Les documents EXTERNES, eux, ne sont jamais parsés ainsi — ils passent
+    par `defusedxml` dans `okxq.jev.source_connectors`.
+    """
+    root = ElementTree.parse(path).getroot()
+    cases: list[TestCaseResult] = []
+    collected = passed = failed = errored = skipped = 0
+    for element in root.iter("testcase"):
+        collected += 1
+        if element.find("failure") is not None:
+            outcome, detail = "failed", _first_text(element, "failure")
+            failed += 1
+        elif element.find("error") is not None:
+            outcome, detail = "error", _first_text(element, "error")
+            errored += 1
+        elif element.find("skipped") is not None:
+            outcome, detail = "skipped", _first_text(element, "skipped")
+            skipped += 1
         else:
-            statuses = {s for _, s, _ in tests}
-            status = (
-                "FAIL"
-                if ("FAIL" in statuses or "ERROR" in statuses)
-                else ("SKIPPED" if statuses == {"SKIPPED"} else "PASS")
+            outcome, detail = "passed", ""
+            passed += 1
+        cases.append(
+            TestCaseResult(
+                classname=element.get("classname", ""),
+                name=element.get("name", ""),
+                outcome=outcome,
+                detail=detail,
             )
-            names = "<br>".join(
-                f"`{n.split('::')[0].split('.')[-1]}::{n.split('::')[-1]}`" for n, _, _ in tests[:4]
-            )
-            if len(tests) > 4:
-                names += f"<br>… (+{len(tests) - 4})"
-            levels = {n.split(".")[1] if "." in n else "?" for n, _, _ in tests}
-            level = "/".join(sorted(levels))
-        summary[status] += 1
-        lines.append(f"| {tid} | {case} | {expected} | {level} | {names} | **{status}** |")
-    lines += ["", "## Synthèse", ""]
-    for k in ("PASS", "FAIL", "SKIPPED", "NOT_RUN"):
-        lines.append(f"- {k} : {summary.get(k, 0)}")
-    lines += [
+        )
+    totals = Totals(collected=collected, passed=passed, failed=failed, errored=errored, skipped=skipped)
+    return cases, totals
+
+
+def index_by_requirement(cases: list[TestCaseResult]) -> dict[str, list[TestCaseResult]]:
+    """Associe chaque identifiant T01–T70 aux cas qui le nomment.
+
+    Un même test peut couvrir deux exigences (`test_T27_T28_...`) : il apparaît alors sur les deux
+    lignes. Un identifiant hors T01–T70 est ignoré : il ne correspond à aucune exigence du §64.
+    """
+    index: dict[str, list[TestCaseResult]] = defaultdict(list)
+    for case in cases:
+        for match in ID_PATTERN.finditer(f"{case.name} {case.classname}"):
+            requirement = f"T{match.group(1)}"
+            if requirement in CASES:
+                index[requirement].append(case)
+    return index
+
+
+def classify(cases: list[TestCaseResult]) -> tuple[str, str]:
+    """Rend (statut, preuve). La preuve dit POURQUOI, surtout quand le statut n'est pas PASS."""
+    if not cases:
+        # Aucun test ne porte cet identifiant : le trou est déclaré, il n'est pas comblé par un PASS.
+        return STATUS_NOT_RUN, "aucun test ne porte cet identifiant"
+    broken = [c for c in cases if c.outcome in ("failed", "error")]
+    if broken:
+        return STATUS_FAIL, broken[0].detail or "échec sans message"
+    ran = [c for c in cases if c.outcome == "passed"]
+    if not ran:
+        # Tous sautés : le code n'a pas été exercé, donc rien n'est vérifié.
+        motifs = sorted({c.detail for c in cases if c.detail}) or ["motif non fourni"]
+        return STATUS_NOT_RUN, f"sauté ({len(cases)}) : {motifs[0]}"
+    note = f"{len(ran)} cas vert{'s' if len(ran) > 1 else ''}"
+    left_out = len(cases) - len(ran)
+    if left_out:
+        note += f", {left_out} sauté(s) — la couverture est partielle"
+    return STATUS_PASS, note
+
+
+def format_cases(cases: list[TestCaseResult], *, limit: int = 3) -> str:
+    """Colonne « Tests » : les fonctions, dédupliquées, sans le bruit du paramétrage."""
+    if not cases:
+        return "—"
+    seen: list[str] = []
+    for case in cases:
+        module = case.classname.rsplit(".", 1)[-1] if case.classname else "?"
+        label = f"{module}::{case.function_name}"
+        if label not in seen:
+            seen.append(label)
+    shown = [f"`{label}`" for label in seen[:limit]]
+    if len(seen) > limit:
+        shown.append(f"… (+{len(seen) - limit})")
+    return "<br>".join(shown)
+
+
+def format_levels(cases: list[TestCaseResult]) -> str:
+    return "/".join(sorted({case.level for case in cases})) if cases else "—"
+
+
+def build_document(junit_path: Path, cases: list[TestCaseResult], totals: Totals) -> str:
+    index = index_by_requirement(cases)
+    statuses: dict[str, str] = {}
+    rows: list[str] = []
+    for requirement, (case_label, expected) in CASES.items():
+        matched = index.get(requirement, [])
+        status, evidence = classify(matched)
+        statuses[requirement] = status
+        rows.append(
+            f"| {requirement} | {case_label} | {expected} | {format_levels(matched)} "
+            f"| {format_cases(matched)} | **{status}** | {evidence} |"
+        )
+    counts = {state: sum(1 for s in statuses.values() if s == state) for state in SUMMARY_ORDER}
+    not_run_ids = [rid for rid, state in statuses.items() if state == STATUS_NOT_RUN]
+    failed_ids = [rid for rid, state in statuses.items() if state == STATUS_FAIL]
+
+    lines: list[str] = [
+        "# Matrice de tests T01–T70 (§64)",
         "",
-        "Les tests de propriété (invariants d'exposition, conservation comptable, déduplication, arrondis,",
-        "monotonie des quantités exécutées, impossibilité d'un ordre sans approbation) sont dans `tests/property/`.",
-        "Les tests connectés (`-m connected`) ne sont jamais lancés par la CI ; sans clé ils restent NOT_RUN.",
+        "<!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute",
+        "     correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->",
+        "",
+        f"Source : `{junit_path.as_posix()}` — {totals.collected} cas collectés, "
+        f"{totals.passed} verts, {totals.failed} échecs, {totals.errored} erreurs, "
+        f"{totals.skipped} sautés.",
+        "",
+        'Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests '
+        "`integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS "
+        "dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais "
+        "`PASS`.",
+        "",
+        "Lecture des statuts :",
+        "",
+        f"- `{STATUS_PASS}` — au moins un cas nommant l'identifiant a été exécuté et aucun n'a échoué ;",
+        f"- `{STATUS_FAIL}` — au moins un cas a échoué ou est tombé en erreur ;",
+        f"- `{STATUS_NOT_RUN}` — aucun cas ne porte l'identifiant, ou tous ont été sautés. Un test",
+        "  sauté n'a rien vérifié : il ne devient pas vert parce que la suite est verte.",
+        "",
+        "Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». Il ne signifie "
+        "ni « vérifié contre OKX », ni « rentable » : aucune ligne de ce tableau n'est une mesure de "
+        "marché.",
+        "",
+        "| ID | Cas à tester (§64) | Résultat attendu (§64) | Niveau | Tests | Statut | Preuve |",
+        "|---|---|---|---|---|---|---|",
+        *rows,
+        "",
+        "## Synthèse",
+        "",
+        f"| Statut | Nombre sur {len(CASES)} |",
+        "|---|---|",
+        *[f"| `{state}` | {counts[state]} |" for state in SUMMARY_ORDER],
+        "",
     ]
-    sys.stdout.write("\n".join(lines) + "\n")
+    if failed_ids:
+        lines += [
+            f"**Exigences en échec ({len(failed_ids)})** : {', '.join(failed_ids)}. "
+            "Un échec bloque la capacité correspondante.",
+            "",
+        ]
+    else:
+        lines += ["Aucune exigence en échec dans cette exécution.", ""]
+
+    # Un tableau sans FAIL alors que la suite a des échecs donnerait une impression fausse : les cas
+    # rouges qui ne nomment aucun identifiant §64 n'apparaissent nulle part ailleurs. On les nomme.
+    unmapped_failures = [
+        case
+        for case in cases
+        if case.outcome in ("failed", "error") and not any(case in matched for matched in index.values())
+    ]
+    if unmapped_failures:
+        listed = ", ".join(f"`{c.short_name}`" for c in unmapped_failures[:8])
+        if len(unmapped_failures) > 8:
+            listed += f" … (+{len(unmapped_failures) - 8})"
+        lines += [
+            f"**Attention — {len(unmapped_failures)} cas en échec hors matrice** : {listed}. "
+            "Ces cas ne nomment aucun identifiant §64, donc aucune ligne ci-dessus ne passe à "
+            "`FAIL` ; la suite est pourtant rouge. Le tableau ne doit pas se lire comme un état de "
+            "santé global de la suite.",
+            "",
+        ]
+    lines += [
+        f"**Exigences non exécutées ({len(not_run_ids)})** : "
+        f"{', '.join(not_run_ids) if not_run_ids else 'aucune'}.",
+        "",
+        "Chacune reste bloquante pour la capacité qu'elle devait valider (§71.1) : rien ici n'est "
+        "présenté comme couvert par autre chose.",
+        "",
+        "## Ce que ce tableau ne dit pas",
+        "",
+        "- Les tests de propriété livrés (`tests/property/`) portent sur la conservation d'une "
+        "position, la direction et la grille des arrondis, l'arithmétique monétaire, les invariants "
+        "de carnet, l'idempotence du remplacement d'un niveau et la monotonie des séquences. Ils ne "
+        "nomment aucun identifiant §64 : ils n'apparaissent donc sur aucune ligne, et les propriétés "
+        "exigées par §64 qui manquent encore (invariants d'exposition, déduplication, monotonie des "
+        "quantités exécutées, impossibilité d'un ordre sans approbation) ne sont pas couvertes ici.",
+        "- Aucun test connecté (clé OKX DEMO/LIVE, clé TypeSafe) n'a été exécuté : ni le connecteur "
+        "privé, ni un appel JEV réel ne sont vérifiés ici.",
+        "- Les chiffres produits par les jeux de données synthétiques ou golden servent à exercer les "
+        "pipelines. Ils ne constituent aucune preuve d'avantage de marché.",
+        "",
+        "- Les tests frontend (`node --test frontend/tests/*.test.js`, cible `make ui-test`) ne "
+        "passent pas par pytest : ils ne sont pas dans ce rapport et ne comptent sur aucune ligne.",
+        "",
+        "## Régénération",
+        "",
+        "`reports/` n'est pas versionné : le rapport source doit être reproduit avant de régénérer ce",
+        "fichier, sinon le tableau décrirait une exécution que personne ne peut retrouver.",
+        "",
+        "```sh",
+        'pytest -q -m "not integration and not connected" --junit-xml=reports/junit.xml -p no:cacheprovider',
+        "python scripts/test_matrix_status.py --junit reports/junit.xml --out docs/test_matrix.md",
+        "```",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Génère docs/test_matrix.md depuis un rapport JUnit de pytest (§64).",
+    )
+    parser.add_argument(
+        "--junit",
+        type=Path,
+        default=Path("reports/junit.xml"),
+        help="rapport JUnit produit par pytest (--junit-xml)",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/test_matrix.md"),
+        help="fichier Markdown à écrire",
+    )
+    args = parser.parse_args(argv)
+    junit_path: Path = args.junit
+    out_path: Path = args.out
+
+    if not junit_path.is_file():
+        # Pas de rapport = pas de matrice. Écrire un tableau « tout NOT_RUN » serait une affirmation
+        # sans source ; mieux vaut échouer et laisser l'opérateur lancer les tests.
+        print(f"rapport JUnit introuvable : {junit_path}", file=sys.stderr)
+        return 2
+    try:
+        cases, totals = parse_junit(junit_path)
+    except ElementTree.ParseError as exc:
+        print(f"rapport JUnit illisible ({junit_path}) : {exc}", file=sys.stderr)
+        return 2
+    if not cases:
+        print(f"aucun cas de test dans {junit_path}", file=sys.stderr)
+        return 2
+
+    document = build_document(junit_path, cases, totals)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(document, encoding="utf-8")
+
+    index = index_by_requirement(cases)
+    covered = sum(1 for rid in CASES if index.get(rid))
+    print(
+        f"{out_path} écrit — {totals.collected} cas lus, "
+        f"{covered}/{len(CASES)} identifiants adossés à au moins un test."
+    )
     return 0
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("usage : test_matrix_status.py <junit.xml>", file=sys.stderr)
-        raise SystemExit(2)
-    raise SystemExit(main(sys.argv[1]))
+    raise SystemExit(main())

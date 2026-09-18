@@ -136,8 +136,19 @@ class DecisionLoop:
             if snapshot.cutoff_at != cutoff_at:
                 raise CausalityError("snapshot.cutoff_at différent du cutoff demandé")
             for fv in snapshot.features.values():
-                if fv.available_at > snapshot.cutoff_at:
-                    raise CausalityError("feature disponible après le cutoff", instrument=fv.instrument)
+                # Le champ qui porte la causalité est `cutoff_at` : c'est la borne des données
+                # UTILISÉES. `available_at`, lui, est l'instant où le vecteur est devenu disponible,
+                # donc nécessairement postérieur ou égal au cutoff (le contrat l'impose déjà).
+                # Refuser `available_at > cutoff_at` forçait l'égalité stricte et aurait rejeté tout
+                # vecteur dont le calcul a pris le moindre instant — c'est-à-dire tous, dès qu'un
+                # fournisseur horodate réellement sa production.
+                if fv.cutoff_at != snapshot.cutoff_at:
+                    raise CausalityError(
+                        "vecteur de features calculé sur un autre cutoff que le snapshot",
+                        instrument=fv.instrument,
+                        cutoff_vecteur=fv.cutoff_at.isoformat(),
+                        cutoff_snapshot=snapshot.cutoff_at.isoformat(),
+                    )
             rec.snapshot_id = snapshot.snapshot_id
             rec.universe_version = snapshot.universe_version
             rec.equity_version = snapshot.equity_version
@@ -157,9 +168,17 @@ class DecisionLoop:
                 rec.rejected_alternatives.append({"stage": "predict", "error": str(exc)})
                 return self._finish(rec, "NO_TRADE")
             for f in forecasts:
+                # Une prévision disponible AVANT la borne des données qu'elle utilise est impossible.
+                # Ce contrôle existait mais ne faisait rien (`pass`) : la condition était juste, la
+                # conséquence absente, et un modèle mal horodaté passait donc silencieusement — ce
+                # qui est exactement la fuite temporelle que la causalité point-in-time doit exclure.
                 if f.available_at < snapshot.cutoff_at:
-                    # une prévision « disponible » avant le cutoff serait un artefact : on la date au cutoff
-                    pass
+                    raise CausalityError(
+                        "prévision disponible avant le cutoff de ses données : horodatage impossible",
+                        forecast=f.forecast_id,
+                        available_at=f.available_at.isoformat(),
+                        cutoff_at=snapshot.cutoff_at.isoformat(),
+                    )
                 if f.snapshot_id != snapshot.snapshot_id:
                     raise CausalityError("prévision issue d'un autre snapshot", forecast=f.forecast_id)
             rec.forecasts = [f.model_dump(mode="json") for f in forecasts]

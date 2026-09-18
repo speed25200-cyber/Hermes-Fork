@@ -62,12 +62,37 @@ devenait simplement « Non disponible ». `tests/contract/test_ui_api_contract.p
 désormais **sans navigateur** (l'API publie les clés lues, et `pages.js` cite bien ces noms), pour que
 le garde-fou tienne aussi là où aucun Chromium n'est disponible.
 
+## Défauts trouvés et corrigés en écrivant le runtime et les groupes CLI
+
+| Défaut | Effet observable | Correction |
+| --- | --- | --- |
+| `.gitignore` portait `data/` et `runtime/` sans ancre de racine | `src/okxq/data/` et `src/okxq/runtime/` étaient exclus : seize modules (carnet, normalisation, qualité, archive, replay, univers, collecteur, journalisation, santé, métriques, alertes, ordonnanceur, boucle, démarrage, superviseur) fonctionnaient sur le disque local **sans avoir jamais été versionnés** | motifs ancrés `/data/` et `/runtime/` ; les 16 modules entrent dans l'historique |
+| `decision_loop` contrôlait `available_at <= cutoff_at` sur les vecteurs de features | Le contrat impose déjà `available_at >= cutoff_at` : l'égalité stricte était donc forcée, et tout fournisseur horodatant réellement sa production aurait fait échouer **chaque** décision | le contrôle porte sur `cutoff_at`, qui est le champ qui porte la causalité (borne des données utilisées) |
+| Le contrôle de causalité des prévisions avait la bonne condition et un corps vide (`pass`) | Une prévision datée avant la borne de ses propres données traversait la boucle en silence — exactement la fuite temporelle que la causalité doit exclure | le contrôle refuse la décision (FAILED journalisé avec `CAUSALITY_VIOLATION`) |
+| `require_role` cherchait la piste d'audit sur `app.state.audit`, que rien ne renseignait | Sa branche d'audit était protégée par `if audit is not None` et ne s'exécutait jamais : un **lecteur authentifié** sondant une commande privilégiée était refusé sans laisser de trace, alors qu'un anonyme en laissait une | `app.state.audit` renseigné dans `create_app` |
+| `okxq api routes` ne lisait qu'un niveau de la table de routage | Inventaire de sécurité annonçant 6 routes là où il y en a 31 : pour un inventaire, sous-déclarer est le pire résultat (on croit avoir tout vu) | récursion dans `routes` et `original_router`, plus la liste explicite des routes dont le rôle n'est pas détectable |
+| L'avis « lecture seule » de l'interface citait `HERMES_UI_MODE=full` | Instruction périmée : le droit d'agir vient du rôle porté par la clé, pas d'une variable d'environnement. Un opérateur suivant l'avis n'obtenait rien | texte corrigé en FR/EN/SQ |
+
+Les tests correspondants échouent si l'un de ces correctifs est retiré : vérifié en les rétablissant
+un par un.
+
 ## Défauts connus
 
 - La CLI n'expose que `config`, `doctor`, `paper/shadow/demo/live` (NOT_IMPLEMENTED tant que la
   composition n'est pas livrée) ; les autres groupes apparaissent à la fusion des modules.
 - `daily_spend_usd` et `cache_hit_ratio` ne sont renseignés que si le worker JEV écrit son instantané
   (`OKXQ_JEV_STATUS_PATH`) ; sans worker en marche, ils restent « non disponibles » — jamais zéro.
+- **`page-labo` de Hermes est conservée dans `index.html` mais inerte** : aucune entrée de navigation
+  n'y mène et aucun élément `lb-*` n'est alimenté. Le balisage et son CSS sont laissés en place parce
+  que supprimer une partie de l'interface héritée est une décision de périmètre qui revient à
+  l'opérateur, pas au constructeur. La vue « Recherche » couvre désormais ce besoin.
+- **Collecte de marché : NOT_RUN faute d'accès réseau.** La politique de sortie de l'environnement
+  refuse le CONNECT vers OKX (403, y compris vers des hôtes tiers). La dégradation observée est celle
+  attendue et elle est testée : le processus continue, la santé passe `market_data` en FAULT, et la
+  décision est NO_TRADE avec `DATA_STALE`.
+- **29 identifiants de la matrice restent NOT_RUN** faute de test portant l'identifiant, alors que
+  l'assertion correspondante existe souvent dans le code. `docs/test_matrix.md` les liste sans les
+  masquer : un test non exécuté reste NOT_RUN, pas PASS.
 
 ## Prérequis externes (accès manquants dans cette session)
 

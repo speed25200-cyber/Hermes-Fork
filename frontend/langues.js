@@ -185,9 +185,9 @@ const Langues = (() => {
 
     /* ===== lecture seule ===== */
     "lecture.titre":     { fr: "Lecture seule.", en: "Read-only.", sq: "Vetëm lexim." },
-    "lecture.texte":     { fr: "Cette page montre tout mais ne commande rien. Servi par le réseau, Hermes-Astra se met en lecture seule par défaut — l’adresse d’écoute ne dit rien de qui se connecte. Pour piloter : <code>HERMES_UI_MODE=full</code> dans l’environnement du service.",
-                           en: "This page shows everything but commands nothing. Served over the network, Hermes-Astra defaults to read-only — the listening address says nothing about who is connecting. To take control: <code>HERMES_UI_MODE=full</code> in the service environment.",
-                           sq: "Kjo faqe tregon gjithçka por s’komandon asgjë. E shërbyer nga rrjeti, Hermes-Astra kalon si parazgjedhje në vetëm lexim — adresa e dëgjimit s’thotë asgjë për atë që lidhet. Për të drejtuar: <code>HERMES_UI_MODE=full</code> në mjedisin e shërbimit." },
+    "lecture.texte":     { fr: "Cette page montre tout mais ne commande rien. Le droit d’agir vient du rôle porté par votre clé d’accès, pas de l’adresse d’écoute : un lecteur voit tout et ne peut rien demander. Pour piloter, ouvrez l’interface avec une clé de rôle <code>operator</code>. Même alors, une commande n’est qu’une demande auditée : le runtime l’exécute sous préconditions.",
+                           en: "This page shows everything but commands nothing. The right to act comes from the role carried by your access key, not from the listening address: a reader sees everything and can request nothing. To take control, open the interface with an <code>operator</code> role key. Even then, a command is only an audited request: the runtime executes it under preconditions.",
+                           sq: "Kjo faqe tregon gjithçka por s’komandon asgjë. E drejta e veprimit vjen nga roli i çelësit tuaj të aksesit, jo nga adresa e dëgjimit: lexuesi shikon gjithçka dhe nuk mund të kërkojë asgjë. Për të drejtuar, hapni ndërfaqen me një çelës me rol <code>operator</code>. Edhe atîherë, komanda është vetëm kërkesë e auditueme: runtime-i e ekzekuton nën parakushte." },
 
     /* ===== courbe, santé, journal ===== */
     "courbe.titre":      { fr: "Courbe d’équité", en: "Equity curve", sq: "Kurba e kapitalit" },

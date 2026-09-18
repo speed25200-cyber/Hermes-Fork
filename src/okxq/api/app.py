@@ -143,6 +143,12 @@ def create_app(
         redoc_url=None,
     )
     app.state.ctx = ctx
+    # `require_role` cherche la piste d'audit sur `app.state.audit` pour consigner un refus de rôle.
+    # Sans cette ligne, sa branche d'audit était protégée par `if audit is not None` et ne s'exécutait
+    # jamais : un lecteur authentifié sondant une commande privilégiée était refusé SANS laisser de
+    # trace, alors qu'un anonyme, refusé par le middleware, en laissait une. C'est l'inverse de ce
+    # qu'on veut — un initié authentifié est le cas qui mérite le plus d'être consigné.
+    app.state.audit = ctx.audit
 
     for module in (health, system, account, orders, decisions, risk, research, jev, control):
         app.include_router(module.router)
