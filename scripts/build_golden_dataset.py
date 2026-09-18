@@ -21,7 +21,6 @@ from typing import Any
 
 from okxq.data.archive import write_jsonl_dataset
 from okxq.data.normalizer import Normalizer
-
 from okxq.domain.clocks import SimulatedClock
 from okxq.domain.events import EventEnvelope
 
@@ -127,12 +126,24 @@ class _BookSim:
 def build(out_dir: Path) -> dict[str, Any]:
     rng = random.Random(SEED)
     clock = SimulatedClock(_ms_dt(T0_MS))
-    norm = Normalizer(clock, source="fixture-golden")
+    # Identifiants déterministes : un jeu golden doit être reproductible bit à bit (T70).
+    norm = Normalizer(clock, source="fixture-golden", id_factory=lambda n: f"evt_golden_{n:06d}")
     events: list[EventEnvelope] = []
 
+    # Les messages sont BUFFERISÉS avec leur heure de réception, puis normalisés dans l'ordre
+    # chronologique : deux instruments publient au même instant, et une horloge de réception ne
+    # recule pas. Le tri est stable, donc l'ordre d'insertion départage les heures égales — c'est
+    # exactement la politique de départage documentée (§34).
+    pending: list[tuple[int, dict[str, Any]]] = []
+
     def push(raw: dict[str, Any], ts_ms: int) -> None:
-        clock.set(_ms_dt(ts_ms + LATENCY_MS))
-        events.extend(norm.normalize_ws(raw))
+        pending.append((ts_ms + LATENCY_MS, raw))
+
+    def flush() -> None:
+        for receive_ms, raw in sorted(pending, key=lambda kv: kv[0]):
+            clock.set(_ms_dt(receive_ms))
+            events.extend(norm.normalize_ws(raw))
+        pending.clear()
 
     instruments = json.loads((ROOT / "tests" / "fixtures" / "okx" / "rest_instruments.json").read_text())
     linear = [i for i in instruments["response"]["data"] if i["instId"] in INSTRUMENTS]
@@ -314,6 +325,7 @@ def build(out_dir: Path) -> dict[str, Any]:
                 )
             if second == 120:
                 push(sim.heartbeat(ts + 800), ts + 800)
+    flush()
     return write_jsonl_dataset(
         events,
         out_dir,

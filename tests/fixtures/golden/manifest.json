@@ -1,0 +1,35 @@
+{
+  "dataset": "golden-okx-usdt-swap-synthetic",
+  "event_types": [
+    "book.snapshot",
+    "book.update",
+    "candle.1m",
+    "funding",
+    "index_price",
+    "instrument",
+    "mark_price",
+    "open_interest",
+    "ticker",
+    "trade"
+  ],
+  "files": [
+    "events.jsonl"
+  ],
+  "first_available_at": "2026-09-18T12:00:00+00:00",
+  "first_exchange_ts": "2021-01-29T10:40:00+00:00",
+  "format": "jsonl",
+  "generated_at": "2026-09-18T12:04:00.730000+00:00",
+  "instruments": [
+    "BTC-USDT",
+    "BTC-USDT-SWAP",
+    "ETH-USDT",
+    "ETH-USDT-SWAP"
+  ],
+  "last_available_at": "2026-09-18T12:04:00.730000+00:00",
+  "last_exchange_ts": "2026-09-18T12:04:00.700000+00:00",
+  "notes": "Jeu synthétique déterministe (scripts/build_golden_dataset.py, graine 25200) reproduisant les formes documentées OKX : carnets books séquencés (seqId non consécutifs, un maintien), trades (side taker), bougies 1m cohérentes avec les trades (confirm 0 puis 1), mark/index, tickers (volCcy24h en base), open interest, funding. Aucune statistique de marché réelle.",
+  "quality_level": "synthetic",
+  "rows": 766,
+  "schema_version": 1,
+  "sha256": "49e2b268cf6d9962bd7036221a55b3ed669607fd7d77fee80406830e5a940c77"
+}
