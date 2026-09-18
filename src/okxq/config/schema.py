@@ -241,6 +241,18 @@ class ApiCfg(StrictModel):
     bind_host: str = "127.0.0.1"
     bind_port: int = Field(ge=1, le=65535, default=8899)
     require_authentication: Literal[True] = True
+    #: Accès à l'interface SANS clé. Décision d'exploitation explicite, jamais un défaut.
+    #:
+    #: - ``non`` (défaut) : la porte reste fermée, une clé est exigée ;
+    #: - ``lecture`` : une requête sans clé reçoit le rôle LECTEUR. Le tableau de bord s'ouvre, et
+    #:   les commandes opérateur restent refusées — exactement comme avec une clé de lecteur ;
+    #: - ``total`` : une requête sans clé reçoit le rôle ADMIN. Tout est ouvert, commandes comprises.
+    #:
+    #: Refusé en DEMO et en LIVE par la validation ci-dessous. Le port est joignable depuis Internet,
+    #: et une API de pilotage ouverte sur un compte qui envoie de vrais ordres n'est pas un réglage
+    #: de confort. Ce garde-fou existe pour que ce choix ne suive pas discrètement la plateforme le
+    #: jour où elle passe en argent réel.
+    acces_sans_cle: Literal["non", "lecture", "total"] = "non"
     allow_browser_live_activation: Literal[False] = False
     session_ttl_minutes: PositiveInt = 720
     cors_origins: list[str] = Field(default_factory=list)
@@ -300,6 +312,14 @@ class AppConfig(StrictModel):
             raise ValueError("influence JEV validée exige jev.enabled")
         if self.strategy.allow_unvalidated_model and p.mode in (Mode.DEMO, Mode.LIVE):
             raise ValueError("un modèle non validé ne peut pas piloter DEMO ou LIVE")
+        if self.api.acces_sans_cle != "non" and p.mode in (Mode.DEMO, Mode.LIVE):
+            # Un accès sans clé se décide pour un bac à sable, et se garde rarement en tête le jour
+            # où le même fichier de configuration sert à un compte qui envoie de vrais ordres. Le
+            # refus est ici, dans la validation, et non dans une consigne d'exploitation.
+            raise ValueError(
+                "api.acces_sans_cle est interdit en DEMO et en LIVE : une API de pilotage ouverte "
+                "sur un compte qui envoie des ordres réels n'est pas un réglage de confort"
+            )
         return self
 
     @property

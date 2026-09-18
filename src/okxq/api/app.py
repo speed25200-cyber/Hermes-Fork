@@ -197,6 +197,21 @@ def create_app(
             allow_headers=["content-type", "x-csrf-token"],
         )
 
+    # Accès sans clé : traduit ici, une seule fois, du réglage vers un rôle. Le journal le dit fort,
+    # au démarrage : une porte ouverte doit être une décision visible, pas une ligne de configuration
+    # que personne ne relit.
+    role_sans_cle = {"lecture": Role.READER, "total": Role.ADMIN}.get(cfg.api.acces_sans_cle)
+    if role_sans_cle is not None:
+        _log.warning(
+            "acces_sans_cle",
+            niveau=cfg.api.acces_sans_cle,
+            role_accorde=role_sans_cle.value,
+            mode=cfg.mode.value,
+            avertissement=(
+                "l'interface répond SANS clé ; toute personne qui atteint ce port obtient ce rôle"
+            ),
+        )
+
     # L'authentification est le middleware LE PLUS EXTERNE : elle voit toutes les requêtes.
     app.add_middleware(
         AuthMiddleware,
@@ -204,6 +219,7 @@ def create_app(
         signer=SessionSigner(secret or "no-secret", ttl_minutes=cfg.api.session_ttl_minutes),
         audit=ctx.audit,
         require_authentication=cfg.api.require_authentication,
+        role_sans_cle=role_sans_cle,
     )
 
     @app.exception_handler(OkxqError)

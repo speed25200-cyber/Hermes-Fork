@@ -273,12 +273,16 @@ class AuthMiddleware:
         signer: SessionSigner,
         audit: AuditTrail,
         require_authentication: bool = True,
+        role_sans_cle: Role | None = None,
     ) -> None:
         self.app = app
         self._keys = keys
         self._signer = signer
         self._audit = audit
         self._require = require_authentication
+        #: Rôle accordé à une requête qui ne présente AUCUNE clé. ``None`` : la porte reste fermée.
+        #: C'est le seul endroit où l'anonymat obtient des droits, et il est explicite.
+        self._role_sans_cle = role_sans_cle
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -345,6 +349,13 @@ class AuthMiddleware:
                         )
                         await response(scope, receive, send)
                         return
+
+        if principal is None and self._role_sans_cle is not None:
+            # Accès libre demandé explicitement par l'exploitant. L'anonyme reçoit un RÔLE, et il est
+            # nommé « anonyme » dans l'audit — jamais un acteur inventé qui laisserait croire à une
+            # identité. Le rôle décide ensuite de ce qu'il peut faire : en `lecture`, les commandes
+            # opérateur restent refusées par `require_role`, exactement comme pour une clé lecteur.
+            principal = Principal(role=self._role_sans_cle, actor="anonyme", via="libre")
 
         if principal is None and self._require:
             if request.method not in SAFE_METHODS or path.startswith("/api"):
