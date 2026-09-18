@@ -1,0 +1,45 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#order-book-trading-market-data-ws-order-book-channel",
+  "_verified_at": "2026-09-18",
+  "_note": "Updates continus après ws_books_snapshot.json : prevSeqId == seqId courant. Les seqId ne sont PAS consécutifs de 1 (123456789 → 123456795 → 123456796). Une quantité publiée REMPLACE le niveau ; '0' le supprime. checksum = 0 (déprécié).",
+  "messages": [
+    {
+      "arg": { "channel": "books", "instId": "BTC-USDT-SWAP" },
+      "action": "update",
+      "data": [
+        {
+          "asks": [
+            ["65000.2", "6", "0", "2"],
+            ["65002.3", "0", "0", "0"]
+          ],
+          "bids": [
+            ["64999.9", "11", "0", "3"],
+            ["64998.9", "4", "0", "1"]
+          ],
+          "ts": "1789732800100",
+          "checksum": 0,
+          "prevSeqId": 123456789,
+          "seqId": 123456795
+        }
+      ]
+    },
+    {
+      "arg": { "channel": "books", "instId": "BTC-USDT-SWAP" },
+      "action": "update",
+      "data": [
+        {
+          "asks": [
+            ["65000.1", "0", "0", "0"]
+          ],
+          "bids": [
+            ["65000", "1", "0", "1"]
+          ],
+          "ts": "1789732800200",
+          "checksum": 0,
+          "prevSeqId": 123456795,
+          "seqId": 123456796
+        }
+      ]
+    }
+  ]
+}

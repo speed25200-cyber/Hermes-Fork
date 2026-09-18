@@ -1,0 +1,6 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#public-data-rest-api-get-system-time",
+  "_verified_at": "2026-09-18",
+  "_note": "GET /api/v5/public/time : ts en millisecondes epoch (chaîne). Enveloppe {code, msg, data}.",
+  "response": { "code": "0", "msg": "", "data": [{ "ts": "1789732800000" }] }
+}

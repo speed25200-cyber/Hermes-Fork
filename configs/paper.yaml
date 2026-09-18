@@ -1,0 +1,6 @@
+# PAPER : données de marché publiques réelles, ordres simulés localement, aucun endpoint privé.
+extends: base.yaml
+project:
+  mode: PAPER
+account:
+  scope: paper-local

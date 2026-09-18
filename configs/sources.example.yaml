@@ -1,0 +1,27 @@
+# Sources autorisées pour JEV (§13, §50.1). Seuls ces domaines/protocoles sont acceptés ; toute
+# redirection vers un autre hôte, un réseau privé ou une adresse de métadonnées cloud est bloquée.
+version: 1
+allowed_schemes: [https]
+max_document_bytes: 262144
+max_redirects: 2
+fetch_timeout_seconds: 10
+sources:
+  - id: okx_announcements
+    kind: html_list
+    url: https://www.okx.com/help/section/announcements-latest-announcements
+    language: en
+    date_method: page_metadata
+    poll_interval_seconds: 300
+  - id: okx_status
+    kind: json
+    url: https://www.okx.com/status
+    language: en
+    date_method: declared_field
+    poll_interval_seconds: 300
+  - id: project_rss_example
+    kind: rss
+    url: https://example.org/feed.xml
+    language: en
+    date_method: rss_pubdate
+    poll_interval_seconds: 900
+    enabled: false

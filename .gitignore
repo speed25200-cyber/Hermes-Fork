@@ -1,0 +1,58 @@
+# Secrets — jamais dans Git (principe 9)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+# Fichiers d'environnement PAR SERVICE du déploiement : c'est là que vivent les vraies clés OKX,
+# TypeSafe et le secret opérateur. Le motif est ANCRÉ à la racine, car `infra/env/` contient les
+# MODÈLES versionnés (`*.env.example`) et doit rester suivi — un motif non ancré les exclurait aussi,
+# et c'est exactement l'erreur qui avait fait disparaître `src/okxq/data/` et `src/okxq/runtime/`.
+/env/
+# Vidages de base : une clé se révoque, un historique de compte non.
+/backups/
+*.dump
+*.tar.enc
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+
+# Données et artefacts générés (le manifeste est versionné, pas les partitions)
+#
+# Ces motifs sont ANCRÉS à la racine (barre oblique de tête). Sans elle, `data/` et `runtime/`
+# excluraient TOUT répertoire de ce nom à n'importe quelle profondeur — y compris `src/okxq/data/`
+# et `src/okxq/runtime/`, c'est-à-dire la couche de données et le runtime de la plateforme. Le code
+# aurait alors continué à fonctionner sur le disque local tout en n'étant jamais versionné.
+/data/
+/artifacts/*
+!/artifacts/.gitkeep
+/reports/*
+!/reports/.gitkeep
+/runtime/
+/logs/
+*.parquet
+*.duckdb
+
+# Frontend
+frontend/node_modules/
+frontend/test-results/
+
+# Divers
+.DS_Store
+*.swp
+
+# Worktrees et état local des agents
+.claude/

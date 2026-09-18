@@ -1,0 +1,202 @@
+# Intégration continue (§64, §67). Tout ce qui tourne ici est HERMÉTIQUE : aucun réseau vers un
+# fournisseur, aucune clé, aucun ordre.
+#
+# CE QUE CE WORKFLOW N'A PAS ET NE DOIT JAMAIS AVOIR :
+#   • aucune clé OKX (ni LIVE, ni DEMO) — il n'existe aucun `secrets:` dans ce fichier ;
+#   • aucune clé TypeSafe / JEV ;
+#   • aucun test marqué `connected` : ils exigent réseau et identifiants, et sont explicitement
+#     désélectionnés. Un test non exécuté reste NOT_RUN, jamais PASS — l'étape « inventaire des tests »
+#     l'écrit dans le journal pour que personne ne confonde « désélectionné » et « réussi ».
+# L'étape « aucune clé dans l'environnement » vérifie cette propriété à l'EXÉCUTION plutôt que par
+# relecture du fichier : c'est la seule forme de preuve qui résiste à une modification ultérieure.
+#
+# `permissions: contents: read` : ce workflow lit le dépôt et rien d'autre. Il ne publie pas, ne
+# commente pas, ne déploie pas, et n'active rien. Le déploiement vit dans deploy-vps.yml, déclenché à
+# la main ; LIVE exige en plus un manifeste d'approbation signé vérifié par le code (§71).
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Une seule exécution par référence : une nouvelle poussée annule la précédente au lieu de faire la
+# queue derrière elle.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Interdiction de sortie réseau côté applicatif : les tests et le smoke doivent échouer plutôt que
+  # d'appeler un fournisseur.
+  OKXQ_OFFLINE: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  # uv épinglé comme dans infra/Dockerfile : c'est lui qui applique uv.lock, et une version flottante
+  # pourrait résoudre autre chose que ce qui a été testé.
+  UV_VERSION: "0.8.17"
+  # uv refuse de modifier uv.lock. Une divergence verrou / pyproject.toml fait échouer la CI, au seul
+  # moment où elle est encore bon marché à corriger.
+  UV_FROZEN: "1"
+
+jobs:
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  qualite:
+    name: Qualité — ruff, mypy, sécurité
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aucune clé dans l'environnement
+        # Garde-fou exécuté AVANT tout le reste : si une clé apparaissait un jour dans les secrets du
+        # dépôt et se retrouvait injectée ici, la CI s'arrêterait au lieu de s'en servir.
+        run: |
+          for nom in OKX_API_KEY OKX_API_SECRET OKX_API_PASSPHRASE TYPESAFE_API_KEY \
+                     OPERATOR_AUTH_SECRET OKXQ_LIVE_MANIFEST; do
+            if [ -n "$(printenv "$nom" || true)" ]; then
+              echo "::error::$nom est défini dans l'environnement de CI ; l'intégration continue"
+              echo "::error::n'a besoin d'aucun identifiant (§60). Retirer ce secret du workflow."
+              exit 1
+            fi
+          done
+          echo "aucune clé OKX, TypeSafe ou opérateur dans l'environnement — conforme"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Environnement verrouillé
+        run: uv sync --frozen --all-groups --python 3.12
+
+      - name: Lint — ruff check
+        run: uv run ruff check src tests scripts
+
+      - name: Format — ruff format --check
+        run: uv run ruff format --check src tests scripts
+
+      - name: Types — mypy strict
+        run: uv run mypy
+
+      - name: Contrôles de sécurité
+        # Refuse : secret committé, *.env non-exemple versionné, configuration activant LIVE, et tout
+        # service de compose.yaml recevant des identifiants qui ne lui appartiennent pas (§60).
+        run: uv run python scripts/security_check.py
+
+      - name: Rapport de sécurité au format JSON
+        if: always()
+        run: uv run python scripts/security_check.py --json > securite.json || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-securite
+          path: securite.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  tests:
+    name: Tests hermétiques et parcours hors ligne
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aucune clé dans l'environnement
+        run: |
+          for nom in OKX_API_KEY OKX_API_SECRET OKX_API_PASSPHRASE TYPESAFE_API_KEY; do
+            if [ -n "$(printenv "$nom" || true)" ]; then
+              echo "::error::$nom est défini : aucun test de cette CI ne doit disposer d'une clé."
+              exit 1
+            fi
+          done
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Environnement verrouillé
+        run: uv sync --frozen --all-groups --python 3.12
+
+      - name: Inventaire des tests non exécutés
+        # Honnêteté du rapport (§72) : on écrit COMBIEN de tests sont écartés et pourquoi. Sans cette
+        # ligne, une suite verte laisserait croire que tout a été vérifié.
+        run: |
+          echo "Tests exclus de cette CI, volontairement :"
+          uv run pytest -q -m "connected" --collect-only 2>&1 | tail -2 \
+            | sed 's/^/  connected (réseau + clés, NOT_RUN ici) : /'
+          uv run pytest -q -m "integration" --collect-only 2>&1 | tail -2 \
+            | sed 's/^/  integration (PostgreSQL requis, NOT_RUN ici) : /'
+
+      - name: Tests hermétiques
+        # Le jeu exact du Makefile : ni integration (PostgreSQL), ni connected (réseau et clés).
+        # --strict-markers : un marqueur mal orthographié ne doit pas silencieusement inclure un test
+        # censé être exclu.
+        run: uv run pytest -q -m "not integration and not connected" --strict-markers
+
+      - name: Parcours complet hors ligne
+        # make smoke-offline : 3 régimes × 2 scénarios, reproductibilité, et les constats que le
+        # cahier des charges exige (un aller-retour à plat coûte de l'argent, PnL marqué et PnL après
+        # liquidation publiés séparément).
+        run: make smoke-offline
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapports-hors-ligne
+          path: |
+            reports/
+            coverage.xml
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  interface:
+    name: Tests de l'interface (node:test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Tests de l'interface
+        # L'interface est servie en fichiers statiques : ces tests s'exécutent sans navigateur, sans
+        # réseau et sans dépendance npm. Le smoke navigateur (Playwright) reste hors de cette CI et
+        # rend NOT_RUN quand Chromium est absent — jamais PASS.
+        run: node --test "frontend/tests/*.test.js"
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  resultat:
+    name: Résultat global
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Point d'entrée unique pour la protection de branche : un seul contrôle requis qui ne peut pas
+    # passer au vert si l'un des précédents a échoué, été annulé ou été sauté.
+    needs: [qualite, tests, interface]
+    if: always()
+    steps:
+      - name: Vérifier que tout est vert
+        run: |
+          echo "qualité   : ${{ needs.qualite.result }}"
+          echo "tests     : ${{ needs.tests.result }}"
+          echo "interface : ${{ needs.interface.result }}"
+          for resultat in "${{ needs.qualite.result }}" "${{ needs.tests.result }}" \
+                          "${{ needs.interface.result }}"; do
+            if [ "$resultat" != "success" ]; then
+              echo "::error::CI en échec : un travail n'est pas au vert ($resultat)."
+              exit 1
+            fi
+          done
+          echo "CI complète au vert — aucune clé n'a été utilisée, aucun test connected exécuté."

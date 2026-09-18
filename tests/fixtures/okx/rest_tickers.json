@@ -1,0 +1,47 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#order-book-trading-market-data-get-tickers",
+  "_verified_at": "2026-09-18",
+  "_note": "GET /api/v5/market/tickers?instType=SWAP (même enregistrement que le canal tickers) : vol24h en CONTRATS, volCcy24h en DEVISE DE BASE. Notionnel 24 h en USDT = volCcy24h × last (univers §3). Valeurs illustratives.",
+  "response": {
+    "code": "0",
+    "msg": "",
+    "data": [
+      {
+        "instType": "SWAP",
+        "instId": "BTC-USDT-SWAP",
+        "last": "65000.1",
+        "lastSz": "2",
+        "askPx": "65000.1",
+        "askSz": "12",
+        "bidPx": "64999.9",
+        "bidSz": "10",
+        "open24h": "65500",
+        "high24h": "66000",
+        "low24h": "64000",
+        "volCcy24h": "25000",
+        "vol24h": "2500000",
+        "ts": "1789732800000",
+        "sodUtc0": "65200",
+        "sodUtc8": "65100"
+      },
+      {
+        "instType": "SWAP",
+        "instId": "ETH-USDT-SWAP",
+        "last": "3200",
+        "lastSz": "10",
+        "askPx": "3200.01",
+        "askSz": "100",
+        "bidPx": "3199.99",
+        "bidSz": "80",
+        "open24h": "3250",
+        "high24h": "3300",
+        "low24h": "3150",
+        "volCcy24h": "300000",
+        "vol24h": "3000000",
+        "ts": "1789732800000",
+        "sodUtc0": "3210",
+        "sodUtc8": "3205"
+      }
+    ]
+  }
+}

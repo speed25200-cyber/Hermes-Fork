@@ -1,0 +1,43 @@
+{
+  "_source_url": "https://app.okx.com/docs-v5/en/#public-data-websocket-instruments-channel",
+  "_verified_at": "2026-09-18",
+  "_note": "Canal instruments (souscription par instType) : même enregistrement que GET /api/v5/public/instruments. Pour un SWAP, baseCcy/quoteCcy sont vides ; la base est ctValCcy ; ctVal = valeur d'un contrat en ctValCcy ; ctMult = 1.",
+  "message": {
+    "arg": { "channel": "instruments", "instType": "SWAP" },
+    "data": [
+      {
+        "instType": "SWAP",
+        "instId": "BTC-USDT-SWAP",
+        "uly": "BTC-USDT",
+        "instFamily": "BTC-USDT",
+        "baseCcy": "",
+        "quoteCcy": "",
+        "settleCcy": "USDT",
+        "ctVal": "0.01",
+        "ctMult": "1",
+        "ctValCcy": "BTC",
+        "optType": "",
+        "stk": "",
+        "listTime": "1611916800000",
+        "auctionEndTime": "",
+        "expTime": "",
+        "lever": "100",
+        "tickSz": "0.1",
+        "lotSz": "0.1",
+        "minSz": "0.1",
+        "ctType": "linear",
+        "alias": "",
+        "state": "live",
+        "ruleType": "normal",
+        "maxLmtSz": "100000000",
+        "maxMktSz": "12000",
+        "maxLmtAmt": "20000000",
+        "maxMktAmt": "",
+        "maxTwapSz": "100000000",
+        "maxIcebergSz": "100000000",
+        "maxTriggerSz": "100000000",
+        "maxStopSz": "12000"
+      }
+    ]
+  }
+}
