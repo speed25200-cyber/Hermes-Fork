@@ -16,8 +16,9 @@ Règles de classement (elles sont le cœur de l'honnêteté du document) :
 * `NOT_RUN` — aucun cas ne porte l'identifiant, OU tous les cas qui le portent ont été sautés.
 
 Un test sauté n'est PAS un test qui passe : il n'a rien vérifié. Un identifiant sans test est un trou
-déclaré, jamais masqué. Les tests marqués `integration` (PostgreSQL) et `connected` (réseau + clés) ne
-sont pas dans la sélection hermétique : ils restent donc `NOT_RUN` faute d'accès, comme l'exige §64.
+déclaré, jamais masqué. La phrase qui décrit la sélection exécutée est DÉDUITE du rapport
+(`selection_sentence`) et non écrite en dur : elle devient fausse dès qu'on fournit un accès
+manquant, ce qui est exactement le cas que ce document ne doit pas rater.
 """
 
 from __future__ import annotations
@@ -283,6 +284,34 @@ def format_levels(cases: list[TestCaseResult]) -> str:
     return "/".join(sorted({case.level for case in cases})) if cases else "—"
 
 
+def selection_sentence(cases: list[TestCaseResult]) -> str:
+    """Décrit la sélection RÉELLEMENT exécutée, en la lisant du rapport.
+
+    Cette phrase affirmait en dur que les tests `integration` et `connected` n'étaient pas dans le
+    rapport. C'était vrai le jour où elle a été écrite. Le jour où une base PostgreSQL est fournie,
+    ces tests s'exécutent et la phrase devient fausse — dans le document dont l'honnêteté est
+    précisément la raison d'être. Elle est donc DÉDUITE des cas présents.
+    """
+    niveaux = sorted({case.level for case in cases})
+    phrases = [f"Niveaux présents dans ce rapport : {', '.join(f'`{n}`' for n in niveaux)}."]
+    if "integration" in niveaux:
+        phrases.append(
+            "Les tests `integration` (schéma et migrations sur PostgreSQL) ont été RÉELLEMENT "
+            "exécutés contre un serveur PostgreSQL 16."
+        )
+    else:
+        phrases.append(
+            "Les tests `integration` (PostgreSQL) ne sont pas dans ce rapport : les exigences qui "
+            "en dépendent restent `NOT_RUN` faute de base, jamais `PASS`."
+        )
+    phrases.append(
+        "La suite ne contient AUCUN test `connected` : rien ici n'a été confronté au vrai OKX ni au "
+        "vrai service TypeSafe. Toute exigence qui demande un appel réel reste `NOT_RUN` par "
+        "construction, et un `PASS` sur fixtures ne la remplace pas."
+    )
+    return " ".join(phrases)
+
+
 def build_document(junit_path: Path, cases: list[TestCaseResult], totals: Totals) -> str:
     index = index_by_requirement(cases)
     statuses: dict[str, str] = {}
@@ -309,10 +338,7 @@ def build_document(junit_path: Path, cases: list[TestCaseResult], totals: Totals
         f"{totals.passed} verts, {totals.failed} échecs, {totals.errored} erreurs, "
         f"{totals.skipped} sautés.",
         "",
-        'Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests '
-        "`integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS "
-        "dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais "
-        "`PASS`.",
+        selection_sentence(cases),
         "",
         "Lecture des statuts :",
         "",
@@ -392,7 +418,10 @@ def build_document(junit_path: Path, cases: list[TestCaseResult], totals: Totals
         "fichier, sinon le tableau décrirait une exécution que personne ne peut retrouver.",
         "",
         "```sh",
-        'pytest -q -m "not integration and not connected" --junit-xml=reports/junit.xml -p no:cacheprovider',
+        "# Les tests `integration` exigent une base PostgreSQL désignée ; sans elle ils se sautent, et",
+        "# les exigences correspondantes retombent à NOT_RUN — ce que le document dira alors.",
+        "export OKXQ_TEST_DATABASE_URL=postgresql+psycopg://okxq@127.0.0.1:5432/okxq_test",
+        "pytest -q -p no:randomly --junit-xml=reports/junit.xml -p no:cacheprovider",
         "python scripts/test_matrix_status.py --junit reports/junit.xml --out docs/test_matrix.md",
         "```",
         "",

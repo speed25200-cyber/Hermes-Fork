@@ -8,21 +8,22 @@ Date : 18 septembre 2026. Dépôt : `speed25200-cyber/Hermes-Fork`, branche
 
 ## 1. En une phrase
 
-La plateforme est construite, testée hors ligne et déployable ; elle n'a jamais parlé à OKX ni à
-TypeSafe dans cette session, LIVE reste désactivé par conception, et l'interface graphique de Hermes
-est conservée puis étendue.
+La plateforme est construite, testée hors ligne — schéma et migrations compris, sur un vrai
+PostgreSQL 16 — et déployable ; elle n'a **jamais** parlé à OKX ni à TypeSafe dans cette session,
+LIVE reste désactivé par conception, et l'interface graphique de Hermes est conservée puis étendue.
 
 ## 2. Vérifications réellement exécutées
 
 | Contrôle | Commande | Résultat |
 | --- | --- | --- |
-| Tests hermétiques | `pytest -m "not integration and not connected"` | **507 verts**, 0 échec, 0 sauté |
-| Matrice §64 | `scripts/test_matrix_status.py` | **48 / 70 identifiants PASS**, 22 NOT_RUN, **0 FAIL** |
-| Lint et format | `ruff check` + `ruff format --check` | propres sur 211 fichiers |
+| Suite complète | `pytest -q -p no:randomly` | **825 verts**, 0 échec, **0 sauté** |
+| Schéma et migrations sur PostgreSQL 16 | `pytest tests/integration` avec `OKXQ_TEST_DATABASE_URL` | **8 verts contre un serveur réel** |
+| Matrice §64 | `scripts/test_matrix_status.py` | **70 / 70 identifiants PASS**, 0 NOT_RUN, **0 FAIL** |
+| Lint et format | `ruff check --no-cache` + `ruff format --check` | propres sur 230 fichiers |
 | Types | `mypy` (strict, `src/okxq`) | propre sur 156 modules |
 | Interface (navigateur) | `pytest tests/e2e/test_ui_smoke.py -m e2e` | **1 vert** dans Chromium, 0 erreur JavaScript |
 | Interface (dictionnaire, contrats) | `node --test "frontend/tests/*.test.js"` | 8 verts |
-| Contrat interface ↔ API | `pytest tests/contract -m contract` | 11 verts, sans navigateur |
+| Contrat interface ↔ API et contrats fournisseurs | `pytest tests/contract -m contract` | 39 verts, sans navigateur ni réseau |
 | Commandes de `compose.yaml` | `pytest tests/unit/test_compose_commands.py` | analysées par la vraie CLI |
 | Parcours complet hors ligne | `make smoke-offline` | 21 contrôles, 4 régimes × 2 scénarios, reproductibilité bit à bit |
 | Sécurité du dépôt | `scripts/security_check.py` | aucune anomalie sur les fichiers indexés |
@@ -39,14 +40,25 @@ Un test non exécuté reste **NOT_RUN**. Il ne devient pas vert parce que le res
 | Connecteur privé OKX (DEMO et LIVE) | NOT_RUN | aucune clé OKX dans cette session |
 | Appel réel au composant sémantique JEV | NOT_RUN | aucune clé TypeSafe dans cette session |
 | Collecte de marché publique | NOT_RUN | la politique réseau de l'environnement refuse le CONNECT vers OKX (403, y compris vers des hôtes tiers) |
-| Schéma sur PostgreSQL | NOT_RUN | aucun serveur PostgreSQL disponible ; les 8 tests `integration` sautent proprement |
+| Schéma sur PostgreSQL | **EXÉCUTÉ** | un serveur PostgreSQL 16 a été lancé localement ; les 8 tests `integration` passent réellement (TIMESTAMPTZ et JSONB partout, précisions NUMERIC, clés séquentielles, unicité durable du `client_order_id`, CHECK de positivité, migration réversible puis rejouable) |
 | Construction de l'image Docker | NOT_RUN | le démon Docker ne tourne pas ; seul le client a validé `compose.yaml` |
 | Recherche sur historique réel | NOT_RUN | aucun historique de marché réel ; seules des données synthétiques ont servi |
 
-Les 22 identifiants encore NOT_RUN de la matrice (T23–T26, T36, T37, T40–T43, T45–T48, T50, T51,
-T57, T59, T61, T63, T67, T68) sont listés sans être masqués dans `docs/test_matrix.md`. Pour
-plusieurs d'entre eux l'assertion existe dans le code sans qu'un test porte l'identifiant ; pour les
-autres, l'accès manquant est la cause.
+Les 70 identifiants de la matrice sont désormais adossés à au moins un test exécuté. **Cela ne
+signifie pas que la plateforme est validée.** Un `PASS` dit « ce comportement est vérifié sur
+fixtures hors ligne » ; la suite ne contient **aucun** test `connected`, et `docs/test_matrix.md`
+le déclare en tête de document plutôt que de laisser lire « 70/70 » comme un feu vert.
+
+Deux identifiants méritent d'être nommés, parce qu'ils portent sur de l'argent réel :
+
+- **T63** (« un échec DEMO ne bascule jamais vers LIVE ») est couvert par
+  `tests/unit/test_demo_never_falls_back_to_live.py`, qui fait échouer l'échange de cinq façons
+  différentes et vérifie après chacune que l'en-tête `x-simulated-trading: 1` est toujours là, que
+  le domaine visé reste celui du profil, et que `demo` n'est pas un drapeau modifiable. L'assertion
+  est écrite **en toutes lettres** et non reprise de la constante du code : une première version
+  comparait le code à lui-même et survivait à une mutation qui aurait envoyé de vrais ordres.
+- **T64** (« LIVE sans approbations complètes ») refuse avant toute connexion privée. Il n'existe
+  aucune option de contournement, et aucune commande `--force`.
 
 ## 3bis. Un point de visibilité à trancher
 
@@ -105,23 +117,57 @@ Le contrat avec l'API est verrouillé des deux côtés par `tests/contract/test_
 ## 7. Défauts trouvés et corrigés pendant la construction
 
 Le détail, avec l'effet observable et la correction, est dans `BUILD_STATUS.md`. Les plus
-significatifs :
+significatifs, en commençant par les plus graves :
 
-1. Une exclusion Git non ancrée (`data/`, `runtime/`) masquait **seize modules** de la couche de
+1. **La protection automatique ne l'était pas.** Rien dans le runtime n'appelait
+   `kill_switch.observe()`. Le kill switch était seulement *lu* (`rt.kill_switch.level`) et jamais
+   alimenté : la frontière de jour UTC n'était jamais franchie, la perte journalière jamais
+   calculée, le sommet d'équité jamais mis à jour, et **aucun déclencheur ne pouvait se produire**.
+   La principale protection de la plateforme ne s'activait que sur commande humaine. Elle est
+   maintenant évaluée à chaque frontière, **avant** la décision — constater le halt après aurait
+   laissé passer exactement une décision de trop.
+
+2. **Le compte papier n'avait pas d'argent au grand livre.** `VirtualExchange` recevait bien
+   `initial_cash`, mais le grand livre — seule source d'equity du système — démarrait à zéro. Donc
+   `day_start_equity = 0`, donc `daily_loss_fraction` rendait `None`, et le Risk Engine **saute** le
+   contrôle dont la mesure est absente : `if ctx.daily_loss_fraction is not None and ...`. La limite
+   de perte journalière était inatteignable en PAPER, c'est-à-dire dans le seul mode que la
+   plateforme est autorisée à faire tourner. Deux autres mesures tombaient avec elle (sommet
+   d'équité, valeur de part). Ces trois défauts se masquaient l'un l'autre : chacun rendait `None`,
+   et `None` ne ressemble pas à une panne — il ressemble à « pas encore mesuré ».
+
+3. **Un dépôt effaçait la perte du jour.** L'equity remontait au-dessus de son point de départ,
+   donc la perte journalière retombait à zéro : il suffisait d'un virement pour faire disparaître
+   une limite atteinte et rendre une reprise possible le jour même. La perte du jour est désormais
+   un plafond monotone à l'intérieur du jour UTC (T45).
+
+4. **Les réponses JEV d'un actif servaient de features à un autre.** Sur un document
+   multi-actifs, le rapprochement point-in-time acceptait toute évaluation dont l'actif figurait
+   dans la cartographie du document — donc l'évaluation de BTC était servie comme feature d'ETH, et
+   réciproquement. Or `evaluate_all` fait un appel *par actif* précisément parce que les réponses
+   diffèrent d'un actif à l'autre pour le même texte.
+
+5. Une exclusion Git non ancrée (`data/`, `runtime/`) masquait **seize modules** de la couche de
    données et du runtime : ils fonctionnaient sur le disque local sans avoir jamais été versionnés.
-2. Deux contrôles de causalité point-in-time étaient inopérants — l'un testait le mauvais champ,
+
+6. Deux contrôles de causalité point-in-time étaient inopérants — l'un testait le mauvais champ,
    l'autre avait un corps vide (`pass`).
-3. Le relevé de migration VPS écrivait `0 position ouverte` quand il n'avait **pas pu lire** l'état,
+
+7. Le relevé de migration VPS écrivait `0 position ouverte` quand il n'avait **pas pu lire** l'état,
    juste avant un effacement irréversible. Il distingue désormais un nombre d'un état `inconnu`, et
    le workflow refuse sur un inconnu.
-4. Un refus de rôle n'était pas audité faute de piste d'audit attachée à l'application : un lecteur
+
+8. Un refus de rôle n'était pas audité faute de piste d'audit attachée à l'application : un lecteur
    authentifié sondant une commande privilégiée ne laissait aucune trace, là où un anonyme en
    laissait une.
-5. Le journal comptable écrivait ses lignes avant leur transaction parente, et toutes les écritures
+
+9. Le journal comptable écrivait ses lignes avant leur transaction parente, et toutes les écritures
    échouaient en silence.
-6. Une réservation de profondeur était libérée trop tôt, permettant à deux ordres de consommer la
+
+10. Une réservation de profondeur était libérée trop tôt, permettant à deux ordres de consommer la
    même liquidité affichée.
-7. Le service de migration de `compose.yaml` portait `okxq db upgrade head`. `head` est une option,
+
+11. Le service de migration de `compose.yaml` portait `okxq db upgrade head`. `head` est une option,
    pas un positionnel : la CLI rejetait la commande, donc la migration échouait à chaque démarrage.
    Comme les cinq rôles écrivains attendent sa terminaison réussie, **aucun ne démarrait jamais** —
    seule l'API montait, donnant une console vivante devant un système mort. Une erreur d'une ligne,
@@ -129,18 +175,33 @@ significatifs :
    d'arguments de la vraie CLI ; deux versions antérieures de ce test étaient elles-mêmes vacuoles
    (l'aide court-circuite l'analyse ; Typer embarque sa propre copie de Click, ce qui rendait les
    tests de type toujours faux) et le commentaire du test le documente.
-8bis. Le contrôle local de lint rendait un verdict PÉRIMÉ. La CI refusait deux fichiers que
-   `ruff check` déclarait propres, avec la même version et la même commande : c'était le cache de
-   ruff. J'avais rapporté « ruff propre » sur la foi d'un résultat mis en cache. `make lint` passe
-   désormais `--no-cache` et `make typecheck` `--no-incremental` : un garde-fou qui affirme le
-   contraire de la vérité est pire que pas de garde-fou.
-8. Le chemin de prix des labels était échantillonné sur l'horodatage brut du premier événement,
+
+12. Le chemin de prix des labels était échantillonné sur l'horodatage brut du premier événement,
    décalé de la latence d'ingestion, alors que les décisions sont alignées sur la minute. Aucun point
    ne tombait dans la fenêtre d'entrée et **100 % des labels sortaient NO_ENTRY** : le jeu
    d'entraînement était vide sans que rien ne le signale, ce qui est plus dangereux qu'une erreur —
    l'entraînement « réussit » et le modèle n'a rien appris.
 
+13. Le contrôle local de lint rendait un verdict PÉRIMÉ. La CI refusait deux fichiers que
+   `ruff check` déclarait propres, avec la même version et la même commande : c'était le cache de
+   ruff. J'avais rapporté « ruff propre » sur la foi d'un résultat mis en cache. `make lint` passe
+   désormais `--no-cache` et `make typecheck` `--no-incremental` : un garde-fou qui affirme le
+   contraire de la vérité est pire que pas de garde-fou.
+
+14. Trois documents de contrat fournisseur référencés par `docs/api_contracts.md` et par la matrice
+   des exigences (§46) **n'existaient pas**. Un contrat manquant se remarque ; un contrat périmé,
+   non — il garde l'autorité d'un document tout en décrivant un autre système. Les trois sont
+   désormais *générés* depuis le code et le manifeste de capacités, et un test échoue si l'un dérive
+   de sa source.
+
 Chaque correctif a été vérifié en le retirant : les tests correspondants échouent alors.
+
+**Deux de mes propres tests étaient creux** et je les ai trouvés en les mutant, pas en les relisant.
+L'un comparait l'en-tête `x-simulated-trading` à la constante du code : renommer la constante en
+`x-simulated-trading-DISABLED` laissait le test vert, alors que de vrais ordres seraient partis.
+L'autre comparait un domaine de région à lui-même. Les deux sont réécrits avec la valeur attendue
+**en toutes lettres**, et `tests/unit/test_no_hollow_tests.py` interdit désormais ce motif. Un test
+qui compare le code à lui-même est pire qu'un test absent : il rassure.
 
 ## 8. Migration VPS — prête, non déclenchée
 
@@ -151,16 +212,48 @@ Le workflow `deploy-vps.yml` est dispatchable et porte trois gardes :
 3. il refuse aussi s'il n'a **pas pu déterminer** l'état des positions, sauf
    `positions_inconnues=accepter`.
 
-**Elle n'a pas été déclenchée.** Deux raisons, toutes deux à trancher par l'opérateur :
+**Elle n'a pas été déclenchée, et elle ne peut pas l'être depuis ici** : la politique de sortie
+réseau de cette session refuse toute connexion vers la machine. Le déclenchement passe donc par
+GitHub Actions, depuis le dépôt `Hermes` où vivent les secrets.
 
-- le secret `VPS_PASSWORD` vit dans les secrets Actions du dépôt `Hermes` et n'est pas accessible
-  depuis cette session ;
-- l'effacement est irréversible et je ne peux vérifier d'ici ni l'état de l'ancien moteur ni la
-  présence de positions réelles sur le compte OKX. Lancer un effacement dans ces conditions serait
-  exactement ce que la troisième garde existe pour empêcher.
+### Marche à suivre
 
-Marche à suivre : vérifier sur OKX qu'aucune position n'est ouverte, puis dispatcher le workflow avec
-`migrer=true` et `confirmer=EFFACER`. Le profil par défaut est `paper`.
+1. **Enregistrer deux secrets de dépôt** dans `speed25200-cyber/Hermes`
+   (*Settings → Secrets and variables → Actions*) :
+   - `VPS_PASSWORD` — le mot de passe root de la machine ;
+   - `TYPESAFE_API_KEY` — la clé JEV.
+
+   Ils ne doivent apparaître **ni dans le code, ni dans une entrée `workflow_dispatch`** : une entrée
+   de dispatch reste affichée dans la page du run et dans ses métadonnées, donc l'y coller
+   reviendrait à la publier. Le workflow les fait voyager par l'entrée standard, jamais par la ligne
+   de commande — les arguments d'un processus sont lisibles par tout utilisateur de la machine et
+   finissent dans l'historique du shell distant.
+
+2. **Dispatcher `migrer-vers-okxq.yml` avec `migrer=false`.** Sur une machine neuve il n'y a rien à
+   effacer : n'employez `migrer=true` / `confirmer=EFFACER` que sur un serveur portant réellement
+   l'ancien Hermes, et après avoir vérifié **directement sur OKX** qu'aucune position n'est ouverte.
+   Un moteur arrêté ne ferme aucune position ; elles restent ouvertes chez OKX, sans surveillance.
+
+3. **Vérifier après coup** : l'interface répond sur le port 8899, et une réponse `403` sur `/` sans
+   clé est le **bon** comportement. `/health/ready` peut renvoyer `503` au premier démarrage, le
+   temps que la réconciliation et les données soient prêtes.
+
+### Sur les identifiants transmis en conversation
+
+Le mot de passe root de la machine et la clé TypeSafe m'ont été communiqués dans le fil de
+discussion. Je ne les ai écrits nulle part — ni dans un fichier, ni dans un commit, ni dans un
+journal — et `scripts/security_check.py` surveille désormais les quatre noms qui les porteraient
+(`VPS_PASSWORD`, `ROOT_PASSWORD`, `SSH_PASSWORD`, `SSHPASS`).
+
+Cela dit : **un secret qui a transité par une conversation doit être considéré comme exposé.** La
+recommandation, dans l'ordre :
+
+1. changer le mot de passe root de la machine, puis n'y accéder que par clé SSH ;
+2. faire tourner la clé TypeSafe depuis la console du fournisseur une fois la plateforme installée ;
+3. n'enregistrer les nouvelles valeurs que dans les secrets Actions du dépôt.
+
+Ce n'est pas une formalité : le mot de passe de la machine est le secret le **plus puissant** du
+déploiement, puisqu'il donne le serveur entier, et donc tous les secrets qu'il porte.
 
 ## 9. Passage en argent réel — non autorisé
 
