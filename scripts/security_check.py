@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """``make security-check`` : contrôles de sécurité bloquants sur le dépôt (§60, principes 8 à 10).
 
-Ce script REFUSE (code de sortie 1) quatre familles de régressions, choisies parce qu'elles sont
+Ce script REFUSE (code de sortie 1) cinq familles de régressions, choisies parce qu'elles sont
 silencieuses : rien ne casse, les tests passent, et le dommage n'apparaît qu'après la publication.
 
 1. ``secret_committe``    — une valeur ressemblant à un identifiant réel affectée à un nom de variable
@@ -10,10 +10,13 @@ silencieuses : rien ne casse, les tests passent, et le dommage n'apparaît qu'ap
                             jeton reconnaissable à sa forme (bloc de clé privée, style ``sk-``, JWT).
 2. ``env_suivi_par_git``  — un ``*.env`` non ``*.example`` suivi par git, ou n'importe quel fichier de
                             ``env/`` (emplacement des secrets par service) qui ne soit pas un modèle.
-3. ``live_active``        — une configuration activant LIVE. LIVE est désactivé par défaut et n'a aucun
+3. ``sauvegarde_versionnee`` — une sauvegarde de base publiable (``backups/``, ``*.dump``,
+                            ``okxq-<horodatage>.tar.enc``). Elle contient tout le journal financier ;
+                            une clé se révoque, un historique de compte publié ne se reprend pas.
+4. ``live_active``        — une configuration activant LIVE. LIVE est désactivé par défaut et n'a aucun
                             contournement : son activation exige un manifeste d'approbation signé
                             vérifié par le code (§71), jamais un drapeau dans un fichier.
-4. ``separation_secrets`` — un service de ``compose.yaml`` recevant des identifiants qui ne lui
+5. ``separation_secrets`` — un service de ``compose.yaml`` recevant des identifiants qui ne lui
                             appartiennent pas : les clés OKX n'existent que dans ``gateway``, la clé
                             TypeSafe que dans ``jev-worker``, la clé opérateur que dans ``api``.
 
@@ -158,7 +161,9 @@ SKIP_DIRS: frozenset[str] = frozenset(
         ".pytest_cache",
         ".hypothesis",
         "htmlcov",
-        "backups",
+        # « backups » n'est volontairement PAS ignoré : c'est le répertoire que
+        # check_backup_artifacts doit justement voir. Les archives y sont écartées à la LECTURE
+        # (suffixe binaire, taille), pas à l'inventaire.
         "data",
         "logs",
         "runtime",
@@ -195,6 +200,10 @@ BINARY_SUFFIXES: frozenset[str] = frozenset(
         ".enc",
     }
 )
+
+# ── Formes de sauvegarde produites par infra/backup.sh, ou par un pg_dump fait à la main.
+BACKUP_SUFFIXES: tuple[str, ...] = (".dump", ".sql", ".sql.gz", ".pgdump", ".bak")
+BACKUP_NAME = re.compile(r"^okxq-\d{8}T\d{6}Z\.tar(\.enc|\.gz)?$")
 
 MAX_FILE_BYTES = 4_000_000
 EXAMPLE_SUFFIXES: tuple[str, ...] = (".example", ".sample", ".template", ".dist", ".j2")
@@ -391,6 +400,34 @@ def check_env_files(inventory: Inventory) -> list[Finding]:
                 line=0,
                 detail=f"fichier d'environnement {origin} : seuls les modèles (*.env.example) sont "
                 "versionnés. Le retirer de l'index et révoquer ce qu'il contenait.",
+            )
+        )
+    return findings
+
+
+def check_backup_artifacts(inventory: Inventory) -> list[Finding]:
+    """Refuse la publication d'une sauvegarde de base.
+
+    Une sauvegarde contient TOUT : ordres, fills, comptabilité, équité, événements de risque. La
+    publier est pire que publier un fichier d'environnement — une clé se révoque, un historique de
+    compte ne se dé-publie pas. Ce contrôle existe parce que ``.gitignore`` couvre ``.env*`` mais pas
+    ``backups/`` : rien d'autre n'empêcherait un ``git add .`` juste après infra/backup.sh.
+    """
+    findings: list[Finding] = []
+    origin = "suivi par git" if inventory.from_git else "présent dans l'arborescence"
+    for relative in inventory.files:
+        in_backup_dir = bool(relative.parts) and relative.parts[0] in ("backups", "backup")
+        looks_like_dump = relative.name.endswith(BACKUP_SUFFIXES) or BACKUP_NAME.match(relative.name)
+        if not (in_backup_dir or looks_like_dump):
+            continue
+        findings.append(
+            Finding(
+                check="sauvegarde_versionnee",
+                path=str(relative),
+                line=0,
+                detail=f"sauvegarde de base {origin} : elle contient l'intégralité du journal "
+                "financier. Une clé se révoque, un historique de compte publié ne se reprend pas. "
+                "La sortir du dépôt et ajouter « backups/ » à .gitignore.",
             )
         )
     return findings
@@ -644,6 +681,7 @@ def run_all_checks(root: Path) -> tuple[list[Finding], Inventory]:
     findings.extend(check_coverage(inventory))
     findings.extend(check_committed_secrets(inventory))
     findings.extend(check_env_files(inventory))
+    findings.extend(check_backup_artifacts(inventory))
     findings.extend(check_live_disabled(inventory))
     findings.extend(check_compose_separation(root))
     return findings, inventory
@@ -654,7 +692,10 @@ def _report(findings: Sequence[Finding], inventory: Inventory) -> None:
     origin = "index git" if inventory.from_git else "arborescence (git indisponible)"
     print("=== contrôles de sécurité (§60) ===")
     print(f"  inventaire : {len(inventory.files)} fichiers depuis l'{origin}, dont {yaml_count} YAML")
-    print("  contrôles  : couverture, secret_committe, env_suivi_par_git, live_active, separation_secrets")
+    print(
+        "  contrôles  : couverture, secret_committe, env_suivi_par_git, sauvegarde_versionnee, "
+        "live_active, separation_secrets"
+    )
     if not findings:
         print("  résultat   : AUCUNE ANOMALIE")
         return

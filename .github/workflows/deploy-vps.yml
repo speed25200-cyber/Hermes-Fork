@@ -28,7 +28,11 @@ on:
         required: false
         default: ""
       positions_ouvertes:
-        description: "refuser (défaut) ou accepter : migrer même si l'ancien moteur a des positions ouvertes"
+        description: "refuser (défaut) ou accepter : migrer même si l'ancien moteur a des positions ouvertes CONNUES"
+        required: false
+        default: "refuser"
+      positions_inconnues:
+        description: "refuser (défaut) ou accepter : migrer alors que l'état des positions n'a PAS pu être lu"
         required: false
         default: "refuser"
       jeton:
@@ -88,12 +92,31 @@ jobs:
         run: |
           OUT=$(sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" bash -s < deploy/preflight.sh 2>&1) || true
           echo "$OUT"
-          N=$(echo "$OUT" | grep -o 'PREFLIGHT_POSITIONS=[0-9]*' | tail -1 | cut -d= -f2)
-          N=${N:-0}
+          # Le relevé distingue un NOMBRE d'un état `inconnu`. Il n'y a pas de valeur par défaut ici :
+          # un marqueur absent (échec SSH, script interrompu) est un état inconnu, pas zéro position.
+          # Écrire `N=${N:-0}` transformait « je n'ai pas pu savoir » en « il n'y a rien », juste
+          # avant un effacement irréversible — sur la machine même qui supervisait ces positions.
+          N=$(echo "$OUT" | grep -o 'PREFLIGHT_POSITIONS=[A-Za-z0-9]*' | tail -1 | cut -d= -f2)
+          RAISON=$(echo "$OUT" | grep -o 'PREFLIGHT_RAISON=.*' | tail -1 | cut -d= -f2-)
+          if [ -z "$N" ]; then
+            N="inconnu"
+            RAISON="relevé préalable sans marqueur : script interrompu ou SSH en échec"
+          fi
+          echo "positions=$N raison=$RAISON"
           ACC=$(jq -r '.inputs.positions_ouvertes // "refuser"' "$GITHUB_EVENT_PATH")
-          if [ "$N" != "0" ] && [ "$ACC" != "accepter" ]; then
-            echo "::error::$N position(s) ouverte(s) sur l'ancien moteur : migration refusée. Fermez-les, ou relancez avec positions_ouvertes=accepter (les positions resteraient ouvertes sur OKX sans supervision par l'ancien moteur)."
-            exit 1
+          ACC_INC=$(jq -r '.inputs.positions_inconnues // "refuser"' "$GITHUB_EVENT_PATH")
+          if [ "$N" = "inconnu" ]; then
+            if [ "$ACC_INC" != "accepter" ]; then
+              echo "::error::état des positions NON DÉTERMINÉ ($RAISON) : migration refusée. Un moteur arrêté ne ferme aucune position — vérifiez directement sur OKX, fermez ce qui doit l'être, puis relancez. Pour passer outre en connaissance de cause : positions_inconnues=accepter."
+              exit 1
+            fi
+            echo "::warning::migration poursuivie alors que l'état des positions est inconnu ($RAISON) — décision explicite de l'opérateur."
+          elif [ "$N" != "0" ]; then
+            if [ "$ACC" != "accepter" ]; then
+              echo "::error::$N position(s) ouverte(s) sur l'ancien moteur : migration refusée. Fermez-les, ou relancez avec positions_ouvertes=accepter (les positions resteraient ouvertes sur OKX sans supervision par l'ancien moteur)."
+              exit 1
+            fi
+            echo "::warning::migration poursuivie avec $N position(s) ouverte(s) — décision explicite de l'opérateur."
           fi
 
       - name: 2. Reprendre l'ancienne clé de console (jamais imprimée)

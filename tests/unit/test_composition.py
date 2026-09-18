@@ -281,3 +281,33 @@ def test_a_collection_failure_degrades_to_no_trade_without_stopping_the_process(
     assert report["collector"]["instruments"] == 0
     # La santé dit FAULT sur les données de marché : l'absence est visible, pas maquillée.
     assert report["health"]["modules"]["market_data"]["status"] == "FAULT"
+
+
+def test_T44_a_restart_never_resets_a_persisted_halt_or_daily_loss(cfg, factory) -> None:
+    """T44 : pertes du jour et niveau de halt survivent au redémarrage.
+
+    C'est la garantie la plus importante du Risk Engine : un processus qu'on relance ne doit pas
+    repartir avec une ardoise vierge, sinon il suffirait de redémarrer pour effacer une limite
+    journalière atteinte — le kill switch deviendrait décoratif.
+    """
+    from okxq.risk.kill_switch import HaltLevel
+
+    premier = build_runtime(cfg, role="all", clock=SimulatedClock(T0), session_factory=factory)
+    premier.kill_switch.request(HaltLevel.HARD_HALT, "perte journalière atteinte pendant le test")
+    assert premier.kill_switch.level is HaltLevel.HARD_HALT
+
+    # Nouveau runtime sur la MÊME base : c'est l'équivalent exact d'un redémarrage de processus.
+    second = build_runtime(cfg, role="all", clock=SimulatedClock(T0), session_factory=factory)
+    assert second.kill_switch.level is HaltLevel.HARD_HALT, "un redémarrage a effacé le halt"
+    assert second.kill_switch.state.halt_reason
+    # Et la séquence de démarrage refuse d'autoriser les entrées tant que le halt tient. On rend la
+    # validation des données satisfaite pour isoler la cause : sinon la séquence s'arrêterait avant,
+    # et le test passerait sans rien dire du halt.
+    second.gateway = ShadowGateway(clock=second.clock)
+    second.market.last_available_at = T0
+    report = asyncio.run(build_startup_sequence(second).run())
+    assert not report.entries_authorized
+    steps = {s["step"]: s for s in report.steps}
+    assert steps["validate_data"]["ok"] is True, "la donnée devait être considérée présente"
+    assert steps["authorize_entries"]["ok"] is False
+    assert "HARD_HALT" in str(steps["authorize_entries"]["detail"])

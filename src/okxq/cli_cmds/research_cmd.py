@@ -117,7 +117,7 @@ def _horizon(plan: ExperimentPlan, override: int | None, notes: list[str] | None
     return usable[0]
 
 
-def _registry_for_plan(plan: ExperimentPlan, cfg: AppConfig) -> FeatureRegistry:
+def _registry_for_plan(plan: ExperimentPlan) -> FeatureRegistry:
     groups = plan.feature_groups
     # L'ablation JEV a besoin des groupes d'événements ; un plan qui ne les cite pas garde son périmètre.
     return default_registry(tuple(groups) if groups else None)
@@ -379,7 +379,7 @@ def prepare(
             dataset_folder=dataset,
             minutes=minutes,
             with_jev=with_jev,
-            feature_registry=_registry_for_plan(plan, cfg),
+            feature_registry=_registry_for_plan(plan),
         )
     except (OkxqError, ValueError) as exc:
         typer.echo(f"préparation impossible : {exc}", err=True)
@@ -421,7 +421,7 @@ def train(
             dataset_folder=dataset,
             minutes=minutes,
             with_jev=False,
-            feature_registry=_registry_for_plan(plan, cfg),
+            feature_registry=_registry_for_plan(plan),
         )
         notes.extend(build_notes)
         horizon = _horizon(plan, horizon_s, notes)
@@ -452,7 +452,8 @@ def train(
             effective_plan, now=now, seed=cfg.research.random_seed, code_commit=code_commit()
         )
         result = walk_forward_train(research_dataset, spec)
-        registry.record_trials(run_id, [t.to_dict() for t in result.trials])
+        # Le budget du plan borne chaque décision de sélection, c'est-à-dire chaque fold.
+        registry.record_trials(run_id, [t.to_dict() for t in result.trials], budget_scope="fold_id")
         pnl = evaluate_oof(result.oof, cutoff_interval_s=research_dataset.cutoff_interval_s)
         schema_hash = _persist_feature_schema(research_dataset, now)
         artifact = artifact_from_result(result)
@@ -661,7 +662,7 @@ def final_test(
             dataset_folder=dataset,
             minutes=minutes,
             with_jev=False,
-            feature_registry=_registry_for_plan(plan, cfg),
+            feature_registry=_registry_for_plan(plan),
         )
         notes.extend(build_notes)
         predictor = RegisteredModelPredictor.from_path(model_artifact)

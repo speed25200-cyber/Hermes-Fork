@@ -514,7 +514,7 @@ def run_ablation(
             registry.record_trials(
                 run_id,
                 [{**t.to_dict(), "variant": variant} for t in result.trials],
-                budget_scope="variant",
+                budget_scope=("variant", "fold_id"),
             )
     independent = False
     if registry is not None and run_id is not None and final_period is not None:

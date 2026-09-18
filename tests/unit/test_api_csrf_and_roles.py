@@ -87,7 +87,7 @@ def _key(role: Role) -> str:
 # --- absence de clé ------------------------------------------------------------------------------------
 
 
-def test_an_anonymous_command_is_refused_and_writes_nothing(app, factory) -> None:
+def test_T65_an_anonymous_command_is_refused_and_writes_nothing(app, factory) -> None:
     response = TestClient(app).post(COMMAND, json=BODY)
     assert response.status_code == 403
     _assert_refused_without_effect(factory)
@@ -96,7 +96,7 @@ def test_an_anonymous_command_is_refused_and_writes_nothing(app, factory) -> Non
 # --- rôle insuffisant ---------------------------------------------------------------------------------
 
 
-def test_a_reader_cannot_request_a_flatten_and_writes_nothing(app, factory) -> None:
+def test_T65_a_reader_cannot_request_a_flatten_and_writes_nothing(app, factory) -> None:
     """Le rôle de lecture est délibérément incapable d'agir : l'interface est en lecture seule.
 
     Un lecteur qui peut demander un flatten rendrait la distinction des rôles décorative.
@@ -108,7 +108,7 @@ def test_a_reader_cannot_request_a_flatten_and_writes_nothing(app, factory) -> N
     _assert_refused_without_effect(factory)
 
 
-def test_an_operator_can_request_a_flatten_and_it_is_only_a_request(app, factory) -> None:
+def test_T65_an_operator_can_request_a_flatten_and_it_is_only_a_request(app, factory) -> None:
     """Contre-épreuve : sans elle, un test de refus passerait aussi sur une API cassée.
 
     La réponse est 202 et non 200 : la demande est ENREGISTRÉE, pas exécutée. Le runtime l'exécute
@@ -127,7 +127,7 @@ def test_an_operator_can_request_a_flatten_and_it_is_only_a_request(app, factory
     assert rows[0].completed_at is None
 
 
-def test_the_same_request_id_is_idempotent(app, factory) -> None:
+def test_T65_the_same_request_id_is_idempotent(app, factory) -> None:
     """Un double-clic ne doit pas produire deux demandes de sortie de position."""
     client = TestClient(app)
     headers = {"Authorization": f"Bearer {_key(Role.OPERATOR)}"}
@@ -152,7 +152,7 @@ def _session_cookies(app) -> tuple[str, str]:
     return session, csrf
 
 
-def test_a_session_without_the_csrf_header_is_refused_and_writes_nothing(app, factory) -> None:
+def test_T65_a_session_without_the_csrf_header_is_refused_and_writes_nothing(app, factory) -> None:
     """Le cœur de la protection : le cookie seul ne suffit jamais pour une action modifiante.
 
     Un site tiers peut faire envoyer les cookies du navigateur ; il ne peut pas lire leur valeur
@@ -168,7 +168,7 @@ def test_a_session_without_the_csrf_header_is_refused_and_writes_nothing(app, fa
     _assert_refused_without_effect(factory)
 
 
-def test_a_session_with_a_wrong_csrf_header_is_refused_and_writes_nothing(app, factory) -> None:
+def test_T65_a_session_with_a_wrong_csrf_header_is_refused_and_writes_nothing(app, factory) -> None:
     session, csrf = _session_cookies(app)
     client = TestClient(app)
     client.cookies.set(COOKIE_SESSION, session)
@@ -178,7 +178,7 @@ def test_a_session_with_a_wrong_csrf_header_is_refused_and_writes_nothing(app, f
     _assert_refused_without_effect(factory)
 
 
-def test_a_session_with_the_matching_csrf_header_is_accepted(app, factory) -> None:
+def test_T65_a_session_with_the_matching_csrf_header_is_accepted(app, factory) -> None:
     """Contre-épreuve de la protection CSRF : l'interface légitime doit continuer à fonctionner."""
     session, csrf = _session_cookies(app)
     client = TestClient(app)
@@ -189,7 +189,7 @@ def test_a_session_with_the_matching_csrf_header_is_accepted(app, factory) -> No
     assert len(_requested(factory)) == 1
 
 
-def test_a_forged_session_cookie_is_refused_and_writes_nothing(app, factory) -> None:
+def test_T65_a_forged_session_cookie_is_refused_and_writes_nothing(app, factory) -> None:
     """Le cookie n'est pas une clé : c'est une session SIGNÉE. Une signature invalide ne passe pas."""
     client = TestClient(app)
     client.cookies.set(COOKIE_SESSION, "operator|2099-01-01T00:00:00Z|jeton|signature-inventee")
@@ -202,7 +202,7 @@ def test_a_forged_session_cookie_is_refused_and_writes_nothing(app, factory) -> 
 # --- aucune commande ne peut activer LIVE ---------------------------------------------------------
 
 
-def test_no_control_command_can_enable_live_or_change_the_mode(app, factory) -> None:
+def test_T65_no_control_command_can_enable_live_or_change_the_mode(app, factory) -> None:
     """Le jeu de commandes est FERMÉ : il n'existe aucun verbe capable d'activer LIVE.
 
     Si un tel verbe apparaissait un jour, ce test échouerait — ce qui est le but.

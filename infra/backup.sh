@@ -135,9 +135,11 @@ echo "  sommaire : $(grep -cv '^;' "$WORK/base.dump.toc" || true) entrées resta
 echo "--- 3. configurations et artefacts ---"
 # Fichiers d'infrastructure et profils validés : ils décrivent CE QUI tournait au moment du vidage.
 # env/ est exclu explicitement (secrets, cf. en-tête).
+# On NE masque PAS stderr : si tar se plaint, on veut lire pourquoi. Une sauvegarde qui échoue en
+# silence est une sauvegarde qu'on croit avoir.
 tar -czf "$WORK/config.tar.gz" -C "$DIR" \
   --exclude='env' --exclude='env/*' --exclude='backups' \
-  configs compose.yaml infra 2>/dev/null || {
+  configs compose.yaml infra || {
     echo "  !! archivage des configurations impossible" >&2; exit 1; }
 echo "  config.tar.gz : configs/, compose.yaml, infra/ (env/ volontairement exclu)"
 

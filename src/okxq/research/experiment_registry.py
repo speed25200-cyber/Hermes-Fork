@@ -290,14 +290,22 @@ class ExperimentRegistry:
             )
 
     def record_trials(
-        self, run_id: str, trials: Sequence[Mapping[str, Any]], *, budget_scope: str | None = None
+        self,
+        run_id: str,
+        trials: Sequence[Mapping[str, Any]],
+        *,
+        budget_scope: str | Sequence[str] | None = None,
     ) -> int:
         """Ajoute des essais au journal. Tous les essais comptent, pas seulement celui qui gagne.
 
-        ``budget_scope`` nomme le champ qui identifie un BRAS d'expérience (``"variant"`` pour l'ablation
-        JEV). Le budget du plan s'applique alors à chaque bras séparément : §40 exige des budgets de
-        recherche COMPARABLES entre variantes, pas un budget global qui laisserait régler la première
-        variante dix fois plus que la dernière. Le total reste journalisé et donc auditable.
+        ``budget_scope`` nomme le ou les champs qui identifient une DÉCISION DE SÉLECTION : ``"fold_id"``
+        pour un walk-forward (chaque fold choisit ses hyperparamètres), ``("variant", "fold_id")`` pour
+        une ablation (chaque variante rechoisit à chaque fold). Le budget du plan s'applique alors à
+        chacune de ces décisions séparément.
+
+        POURQUOI pas un budget global : §40 exige des budgets de recherche COMPARABLES entre variantes.
+        Un budget global laisserait régler la première variante dix fois plus que la dernière, puis
+        présenter l'écart comme un effet causal. Le total reste journalisé, donc auditable.
         """
         self.assert_optimization_allowed(run_id)
         with self._factory() as session:
@@ -309,9 +317,14 @@ class ExperimentRegistry:
             budget = (run.plan.get("budget") or {}).get("max_trials")
             merged = [*run.trials, *[dict(t) for t in trials]]
             if budget is not None:
+                fields = (
+                    ()
+                    if budget_scope is None
+                    else ((budget_scope,) if isinstance(budget_scope, str) else tuple(budget_scope))
+                )
                 counts: dict[str, int] = {}
                 for trial in merged:
-                    key = str(trial.get(budget_scope, "")) if budget_scope else ""
+                    key = "|".join(str(trial.get(f, "")) for f in fields)
                     counts[key] = counts.get(key, 0) + 1
                 over = {k: v for k, v in counts.items() if v > int(budget)}
                 if over:
@@ -319,7 +332,7 @@ class ExperimentRegistry:
                         "budget d'essais dépassé : le plan borne la recherche",
                         run_id=run_id,
                         budget=int(budget),
-                        budget_scope=budget_scope,
+                        budget_scope=list(fields) or None,
                         over_budget=over,
                     )
             run.trials = merged  # réaffectation explicite : SQLAlchemy ne suit pas une mutation en place

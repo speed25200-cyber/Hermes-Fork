@@ -228,6 +228,38 @@ def test_modeles_env_sont_acceptes(depot: Path, nom: str) -> None:
     assert [f.render() for f in findings if f.check == "env_suivi_par_git"] == []
 
 
+# ══ 2 bis. Sauvegardes de base ════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize(
+    "nom",
+    [
+        "backups/okxq-20260918T120000Z.tar.enc",
+        "backups/okxq-20260918T120000Z.tar",
+        "backups/notes.txt",
+        "okxq-20260918T120000Z.tar.enc",
+        "base.dump",
+        "vidage.sql.gz",
+    ],
+)
+def test_sauvegarde_publiable_est_refusee(depot: Path, nom: str) -> None:
+    """Un vidage contient ordres, fills, comptabilité et équité : sa publication est irréversible."""
+    chemin = depot / nom
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_bytes(b"PGDMP-faux\n")
+    findings, _ = sc.run_all_checks(depot)
+    assert any(f.check == "sauvegarde_versionnee" and f.path == nom for f in findings)
+
+
+@pytest.mark.parametrize("nom", ["configs/base.yaml", "docs/reprise.md", "infra/backup.sh"])
+def test_fichiers_ordinaires_ne_sont_pas_pris_pour_des_sauvegardes(depot: Path, nom: str) -> None:
+    chemin = depot / nom
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_text("# rien de sensible\n", encoding="utf-8")
+    findings, _ = sc.run_all_checks(depot)
+    assert [f.render() for f in findings if f.check == "sauvegarde_versionnee"] == []
+
+
 # ══ 3. Activation de LIVE ═════════════════════════════════════════════════════════════════════════
 
 

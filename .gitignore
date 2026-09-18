@@ -5,6 +5,15 @@
 *.pem
 *.key
 secrets/
+# Fichiers d'environnement PAR SERVICE du déploiement : c'est là que vivent les vraies clés OKX,
+# TypeSafe et le secret opérateur. Le motif est ANCRÉ à la racine, car `infra/env/` contient les
+# MODÈLES versionnés (`*.env.example`) et doit rester suivi — un motif non ancré les exclurait aussi,
+# et c'est exactement l'erreur qui avait fait disparaître `src/okxq/data/` et `src/okxq/runtime/`.
+/env/
+# Vidages de base : une clé se révoque, un historique de compte non.
+/backups/
+*.dump
+*.tar.enc
 
 # Python
 __pycache__/

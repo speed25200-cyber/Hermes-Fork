@@ -641,6 +641,28 @@ def assert_oof_is_out_of_fold(oof: pl.DataFrame) -> None:
         )
 
 
+def assert_oof_has_no_duplicate_decision(oof: pl.DataFrame) -> None:
+    """Deux folds ne peuvent pas prédire la même décision : elle serait comptée deux fois dans le PnL.
+
+    Un ``step_s`` inférieur à ``test_s`` produirait des périodes de test qui se recouvrent. Le résultat
+    resterait hors échantillon mais l'exposition et le turnover seraient gonflés — autrement dit un
+    chiffre faux, pas une fuite. On refuse plutôt que d'additionner.
+    """
+    if oof.height == 0:
+        return
+    duplicates = (
+        oof.group_by(["decision_at", "instrument"]).len().filter(pl.col("len") > 1).sort("decision_at")
+    )
+    if duplicates.height:
+        first = duplicates.row(0, named=True)
+        raise ProtocolViolationError(
+            "périodes de test chevauchantes : une même décision est prédite par plusieurs folds",
+            rows=int(duplicates.height),
+            decision_at=str(first["decision_at"]),
+            instrument=str(first["instrument"]),
+        )
+
+
 def _final_fit_indices(matrix: TrainingMatrix, spec: TrainingSpec, folds: Sequence[Fold]) -> np.ndarray:
     """Lignes autorisées pour le modèle publié : strictement avant la période finale gelée, purge incluse."""
     limit = ensure_utc(spec.final_test_start) if spec.final_test_start is not None else None
@@ -694,6 +716,7 @@ def walk_forward_train(
         )
     oof = pl.concat([o.oof for o in outcomes]).sort(["decision_at", "instrument"])
     assert_oof_is_out_of_fold(oof)
+    assert_oof_has_no_duplicate_decision(oof)
     # Modèle publié : on reprend le candidat retenu par le fold le PLUS RÉCENT (celui dont la sélection
     # a été mesurée le plus près du présent), réajusté sur toutes les lignes antérieures au test final.
     last = outcomes[-1]

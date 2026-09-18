@@ -67,10 +67,14 @@ PGPW=$(grep "^POSTGRES_PASSWORD=" "$ENVDIR/postgres.env" | cut -d= -f2-)
 poser postgres.env POSTGRES_USER okxq
 poser postgres.env POSTGRES_DB "okxq_${PROFILE}"
 DBURL="postgresql+psycopg://okxq:${PGPW}@postgres:5432/okxq_${PROFILE}"
-for svc in api collector strategy risk gateway jev-worker; do
+for svc in api collector strategy risk gateway jev-worker migrate; do
   poser "$svc.env" DATABASE_URL "$DBURL"
   poser "$svc.env" OKXQ_MODE "$(echo "$PROFILE" | tr '[:lower:]' '[:upper:]')"
 done
+# `migrate.env` est posé explicitement : sans lui, le service de migration retomberait sur
+# env/collector.env. Cela fonctionnerait, mais un fichier dédié permet d'y mettre plus tard un rôle
+# PostgreSQL aux droits DDL minimaux sans toucher au collecteur (§60). Il ne porte aucun secret de
+# fournisseur : migrer un schéma n'exige aucune clé d'échange.
 poser gateway.env OKX_API_KEY "${OKX_API_KEY_POSE:-}"
 poser gateway.env OKX_API_SECRET "${OKX_API_SECRET_POSE:-}"
 poser gateway.env OKX_API_PASSPHRASE "${OKX_API_PASSPHRASE_POSE:-}"
@@ -86,7 +90,30 @@ docker compose --profile "$PROFILE" build --quiet 2>&1 | tail -3 || docker compo
 echo "=== 5. services (profil $PROFILE) ==="
 docker compose --profile "$PROFILE" up -d --remove-orphans 2>&1 | tail -10
 
-echo "=== 6. vérification ==="
+echo "=== 6. schéma de base ==="
+# La migration est un travail à usage unique dont l'échec doit être VISIBLE. Sans ce contrôle, un
+# schéma non appliqué laisserait les écrivains bloqués (ils attendent la fin de `migrate`) tandis que
+# l'API, qui ne l'attend pas, resterait joignable : l'opérateur verrait une console vivante devant un
+# système mort. C'est exactement le genre de panne qu'on met des heures à diagnostiquer.
+mig_state=$(docker compose --profile "$PROFILE" ps -a --format '{{.Service}} {{.State}} {{.ExitCode}}' 2>/dev/null | awk '$1=="migrate"{print $2" "$3}' | tail -1)
+echo "  migrate : ${mig_state:-état inconnu}"
+case "$mig_state" in
+  "exited 0")
+    echo "  schéma appliqué"
+    ;;
+  "exited "*)
+    echo "  !! la migration a échoué : les rôles écrivains ne démarreront pas"
+    docker compose --profile "$PROFILE" logs --tail=40 migrate
+    exit 1
+    ;;
+  *)
+    # Ni terminé ni en échec : on ne conclut pas. Un état indéterminé n'est pas un succès.
+    echo "  !! état de la migration non déterminé — vérifier avant d'utiliser la plateforme"
+    docker compose --profile "$PROFILE" logs --tail=20 migrate || true
+    ;;
+esac
+
+echo "=== 7. vérification ==="
 code=000
 for _ in $(seq 1 45); do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "http://127.0.0.1:${PORT}/health/live" || echo 000)

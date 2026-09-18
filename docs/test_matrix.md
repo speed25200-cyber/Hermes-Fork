@@ -3,7 +3,7 @@
 <!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute
      correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->
 
-Source : `reports/junit.xml` — 372 cas collectés, 370 verts, 2 échecs, 0 erreurs, 0 sautés.
+Source : `reports/junit.xml` — 493 cas collectés, 493 verts, 0 échecs, 0 erreurs, 0 sautés.
 
 Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests `integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais `PASS`.
 
@@ -31,15 +31,15 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T11 | Quantité de niveau égale à zéro | Niveau supprimé et top-of-book reconstruit | unit | `test_orderbook::test_T11_zero_quantity_removes_level_and_rebuilds_top` | **PASS** | 1 cas vert |
 | T12 | Carnet croisé, quantité négative ou NaN | Données invalides exclues des décisions | unit | `test_orderbook::test_T12_crossed_negative_and_nan_are_invalid` | **PASS** | 1 cas vert |
 | T13 | REST et WS non raccordables | Fusion interdite | unit | `test_orderbook::test_T13_rest_snapshot_cannot_be_spliced_with_ws_increments` | **PASS** | 1 cas vert |
-| T14 | Donnée future ajoutée à l'historique | Décisions antérieures inchangées | unit | `test_point_in_time::test_T14_future_data_does_not_change_earlier_answers` | **PASS** | 1 cas vert |
+| T14 | Donnée future ajoutée à l'historique | Décisions antérieures inchangées | unit | `test_point_in_time::test_T14_future_data_does_not_change_earlier_answers`<br>`test_research_training::test_T14_une_feature_disponible_apres_la_decision_est_refusee` | **PASS** | 2 cas verts |
 | T15 | Événement ancien reçu tard | Indisponible avant sa réception réelle | unit | `test_point_in_time::test_T15_old_event_received_late_is_unavailable_before_its_reception` | **PASS** | 1 cas vert |
 | T16 | Feature intrabougie vs bougie clôturée | Pas de confusion ni de fuite de clôture | unit | `test_normalizer_archive::test_T16_closed_candle_and_intrabar_candle_are_not_confused` | **PASS** | 1 cas vert |
-| T17 | Normalisation ou sélection sur test | Détectée par les assertions de provenance | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T17 | Normalisation ou sélection sur test | Détectée par les assertions de provenance | unit | `test_research_training::test_T17_une_transformation_ajustee_sur_le_test_est_detectee` | **PASS** | 1 cas vert |
 | T18 | Actif délisté/renommé | Univers point-in-time et position encore comptabilisée | unit | `test_point_in_time::test_T18_delisted_asset_leaves_universe_but_stays_accountable` | **PASS** | 1 cas vert |
-| T19 | Labels chevauchants | Purge et disponibilités temporelles correctes | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T20 | Stacking OOF | Aucun entraînement sur la fenêtre prédite | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T21 | Label censuré | Exclusion/masque explicite, pas rendement nul inventé | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T22 | Changement du test final après consultation | Statut indépendant perdu et revalidation requise | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T19 | Labels chevauchants | Purge et disponibilités temporelles correctes | unit | `test_research_training::test_T19_aucune_ligne_dentrainement_ne_connait_la_periode_de_test`<br>`test_research_training::test_T19_les_lignes_qui_chevauchent_le_test_sont_purgees` | **PASS** | 2 cas verts |
+| T20 | Stacking OOF | Aucun entraînement sur la fenêtre prédite | unit | `test_research_stacking::test_T20_un_composant_qui_connait_la_fenetre_predite_est_refuse`<br>`test_research_training::test_T20_les_predictions_oof_precedent_leur_propre_entrainement` | **PASS** | 2 cas verts |
+| T21 | Label censuré | Exclusion/masque explicite, pas rendement nul inventé | unit | `test_research_training::test_T21_les_labels_censures_ne_sont_jamais_remplaces_par_zero` | **PASS** | 1 cas vert |
+| T22 | Changement du test final après consultation | Statut indépendant perdu et revalidation requise | unit | `test_research_registry::test_T22_la_premiere_consultation_du_test_final_le_consomme`<br>`test_research_registry::test_T22_aucune_optimisation_apres_consultation_du_test_final`<br>`test_research_registry::test_T22_une_autre_execution_du_meme_plan_ne_rend_pas_la_periode_independante` | **PASS** | 3 cas verts |
 | T23 | Frais maker/taker et rebate | Signes, devises et montants exacts | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T24 | Prix exécutables + spread déduit à nouveau | Erreur de double comptage bloquée | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T25 | Funding traversé ou non | Flux uniquement aux règlements concernés | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
@@ -61,7 +61,7 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T41 | Solveur timeout/infeasible/NaN | Aucune stratégie de secours non validée | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T42 | Une seule jambe d'un basket est exécutée | Risque transitoire plafonné et réconciliation | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T43 | Ordres opposés/UNKNOWN en attente | Exposition pessimiste prise en compte | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T44 | Risque journalier après redémarrage | Pertes et halt conservés | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T44 | Risque journalier après redémarrage | Pertes et halt conservés | unit | `test_composition::test_T44_a_restart_never_resets_a_persisted_halt_or_daily_loss` | **PASS** | 1 cas vert |
 | T45 | Dépôt/retrait externe | Performance et high-water mark non artificiellement améliorés | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T46 | Deux gateways concurrents | Un seul chemin de signature/envoi effectif | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T47 | Perte du bail/base | Ancien writer incapable d'augmenter le risque | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
@@ -82,26 +82,24 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T62 | Exchange indisponible pendant flatten | État pending et exposition résiduelle visible | unit | `test_virtual_exchange::test_T62_unreachable_exchange_and_residual_exposure_are_visible` | **PASS** | 1 cas vert |
 | T63 | DEMO en échec | Aucun basculement réseau/clés vers LIVE | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T64 | LIVE sans approbations complètes | Refus avant connexion privée de trading | unit | `test_config::test_T64_live_without_manifest_is_refused`<br>`test_config::test_T64_live_manifest_must_be_signed_complete_and_unexpired` | **PASS** | 2 cas verts |
-| T65 | Action UI non autorisée/CSRF | Aucun effet et événement d'audit | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T65 | Action UI non autorisée/CSRF | Aucun effet et événement d'audit | unit | `test_api_csrf_and_roles::test_T65_an_anonymous_command_is_refused_and_writes_nothing`<br>`test_api_csrf_and_roles::test_T65_a_reader_cannot_request_a_flatten_and_writes_nothing`<br>`test_api_csrf_and_roles::test_T65_an_operator_can_request_a_flatten_and_it_is_only_a_request`<br>… (+6) | **PASS** | 9 cas verts |
 | T66 | Secret dans logs/artefacts/image | Test de sécurité échoué et livraison bloquée | unit | `test_logging_secrets::test_T66_injected_secret_never_appears_in_structlog_output`<br>`test_logging_secrets::test_T66_stdlib_logs_from_uvicorn_are_masked_too`<br>`test_logging_secrets::test_T66_secret_inside_exception_text_is_masked`<br>… (+1) | **PASS** | 4 cas verts |
 | T67 | Restauration de sauvegarde | Données restaurées et réconciliation avant reprise | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T68 | Saturation disque/queue/CPU | Backpressure/arrêt contrôlé, pas de perte silencieuse critique | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T69 | Tests hors ligne sans réseau | Parcours complet sur fixtures reproductible | unit | `test_normalizer_archive::test_T69_golden_dataset_replays_offline_with_verified_checksum` | **PASS** | 1 cas vert |
-| T70 | Même dataset/config/seed | Résultat identique dans la tolérance documentée | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T70 | Même dataset/config/seed | Résultat identique dans la tolérance documentée | unit | `test_jev_ablation::test_T70_lablation_est_reproductible`<br>`test_research_stacking::test_T70_meme_graine_memes_predictions_de_meta_modele`<br>`test_research_training::test_T70_meme_jeu_meme_graine_memes_resultats` | **PASS** | 3 cas verts |
 
 ## Synthèse
 
 | Statut | Nombre sur 70 |
 |---|---|
 | `FAIL` | 0 |
-| `NOT_RUN` | 30 |
-| `PASS` | 40 |
+| `NOT_RUN` | 22 |
+| `PASS` | 48 |
 
 Aucune exigence en échec dans cette exécution.
 
-**Attention — 2 cas en échec hors matrice** : `test_security_check::test_le_depot_reel_passe_les_controles`, `test_security_check::test_main_rend_zero_sur_le_depot_reel`. Ces cas ne nomment aucun identifiant §64, donc aucune ligne ci-dessus ne passe à `FAIL` ; la suite est pourtant rouge. Le tableau ne doit pas se lire comme un état de santé global de la suite.
-
-**Exigences non exécutées (30)** : T17, T19, T20, T21, T22, T23, T24, T25, T26, T36, T37, T40, T41, T42, T43, T44, T45, T46, T47, T48, T50, T51, T57, T59, T61, T63, T65, T67, T68, T70.
+**Exigences non exécutées (22)** : T23, T24, T25, T26, T36, T37, T40, T41, T42, T43, T45, T46, T47, T48, T50, T51, T57, T59, T61, T63, T67, T68.
 
 Chacune reste bloquante pour la capacité qu'elle devait valider (§71.1) : rien ici n'est présenté comme couvert par autre chose.
 
