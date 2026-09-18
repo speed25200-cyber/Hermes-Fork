@@ -93,6 +93,13 @@ docker compose --profile "$PROFILE" build --quiet 2>&1 | tail -3 || docker compo
 echo "=== 5. services (profil $PROFILE) ==="
 docker compose --profile "$PROFILE" up -d --remove-orphans 2>&1 | tail -10
 
+echo "=== 5bis. conteneurs hors profil ==="
+# Changer de profil n'arrête pas ce que l'ancien profil faisait tourner : `up` ignore les services
+# désactivés et `--remove-orphans` ne les voit pas comme orphelins. Sans cette étape, les rôles d'un
+# découpage abandonné survivent au déploiement, sur l'ancienne image, et écrivent le même état que
+# le nouveau. Le détail est dans le script — il est testé, plutôt que relu.
+bash "$DIR/deploy/nettoyer_hors_profil.sh" "$PROFILE"
+
 echo "=== 6. schéma de base ==="
 # La migration est un travail à usage unique dont l'échec doit être VISIBLE. Sans ce contrôle, un
 # schéma non appliqué laisserait les écrivains bloqués (ils attendent la fin de `migrate`) tandis que
