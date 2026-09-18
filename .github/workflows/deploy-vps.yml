@@ -144,6 +144,35 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=accept-new" \
             ./ "root@$VPS:/opt/okxq/"
 
+      - name: 3bis. Faire de la place avant de construire
+        run: |
+          # POURQUOI cette étape existe : une construction d'image qui manque de disque échoue TARD,
+          # avec un message qui ne parle pas de disque. Le deuxième déploiement de cette plateforme a
+          # échoué ainsi — 38 Go pleins à 100 %, 365 Mo libres — et les conteneurs sont restés sur
+          # l'ANCIENNE image sans que rien ne le dise clairement. Chaque déploiement reconstruit
+          # l'image ; le cache de construction et les couches devenues inutiles s'accumulent.
+          #
+          # On ne touche JAMAIS aux volumes nommés : ils portent la base, le grand livre et les
+          # halts persistés. `docker system prune --volumes` les effacerait ; il n'est pas employé
+          # ici, et ne doit pas l'être.
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
+            set -e
+            echo "  avant :"; df -h / | tail -1
+            if command -v docker >/dev/null 2>&1; then
+              docker builder prune -af >/dev/null 2>&1 || true
+              docker image prune -af >/dev/null 2>&1 || true
+              docker container prune -f >/dev/null 2>&1 || true
+            fi
+            journalctl --vacuum-size=100M >/dev/null 2>&1 || true
+            echo "  après :"; df -h / | tail -1
+            LIBRE=$(df -BM --output=avail / | tail -1 | tr -dc "0-9")
+            echo "  libre : ${LIBRE} Mo"
+            if [ "${LIBRE:-0}" -lt 3000 ]; then
+              echo "::error::moins de 3 Go libres (${LIBRE} Mo) : la construction de l image échouerait tard et sans message clair. Libérez de la place sur le serveur."
+              exit 1
+            fi
+          '
+
       - name: 4. Installer Docker et construire l'image (l'ancien moteur tourne encore)
         run: |
           sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" '
@@ -180,6 +209,18 @@ jobs:
           # (`ps`), et ils finissent dans l'historique du shell distant.
           printf '%s\n%s\n' "${JETON:-}" "${TYPESAFE_KEY:-}" | sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" \
             'IFS= read -r J; IFS= read -r T; OKXQ_OPERATOR_KEY_POSE="$J" TYPESAFE_API_KEY_POSE="$T" OKXQ_PROFILE='"$OKXQ_PROFILE"' bash /opt/okxq/deploy/install.sh'
+
+      - name: 7. Retirer l'image précédente, devenue inutile
+        if: success()
+        run: |
+          # Une fois les conteneurs repartis sur la nouvelle image, l'ancienne n'est plus référencée.
+          # La retirer ICI, et non au prochain déploiement, évite que le disque se remplisse entre
+          # deux. Toujours sans `--volumes`.
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" '
+            docker image prune -af >/dev/null 2>&1 || true
+            docker builder prune -af >/dev/null 2>&1 || true
+            df -h / | tail -1
+          ' || true
 
       - name: État final
         if: always()

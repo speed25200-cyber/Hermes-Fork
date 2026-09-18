@@ -32,4 +32,11 @@ cd "$DIR" 2>/dev/null && docker compose logs --tail=30 --no-color 2>/dev/null | 
 echo
 echo "===== disque et mémoire ====="
 df -h / | tail -1
+# Un disque plein ne casse pas la plateforme tout de suite : il casse le PROCHAIN déploiement, et
+# le message d'erreur ne parlera pas de disque. On le dit tant qu'il est encore temps.
+LIBRE=$(df -BM --output=avail / | tail -1 | tr -dc "0-9")
+if [ "${LIBRE:-0}" -lt 3000 ]; then
+  echo "  !! ATTENTION : ${LIBRE} Mo libres — le prochain déploiement échouera à construire l'image"
+  echo "     libérer : docker builder prune -af && docker image prune -af   (jamais --volumes)"
+fi
 free -m | sed -n "2p"
