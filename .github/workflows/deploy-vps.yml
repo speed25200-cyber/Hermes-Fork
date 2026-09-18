@@ -1,5 +1,10 @@
-# Déploiement de okx-quant-jev sur le VPS, depuis un runner GitHub, par SSH (mot de passe root :
-# secret VPS_PASSWORD ou entrée root_password ; le VPS est vars.VPS_HOST ou l'adresse par défaut).
+# Déploiement de okx-quant-jev sur le VPS, depuis un runner GitHub, par SSH. Le mot de passe root
+# vient EXCLUSIVEMENT du secret VPS_PASSWORD ; le VPS est vars.VPS_HOST ou l'adresse par défaut.
+#
+# AUCUN secret ne passe par une entrée `workflow_dispatch`. La valeur saisie dans une entrée est
+# enregistrée dans la charge utile de l'événement et affichée sur la page du run — laquelle est
+# LISIBLE PAR TOUT LE MONDE sur un dépôt public. `::add-mask::` ne masque que la sortie des étapes,
+# pas cette page. Coller un mot de passe root dans une entrée reviendrait donc à le publier.
 #
 # Mode « migrer » : retire l'ancien Hermes (Node/systemd) et EFFACE ses données, puis installe la
 # plateforme sous /opt/okxq en Docker Compose (profil PAPER : aucune clé OKX requise, LIVE désactivé).
@@ -16,9 +21,6 @@ name: Deploy okx-quant-jev to VPS
 on:
   workflow_dispatch:
     inputs:
-      root_password:
-        description: "Mot de passe root (optionnel si le secret VPS_PASSWORD est posé)"
-        required: false
       migrer:
         description: "Retirer l'ancien Hermes et effacer ses données avant d'installer (true/false)"
         required: false
@@ -35,10 +37,6 @@ on:
         description: "refuser (défaut) ou accepter : migrer alors que l'état des positions n'a PAS pu être lu"
         required: false
         default: "refuser"
-      jeton:
-        description: "Clé opérateur CONNUE à poser (masquée ; vide = conserver celle en place ou reprendre l'ancienne clé de console)"
-        required: false
-        default: ""
       profil:
         description: "Profil compose : paper (défaut) ou demo"
         required: false
@@ -73,12 +71,13 @@ jobs:
 
       - name: Resolve SSH access
         env:
-          PW_SECRET: ${{ secrets.VPS_PASSWORD }}
+          PW: ${{ secrets.VPS_PASSWORD }}
         run: |
-          PW_INPUT=$(jq -r '.inputs.root_password // empty' "$GITHUB_EVENT_PATH")
-          if [ -n "$PW_INPUT" ]; then echo "::add-mask::$PW_INPUT"; fi
-          PW="${PW_INPUT:-$PW_SECRET}"
-          [ -z "$PW" ] && { echo "::error::no credentials"; exit 1; }
+          # Un seul chemin possible : le magasin de secrets. Il n'existe plus d'entrée de repli, pour
+          # qu'il n'existe plus de façon de publier ce mot de passe en le tapant au mauvais endroit.
+          if [ -z "${PW:-}" ]; then
+            echo "::error::secret VPS_PASSWORD absent — Settings → Secrets and variables → Actions"; exit 1
+          fi
           ALT="${PW}.Hermes1"
           echo "::add-mask::$PW"; echo "::add-mask::$ALT"
           SSHOPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
@@ -165,18 +164,21 @@ jobs:
 
       - name: 6. Installer et démarrer (profil ${{ inputs.profil }})
         env:
-          # La clé TypeSafe vient du magasin de SECRETS, jamais d'une entrée de workflow : une entrée
+          # Les deux clés viennent du magasin de SECRETS, jamais d'une entrée de workflow : une entrée
           # `workflow_dispatch` reste affichée dans la page du run et dans ses métadonnées, donc la
-          # coller là revient à la publier. Un secret, lui, n'apparaît nulle part.
+          # coller là revient à la publier — et sur un dépôt PUBLIC, à la publier pour tout le monde.
+          # Un secret, lui, n'apparaît nulle part.
           TYPESAFE_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          # Facultatif. Vide : la clé opérateur en place est conservée, ou l'ancienne clé de console
+          # de Hermes est reprise (étape 2) pour que votre lien continue de fonctionner.
+          JETON: ${{ secrets.OKXQ_OPERATOR_KEY }}
         run: |
-          JETON=$(jq -r '.inputs.jeton // empty' "$GITHUB_EVENT_PATH")
-          if [ -n "$JETON" ]; then echo "::add-mask::$JETON"; fi
+          if [ -n "${JETON:-}" ]; then echo "::add-mask::$JETON"; fi
           if [ -n "${TYPESAFE_KEY:-}" ]; then echo "::add-mask::$TYPESAFE_KEY"; fi
           # Les deux secrets passent par l'ENTRÉE STANDARD, une ligne chacun. Jamais par la ligne de
           # commande : les arguments d'un processus sont lisibles par tout utilisateur de la machine
           # (`ps`), et ils finissent dans l'historique du shell distant.
-          printf '%s\n%s\n' "$JETON" "${TYPESAFE_KEY:-}" | sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" \
+          printf '%s\n%s\n' "${JETON:-}" "${TYPESAFE_KEY:-}" | sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" \
             'IFS= read -r J; IFS= read -r T; OKXQ_OPERATOR_KEY_POSE="$J" TYPESAFE_API_KEY_POSE="$T" OKXQ_PROFILE='"$OKXQ_PROFILE"' bash /opt/okxq/deploy/install.sh'
 
       - name: État final

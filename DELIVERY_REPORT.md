@@ -60,20 +60,44 @@ Deux identifiants méritent d'être nommés, parce qu'ils portent sur de l'argen
 - **T64** (« LIVE sans approbations complètes ») refuse avant toute connexion privée. Il n'existe
   aucune option de contournement, et aucune commande `--force`.
 
-## 3bis. Un point de visibilité à trancher
+## 3bis. Dépôt public tenant des secrets de déploiement
 
-`speed25200-cyber/Hermes-Fork` est un dépôt **PUBLIC** ; `speed25200-cyber/Hermes` est privé.
+`speed25200-cyber/Hermes-Fork` est un dépôt **PUBLIC**, et c'est là que vivent désormais
+`VPS_PASSWORD` et `TYPESAFE_API_KEY`. Ce qu'un dépôt public change, précisément :
 
-Aucun secret n'y est committé — `scripts/security_check.py` le vérifie à chaque exécution et la CI
-l'exécute. Mais la CONCEPTION complète de la plateforme y est lisible par tout le monde :
-architecture, limites de risque, politique d'exécution, et `docs/threat_model.md` qui décrit
-précisément les défenses et leurs limites.
+**Ce qui reste protégé.** Les valeurs des secrets Actions ne sont pas lisibles, même sur un dépôt
+public. Une *pull request* venue d'un fork ne reçoit **aucun** secret — c'est la règle GitHub par
+défaut, et c'est le principal vecteur d'exfiltration. Les trois workflows respectent les conditions
+qui la rendent effective :
 
-Ce n'est pas une fuite, et ce n'est peut-être pas un problème. C'est une décision qui vous
-appartient, et je la signale parce qu'elle n'est pas évidente en regardant le dépôt. Si la
-visibilité devait passer en privé, une seule chose casserait : le workflow de migration du dépôt
-`Hermes` récupère la plateforme sans jeton parce qu'elle est publique ; il faudrait lui passer un
-`token:`. C'est écrit dans son commentaire et dans `MIGRATION.md`.
+| Workflow | Déclencheurs | Secrets |
+| --- | --- | --- |
+| `ci.yml` | `push`, `pull_request`, `workflow_dispatch` | **aucun** |
+| `deploy-vps.yml` | `workflow_dispatch` **seulement** | `VPS_PASSWORD`, `TYPESAFE_API_KEY`, `OKXQ_OPERATOR_KEY` |
+| `vps-status.yml` | `workflow_dispatch` **seulement** | idem + clés OKX |
+
+Aucun `pull_request_target`, aucun `workflow_run`, aucun `issue_comment` : ce sont les déclencheurs
+qui donnent des secrets à du code venu de l'extérieur. Les deux workflows sensibles n'existent qu'en
+lancement manuel, ce qui exige un droit d'écriture sur le dépôt.
+
+**Ce qui était exposé, et ne l'est plus.** `deploy-vps.yml` et `vps-status.yml` acceptaient une
+entrée `root_password`, et `deploy-vps.yml` une entrée `jeton`. La valeur saisie dans une entrée
+`workflow_dispatch` est enregistrée dans la charge utile de l'événement et **affichée sur la page du
+run** — publique pour un dépôt public. `::add-mask::` masque la sortie des étapes, **pas** cette
+page. Taper le mot de passe root là aurait donc suffi à le publier mondialement. Les deux entrées
+sont **supprimées** : le mot de passe ne vient plus que du magasin de secrets, et la clé opérateur
+d'un secret facultatif `OKXQ_OPERATOR_KEY`.
+
+**Ce qui reste visible et ne peut pas l'être moins.** La conception complète : architecture, limites
+de risque, politique d'exécution, et `docs/threat_model.md` qui décrit les défenses et leurs
+limites. Ce n'est pas une fuite — un système dont la sécurité dépend du secret de sa conception n'en
+a pas. Mais c'est une décision qui vous appartient, et elle n'est pas évidente en regardant le
+dépôt.
+
+Si vous passiez `Hermes-Fork` en privé, rien ne casserait côté déploiement (les workflows y vivent
+et s'y exécutent). La seule chose qui casserait est le workflow `migrer-vers-okxq.yml` du dépôt
+`Hermes`, qui récupère la plateforme sans jeton **parce qu'elle est publique** ; il faudrait lui
+passer un `token:`. C'est écrit dans son commentaire et dans `MIGRATION.md`.
 
 ## 4. Aucune preuve d'avantage de marché
 

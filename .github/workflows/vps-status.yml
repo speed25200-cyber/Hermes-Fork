@@ -1,12 +1,11 @@
-# État de la plateforme sur le VPS, et pose des clés par service (jamais dans le dépôt, jamais imprimées).
+# État de la plateforme sur le VPS, et pose des clés par service (jamais dans le dépôt, jamais
+# imprimées, et JAMAIS saisies dans une entrée de workflow : la valeur d'une entrée est affichée sur
+# la page du run, publique pour un dépôt public).
 name: VPS status
 
 on:
   workflow_dispatch:
     inputs:
-      root_password:
-        description: "Mot de passe root (optionnel si VPS_PASSWORD est posé)"
-        required: false
       poser_cles_okx:
         description: "oui : poser OKX_API_KEY/SECRET/PASSPHRASE (secrets du dépôt) dans env/gateway.env et redémarrer le gateway"
         required: false
@@ -28,12 +27,11 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get -y -qq install sshpass
       - name: Resolve SSH access
         env:
-          PW_SECRET: ${{ secrets.VPS_PASSWORD }}
+          PW: ${{ secrets.VPS_PASSWORD }}
         run: |
-          PW_INPUT=$(jq -r '.inputs.root_password // empty' "$GITHUB_EVENT_PATH")
-          if [ -n "$PW_INPUT" ]; then echo "::add-mask::$PW_INPUT"; fi
-          PW="${PW_INPUT:-$PW_SECRET}"
-          [ -z "$PW" ] && { echo "::error::no credentials"; exit 1; }
+          if [ -z "${PW:-}" ]; then
+            echo "::error::secret VPS_PASSWORD absent — Settings → Secrets and variables → Actions"; exit 1
+          fi
           ALT="${PW}.Hermes1"
           echo "::add-mask::$PW"; echo "::add-mask::$ALT"
           SSHOPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
