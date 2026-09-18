@@ -7,6 +7,7 @@ import json
 import logging
 
 import pytest
+
 from okxq.runtime.logging import (
     MASK,
     SecretMasker,
@@ -106,3 +107,31 @@ def test_masker_keeps_hashes_and_ids_readable() -> None:
     assert out["payload_hash"] == payload_hash
     assert out["intent_id"] == "int_01hxyz"
     assert out["contracts"] == "10"
+
+
+def test_T66_a_level_set_by_a_third_party_cannot_silence_the_masked_pipeline() -> None:
+    """Un niveau posé sur un logger tiers ne doit pas écarter les enregistrements avant le masquage.
+
+    uvicorn applique sa propre configuration via ``dictConfig`` et pose un niveau sur
+    ``uvicorn.access``/``uvicorn.error``. Si ``configure_logging`` ne le remet pas à NOTSET, ces
+    enregistrements sont filtrés AVANT le handler masqué : le journal paraît propre alors qu'il est
+    simplement muet, et l'ordre des imports déciderait du masquage.
+    """
+    logging.getLogger("uvicorn.access").setLevel(logging.CRITICAL)
+    logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
+    try:
+        get_masker().clear()
+        get_masker().register(TYPESAFE)
+        stream = io.StringIO()
+        configure_logging(level="DEBUG", json_output=True, mode="PAPER", stream=stream)
+        clear_context()
+        logging.getLogger("uvicorn.access").info("GET /?key=%s 200", TYPESAFE)
+        out = stream.getvalue()
+        assert out.strip(), "l'enregistrement a été écarté par un niveau tiers : le pipeline est muet"
+        assert TYPESAFE not in out
+        assert MASK in out
+    finally:
+        clear_context()
+        get_masker().clear()
+        logging.getLogger("uvicorn.access").setLevel(logging.NOTSET)
+        logging.getLogger("uvicorn.error").setLevel(logging.NOTSET)

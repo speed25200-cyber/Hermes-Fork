@@ -50,7 +50,7 @@ build: ## Image Docker multi-stage
 	docker build -t okx-quant-jev:local -f infra/Dockerfile .
 
 ui-test: ## Tests frontend (node:test) et smoke Playwright si disponible
-	node --test frontend/tests/
+	node --test "frontend/tests/*.test.js"
 	$(PY) pytest -q tests/e2e/test_ui_smoke.py -m e2e
 
 security-check: ## Scan de secrets, dépendances et permissions

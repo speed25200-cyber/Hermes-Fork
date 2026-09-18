@@ -28,13 +28,46 @@ hermétiques exécutés et verts) · **EN COURS** (agent de construction actif) 
 
 ## Tests exécutés (dernier run)
 
-`.venv/bin/pytest -q tests/unit tests/property` → 58 passed. `ruff check`, `ruff format --check`,
-`mypy --strict` → 0 erreur. Aucun test connecté exécuté (NOT_RUN par construction).
+| Commande | Résultat |
+| --- | --- |
+| `pytest -q -m "not integration and not connected"` | 281 passed |
+| `ruff check` / `ruff format --check` (src, tests, scripts) | 0 erreur |
+| `mypy` (strict, `src/okxq`) | 0 erreur sur 144 modules |
+| `node --test "frontend/tests/*.test.js"` | 8 passed |
+| `make smoke-offline` | 21 contrôles verts (4 régimes × 2 scénarios, reproductibilité T70) |
+| `pytest tests/e2e/test_ui_smoke.py -m e2e` | **1 passed** — interface vérifiée dans Chromium |
+
+Aucun test connecté exécuté : NOT_RUN par construction (ni clé OKX ni clé TypeSafe dans cette session).
+
+### Smoke navigateur : de NOT_RUN à PASS
+
+Le smoke d'interface sautait silencieusement. Motif réel obtenu avec `-rs` : le paquet Playwright
+épinglé réclame la révision Chromium 1243 alors que l'environnement fournit la 1194. Il lance
+désormais le binaire préinstallé (`PLAYWRIGHT_BROWSERS_PATH`, `--no-sandbox`) sans aucun
+téléchargement, et saute encore **avec son motif** si aucun binaire n'est utilisable.
+
+Ce test, une fois réellement exécuté, a révélé trois défauts que rien d'autre ne voyait.
+
+## Défauts trouvés et corrigés pendant cette vérification
+
+| Défaut | Effet observable | Correction |
+| --- | --- | --- |
+| Le bloc de risque était publié sous `halts` par `/api/v1/system/status` tandis que `pages.js` lisait `risk` | La page Risque affichait « Non disponible » sur ses cinq lignes alors que la donnée existait | `pages.js` lit `etat.halts` ; contrat verrouillé des deux côtés |
+| `/api/v1/experiments` ne publiait ni `items` ni `jev_variants` | Pages Recherche et panneau A/B JEV vides sans aucune erreur | l'endpoint publie `items` (vocabulaire commun) et `jev_variants` dérivés des rapports d'ablation |
+| `/api/v1/jev/status` ne publiait pas `available`, `age_seconds`, `latency_p95_ms`, `errors`, `daily_spend_usd` ; `jev_sources()` ni `age_seconds` ni `status` | Sept tuiles JEV et deux colonnes de sources bloquées sur « Non disponible » | l'API reprend le vocabulaire de `JevStatus` du worker ; les compteurs qui n'existent qu'en mémoire du worker sont relayés depuis son instantané, sinon `None` |
+| `configure_logging` remettait les handlers des loggers tiers mais pas leur **niveau** | Un niveau posé par uvicorn écartait les enregistrements AVANT le handler masqué : journal muet là où on le croyait filtré, et le masquage dépendait de l'ordre des imports | niveau remis à NOTSET ; test T66 dédié qui échoue sans le correctif ; uvicorn démarré avec `log_config=None` |
+
+Les deux premiers défauts étaient invisibles en Python : la page se rendait sans erreur, chaque valeur
+devenait simplement « Non disponible ». `tests/contract/test_ui_api_contract.py` les verrouille
+désormais **sans navigateur** (l'API publie les clés lues, et `pages.js` cite bien ces noms), pour que
+le garde-fou tienne aussi là où aucun Chromium n'est disponible.
 
 ## Défauts connus
 
 - La CLI n'expose que `config`, `doctor`, `paper/shadow/demo/live` (NOT_IMPLEMENTED tant que la
   composition n'est pas livrée) ; les autres groupes apparaissent à la fusion des modules.
+- `daily_spend_usd` et `cache_hit_ratio` ne sont renseignés que si le worker JEV écrit son instantané
+  (`OKXQ_JEV_STATUS_PATH`) ; sans worker en marche, ils restent « non disponibles » — jamais zéro.
 
 ## Prérequis externes (accès manquants dans cette session)
 

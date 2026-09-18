@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from okxq.api.auth import Principal, Role, require_role
+from okxq.api.auth import Principal, Role, current_principal, require_role
 from okxq.api.context import ApiContext, get_ctx
 from okxq.api.readmodel import clamp
 from okxq.api.serialize import as_iso, to_jsonable
@@ -94,6 +94,48 @@ def create_operator_action(
         },
     )
     return row, True
+
+
+def submit_operator_action(
+    ctx: ApiContext, request: Request, *, action: str, scope: str, reason: str
+) -> dict[str, Any]:
+    """Point d'entrée utilisé par la couche de compatibilité : une DEMANDE auditée, pas une exécution.
+
+    Le rôle est celui du principal courant ; un lecteur est refusé. L'identifiant de demande est dérivé
+    de l'acteur, de l'action et de la minute pour rester idempotent sur un double-clic.
+    """
+    principal = current_principal(request)
+    if principal is None or principal.role not in (Role.OPERATOR, Role.ADMIN):
+        return {
+            "ok": False,
+            "error": "ROLE_INSUFFISANT",
+            "message": "cette commande exige le rôle operator ; l'interface est en lecture seule",
+        }
+    minute = ctx.clock.now_utc().strftime("%Y%m%dT%H%M")
+    body = ControlRequest(
+        reason=reason,
+        scope=scope,
+        request_id=f"ui-{action.lower()}-{minute}-{principal.role.value}",
+        actor=principal.actor,
+    )
+    mapped = (
+        action
+        if action in COMMAND_ACTIONS.values()
+        else COMMAND_ACTIONS.get(action.replace("_", "-"), action.upper())
+    )
+    row, created = create_operator_action(ctx, action=mapped, body=body, principal=principal)
+    return {
+        "ok": True,
+        "created": created,
+        "request_id": row.request_id,
+        "action": row.action,
+        "status": row.status,
+        # L'interface affiche le SUIVI : une demande acceptée n'est pas une reprise effectuée (§58).
+        "active": False,
+        "message": "demande enregistrée ; le runtime l'exécute sous préconditions et renseigne son résultat",
+        "track": f"/api/v1/control/requests/{row.request_id}",
+        "mode": ctx.cfg.mode.value,
+    }
 
 
 @router.post(

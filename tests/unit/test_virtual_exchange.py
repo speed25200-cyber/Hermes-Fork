@@ -12,11 +12,11 @@ from okxq.backtest.latency import LatencyModel
 from okxq.backtest.market_state import BookView, MarketState, Trade
 from okxq.backtest.queue_models import QueueAssumption
 from okxq.backtest.virtual_exchange import ChaosOptions, VirtualExchange
+from okxq.domain.clocks import SimulatedClock
 from okxq.domain.errors import ExchangeError
 from okxq.domain.instruments import InstrumentSpec, InstrumentState
 from okxq.domain.money import Side
 from okxq.exchange.base import OrderRequest, PlaceOutcome, ProtectionRequest
-from okxq.domain.clocks import SimulatedClock
 
 T0 = datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
 INST = "TEST-USDT-SWAP"
@@ -24,17 +24,27 @@ INST = "TEST-USDT-SWAP"
 
 def spec() -> InstrumentSpec:
     return InstrumentSpec(
-        inst_id=INST, valid_from=T0 - timedelta(days=1), observed_at=T0, settle_ccy="USDT",
-        base_ccy="TEST", quote_ccy="USDT", contract_type="linear",
-        base_units_per_contract=Decimal("0.001"), tick_size=Decimal("0.1"),
-        lot_size=Decimal("1"), min_size=Decimal("1"), state=InstrumentState.LIVE, provenance="test",
+        inst_id=INST,
+        valid_from=T0 - timedelta(days=1),
+        observed_at=T0,
+        settle_ccy="USDT",
+        base_ccy="TEST",
+        quote_ccy="USDT",
+        contract_type="linear",
+        base_units_per_contract=Decimal("0.001"),
+        tick_size=Decimal("0.1"),
+        lot_size=Decimal("1"),
+        min_size=Decimal("1"),
+        state=InstrumentState.LIVE,
+        provenance="test",
     )
 
 
-def market(*, bids=((Decimal("100.0"), Decimal("5")),), asks=((Decimal("100.1"), Decimal("3")),)) -> MarketState:
+def market(
+    *, bids=((Decimal("100.0"), Decimal("5")),), asks=((Decimal("100.1"), Decimal("3")),)
+) -> MarketState:
     m = MarketState()
     m.specs[INST] = spec()
-    book = type("B", (), {})()  # vue de carnet minimale injectée directement
     m.books[INST] = _FakeBook(bids, asks)
     m.marks[INST] = Decimal("100.05")
     return m
@@ -52,15 +62,25 @@ class _FakeBook:
 
 def exchange(m: MarketState, clock: SimulatedClock, **kwargs) -> VirtualExchange:
     return VirtualExchange(
-        clock=clock, market=m, account_scope="test", initial_cash=Decimal("10000"),
-        latency=kwargs.pop("latency", LatencyModel.zero()), **kwargs
+        clock=clock,
+        market=m,
+        account_scope="test",
+        initial_cash=Decimal("10000"),
+        latency=kwargs.pop("latency", LatencyModel.zero()),
+        **kwargs,
     )
 
 
 def request(**over) -> OrderRequest:
     base = dict(
-        account_scope="test", client_order_id="cl_1", inst_id=INST, side="buy",
-        contracts=Decimal("2"), price_limit=Decimal("100.1"), order_type="ioc", reduce_only=False,
+        account_scope="test",
+        client_order_id="cl_1",
+        inst_id=INST,
+        side="buy",
+        contracts=Decimal("2"),
+        price_limit=Decimal("100.1"),
+        order_type="ioc",
+        reduce_only=False,
     )
     base.update(over)
     return OrderRequest(**base)  # type: ignore[arg-type]
@@ -96,7 +116,9 @@ async def test_T27_T28_maker_order_needs_volume_not_a_touch():
     clock = SimulatedClock(T0)
     m = market()
     ex = exchange(m, clock, queue_assumption=QueueAssumption.PESSIMISTIC)
-    await ex.place_order(request(order_type="post_only", price_limit=Decimal("100.0"), contracts=Decimal("2")))
+    await ex.place_order(
+        request(order_type="post_only", price_limit=Decimal("100.0"), contracts=Decimal("2"))
+    )
     ex.on_market_event()
     order = ex.orders["cl_1"]
     assert order.filled == 0  # le prix est « touché » mais rien n'a été échangé
@@ -161,7 +183,9 @@ async def test_T35_fill_can_arrive_before_the_local_ack():
 async def test_T31_fill_during_cancellation_counts_once_and_is_not_retroactive():
     clock = SimulatedClock(T0)
     ex = exchange(market(), clock, latency=LatencyModel())
-    await ex.place_order(request(order_type="post_only", price_limit=Decimal("100.0"), contracts=Decimal("2")))
+    await ex.place_order(
+        request(order_type="post_only", price_limit=Decimal("100.0"), contracts=Decimal("2"))
+    )
     clock.advance(timedelta(milliseconds=200))
     ex.on_market_event()
     await ex.cancel_order("test", "cl_1", INST)
@@ -193,7 +217,12 @@ async def test_T60_cancel_all_after_cancels_orders_but_closes_no_position():
     position_before = ex._positions[INST].signed_base_qty
     assert position_before > 0
     await ex.place_order(
-        request(client_order_id="cl_rest", order_type="post_only", price_limit=Decimal("100.0"), contracts=Decimal("1"))
+        request(
+            client_order_id="cl_rest",
+            order_type="post_only",
+            price_limit=Decimal("100.0"),
+            contracts=Decimal("1"),
+        )
     )
     ex.on_market_event()
     await ex.cancel_all_after(30)
@@ -230,8 +259,13 @@ async def test_protection_triggers_on_mark_and_reduces_position():
     assert ex._positions[INST].signed_base_qty > 0
     await ex.place_protection(
         ProtectionRequest(
-            account_scope="test", client_algo_id="algo_1", inst_id=INST, side="sell",
-            contracts=Decimal("3"), trigger_price=Decimal("99.0"), trigger_reference="mark",
+            account_scope="test",
+            client_algo_id="algo_1",
+            inst_id=INST,
+            side="sell",
+            contracts=Decimal("3"),
+            trigger_price=Decimal("99.0"),
+            trigger_reference="mark",
         )
     )
     protections = await ex.protections("test")

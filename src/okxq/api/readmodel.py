@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from okxq.api.serialize import as_iso, to_jsonable
 from okxq.config.schema import AppConfig
-from okxq.domain.clocks import Clock, SystemClock, utc_day
+from okxq.domain.clocks import Clock, SystemClock, ensure_utc, utc_day
 from okxq.persistence.models import (
     AccountSnapshot,
     DataQualityEvent,
@@ -51,6 +51,10 @@ from okxq.persistence.models import (
 from okxq.runtime.health import Status
 
 MAX_LIMIT = 500
+# Seuils d'affichage de la fraîcheur d'une source JEV. Ils qualifient un ÂGE, pas une qualité de
+# contenu, et ne pilotent aucune décision : le worker a ses propres seuils bloquants.
+JEV_SOURCE_FRESH_SECONDS = 3600
+JEV_SOURCE_STALE_SECONDS = 86400
 
 
 def clamp(limit: int | None, default: int = 100) -> int:
@@ -381,6 +385,11 @@ class ReadModel:
             return [(r, dv, sd) for r, dv, sd in rows]
 
     def jev_sources(self) -> list[dict[str, Any]]:
+        """Une ligne par source : nombre de documents, dernière vue, âge et statut dérivé de cet âge.
+
+        ``status`` reste ``None`` si la source n'a jamais rien livré : une absence n'est pas « stale ».
+        """
+        now = self._clock.now_utc()
         with self.session() as s:
             rows = s.execute(
                 select(
@@ -389,7 +398,27 @@ class ReadModel:
                     func.max(SourceDocumentRow.first_seen_at),
                 ).group_by(SourceDocumentRow.source)
             ).all()
-        return [{"source": src, "documents": int(n), "last_seen_at": as_iso(last)} for src, n, last in rows]
+        out: list[dict[str, Any]] = []
+        for src, n, last in rows:
+            age = None if last is None else int((now - ensure_utc(last)).total_seconds())
+            if age is None:
+                status = None
+            elif age <= JEV_SOURCE_FRESH_SECONDS:
+                status = "fresh"
+            elif age <= JEV_SOURCE_STALE_SECONDS:
+                status = "late"
+            else:
+                status = "stale"
+            out.append(
+                {
+                    "source": src,
+                    "documents": int(n),
+                    "last_seen_at": as_iso(last),
+                    "age_seconds": age,
+                    "status": status,
+                }
+            )
+        return out
 
     def jev_counts(self, since: datetime) -> dict[str, int]:
         with self.session() as s:

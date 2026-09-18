@@ -92,14 +92,52 @@ def research_payload(ctx: ApiContext, limit: int = 50) -> dict[str, Any]:
     }
 
 
+# Un rapport d'ablation JEV compare des variantes du MÊME plan (avec / sans composant sémantique).
+# Il est identifié par son `kind` ; ses chiffres vivent dans `metrics`.
+JEV_ABLATION_KINDS = ("jev_ablation", "jev_variant", "ablation")
+
+
+def jev_variant_rows(reports: list[EvaluationReport]) -> list[dict[str, Any]]:
+    """Lignes du panneau A/B JEV. Une variante sans PnL reste à ``None`` : jamais de zéro par défaut.
+
+    ``independent`` dit si la mesure vient d'une période indépendante ; une variante mesurée sur une
+    période déjà consultée n'est pas une preuve, et l'interface la marque comme telle.
+    """
+    rows: list[dict[str, Any]] = []
+    for r in reports:
+        if r.kind not in JEV_ABLATION_KINDS:
+            continue
+        metrics = r.metrics if isinstance(r.metrics, dict) else {}
+        rows.append(
+            {
+                "report_id": r.report_id,
+                "run_id": r.run_id,
+                "model_id": r.model_id,
+                "variant": metrics.get("variant") or metrics.get("arm"),
+                "net_pnl": to_jsonable(metrics.get("net_pnl")),
+                "period_start": as_iso(r.period_start),
+                "period_end": as_iso(r.period_end),
+                "independent": r.independent,
+                "metrics": to_jsonable(metrics),
+            }
+        )
+    return rows
+
+
 @router.get("/api/v1/experiments", summary="Expériences avec leurs rapports (validés = période indépendante)")
 def experiments(
     request: Request,
     _p: Principal = Depends(require_role(Role.READER)),
     limit: int = Query(50, ge=1, le=500),
 ) -> dict[str, Any]:
-    payload = research_payload(get_ctx(request), limit=clamp(limit, 50))
-    return {k: v for k, v in payload.items() if k != "models"}
+    ctx = get_ctx(request)
+    payload = research_payload(ctx, limit=clamp(limit, 50))
+    out = {k: v for k, v in payload.items() if k != "models"}
+    # `items` est le nom de liste commun à tous les endpoints (et celui que lit l'interface) ;
+    # `experiments` est conservé pour ne casser aucun consommateur existant.
+    out["items"] = out["experiments"]
+    out["jev_variants"] = jev_variant_rows(ctx.readmodel.evaluation_reports(limit=500))
+    return out
 
 
 @router.get("/api/v1/experiments/{run_id}", summary="Une expérience et ses rapports")
