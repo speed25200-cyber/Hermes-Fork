@@ -41,12 +41,25 @@ def _ms_dt(ms: int) -> datetime:
     return datetime(1970, 1, 1, tzinfo=UTC) + timedelta(milliseconds=ms)
 
 
+#: Pas de dérive par régime (§68.2) : un parcours favorable, un défavorable, un plat où les coûts
+#: imposent NO_TRADE. Les distributions sont FIXES et documentées, pas ajustées sur un résultat.
+REGIME_STEPS: dict[str, list[int]] = {
+    "neutre": [-2, -1, 0, 0, 1, 2],
+    "favorable": [0, 1, 1, 2, 2, 3],
+    "defavorable": [0, -1, -1, -2, -2, -3],
+    "plat": [0],
+}
+
+
 class _BookSim:
-    def __init__(self, inst_id: str, spec: dict[str, Any], rng: random.Random) -> None:
+    def __init__(
+        self, inst_id: str, spec: dict[str, Any], rng: random.Random, regime: str = "neutre"
+    ) -> None:
         self.inst_id = inst_id
         self.mid: Decimal = spec["mid"]
         self.tick: Decimal = spec["tick"]
         self.rng = rng
+        self.steps = REGIME_STEPS[regime]
         self.seq = 100_000
         self.levels: dict[str, dict[Decimal, Decimal]] = {"bids": {}, "asks": {}}
 
@@ -77,7 +90,7 @@ class _BookSim:
         }
 
     def update(self, ts_ms: int) -> dict[str, Any]:
-        step = self.rng.choice([-2, -1, 0, 0, 1, 2])
+        step = self.rng.choice(self.steps)
         self.mid += self.tick * step
         target = self._target()
         diff: dict[str, dict[Decimal, Decimal]] = {"bids": {}, "asks": {}}
@@ -123,7 +136,9 @@ class _BookSim:
         }
 
 
-def build(out_dir: Path) -> dict[str, Any]:
+def build(out_dir: Path, regime: str = "neutre") -> dict[str, Any]:
+    if regime not in REGIME_STEPS:
+        raise SystemExit(f"régime inconnu : {regime} (attendu : {', '.join(REGIME_STEPS)})")
     rng = random.Random(SEED)
     clock = SimulatedClock(_ms_dt(T0_MS))
     # Identifiants déterministes : un jeu golden doit être reproductible bit à bit (T70).
@@ -150,7 +165,7 @@ def build(out_dir: Path) -> dict[str, Any]:
     clock.set(_ms_dt(T0_MS))
     events.extend(norm.normalize_rest("public/instruments", linear))
 
-    books = {inst: _BookSim(inst, spec, rng) for inst, spec in INSTRUMENTS.items()}
+    books = {inst: _BookSim(inst, spec, rng, regime) for inst, spec in INSTRUMENTS.items()}
     trade_id = 130_000_000
     minute_trades: dict[str, list[tuple[Decimal, Decimal]]] = {inst: [] for inst in INSTRUMENTS}
     vol_ccy_24h = {inst: Decimal(20_000) for inst in INSTRUMENTS}
@@ -329,14 +344,15 @@ def build(out_dir: Path) -> dict[str, Any]:
     return write_jsonl_dataset(
         events,
         out_dir,
-        dataset="golden-okx-usdt-swap-synthetic",
+        dataset=f"golden-okx-usdt-swap-synthetic-{regime}",
         clock=clock,
         quality_level="synthetic",
         notes=(
             "Jeu synthétique déterministe (scripts/build_golden_dataset.py, graine 25200) reproduisant les formes "
             "documentées OKX : carnets books séquencés (seqId non consécutifs, un maintien), trades (side taker), "
             "bougies 1m cohérentes avec les trades (confirm 0 puis 1), mark/index, tickers (volCcy24h en base), "
-            "open interest, funding. Aucune statistique de marché réelle."
+            f"open interest, funding. Régime de dérive « {regime} » (pas fixés dans REGIME_STEPS). "
+            "Aucune statistique de marché réelle : ce jeu ne démontre aucun avantage."
         ),
     )
 
@@ -344,8 +360,22 @@ def build(out_dir: Path) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=str(ROOT / "tests" / "fixtures" / "golden"))
+    parser.add_argument("--regime", default="neutre", choices=sorted(REGIME_STEPS))
+    parser.add_argument(
+        "--all-regimes",
+        action="store_true",
+        help="Génère les trois régimes §68.2 dans <out>/../golden_regimes/<régime>.",
+    )
     args = parser.parse_args()
-    manifest = build(Path(args.out))
+    if args.all_regimes:
+        base = Path(args.out).parent / "golden_regimes"
+        summary: dict[str, Any] = {}
+        for regime in ("favorable", "defavorable", "plat"):
+            manifest = build(base / regime, regime)
+            summary[regime] = {"rows": manifest["rows"], "sha256": manifest["sha256"][:16]}
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return
+    manifest = build(Path(args.out), args.regime)
     print(json.dumps({k: v for k, v in manifest.items() if k != "notes"}, ensure_ascii=False, indent=2))
 
 

@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 from okxq.data.collector import CollectorStats, PublicCollector, backoff_delay
 from okxq.data.point_in_time import PointInTimeStore
 from okxq.data.replay import load_dataset

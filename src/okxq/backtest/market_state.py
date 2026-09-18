@@ -214,6 +214,10 @@ class MarketState:
         self.partial_candle: dict[str, Candle] = {}
         self.marks: dict[str, Decimal] = {}
         self.mark_ts: dict[str, datetime] = {}
+        self.index_prices: dict[str, Decimal] = {}
+        self.last_prices: dict[str, Decimal] = {}
+        self.notional_volume_24h: dict[str, Decimal] = {}
+        self.price_limits: dict[str, tuple[Decimal, Decimal]] = {}
         self.funding: list[FundingObservation] = []
         self.open_interest: dict[str, Decimal] = {}
         self.events_applied = 0
@@ -301,6 +305,26 @@ class MarketState:
             self.open_interest[inst_id] = dec(str(p["oi_contracts"]), field="oi_contracts")
             return Applied(kind, inst_id)
         if kind == "index_price":
+            self.index_prices[inst_id] = dec(str(p["idx_px"]), field="idx_px")
+            return Applied(kind, inst_id)
+        if kind == "ticker":
+            # volCcy24h est en devise de BASE : le notionnel exige une multiplication par le prix.
+            last = p.get("last")
+            base_volume = p.get("vol_ccy_24h_base")
+            if last:
+                self.last_prices[inst_id] = dec(str(last), field="last")
+            if last and base_volume:
+                self.notional_volume_24h[inst_id] = dec(str(base_volume), field="vol_ccy_24h_base") * dec(
+                    str(last), field="last"
+                )
+            return Applied(kind, inst_id)
+        if kind == "price_limit":
+            buy, sell = p.get("buy_limit"), p.get("sell_limit")
+            if buy and sell:
+                self.price_limits[inst_id] = (
+                    dec(str(buy), field="buy_limit"),
+                    dec(str(sell), field="sell_limit"),
+                )
             return Applied(kind, inst_id)
         raise DataQualityError("type d'événement inconnu", event_type=kind)
 

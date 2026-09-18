@@ -1,5 +1,5 @@
 {
-  "dataset": "golden-okx-usdt-swap-synthetic-neutre",
+  "dataset": "golden-okx-usdt-swap-synthetic-favorable",
   "event_types": [
     "book.snapshot",
     "book.update",
@@ -27,9 +27,9 @@
   ],
   "last_available_at": "2026-09-18T12:04:00.730000+00:00",
   "last_exchange_ts": "2026-09-18T12:04:00.700000+00:00",
-  "notes": "Jeu synthétique déterministe (scripts/build_golden_dataset.py, graine 25200) reproduisant les formes documentées OKX : carnets books séquencés (seqId non consécutifs, un maintien), trades (side taker), bougies 1m cohérentes avec les trades (confirm 0 puis 1), mark/index, tickers (volCcy24h en base), open interest, funding. Régime de dérive « neutre » (pas fixés dans REGIME_STEPS). Aucune statistique de marché réelle : ce jeu ne démontre aucun avantage.",
+  "notes": "Jeu synthétique déterministe (scripts/build_golden_dataset.py, graine 25200) reproduisant les formes documentées OKX : carnets books séquencés (seqId non consécutifs, un maintien), trades (side taker), bougies 1m cohérentes avec les trades (confirm 0 puis 1), mark/index, tickers (volCcy24h en base), open interest, funding. Régime de dérive « favorable » (pas fixés dans REGIME_STEPS). Aucune statistique de marché réelle : ce jeu ne démontre aucun avantage.",
   "quality_level": "synthetic",
   "rows": 766,
   "schema_version": 1,
-  "sha256": "49e2b268cf6d9962bd7036221a55b3ed669607fd7d77fee80406830e5a940c77"
+  "sha256": "a02f0e4eae3194f9e965cbb9bbc8fb156898740fa4cd81709ab472c85f51c179"
 }

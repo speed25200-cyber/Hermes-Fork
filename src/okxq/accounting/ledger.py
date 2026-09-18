@@ -651,6 +651,10 @@ class Ledger:
                         metadata_=metadata,
                     )
                 )
+                # La transaction est écrite AVANT ses écritures : la clé étrangère
+                # ledger_entries.txn_id est vérifiée immédiatement par PostgreSQL comme par SQLite,
+                # et l'ordre d'un flush unique n'est pas garanti.
+                session.flush()
                 for e in full:
                     session.add(
                         LedgerEntry(

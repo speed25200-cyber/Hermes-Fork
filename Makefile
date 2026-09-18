@@ -39,8 +39,12 @@ test-contract-offline: ## Contrats fournisseurs sur fixtures (OKX, TypeSafe), sa
 test-integration: ## Tests PostgreSQL (OKXQ_TEST_DATABASE_URL requis)
 	$(PY) pytest -q tests/integration -m integration
 
-smoke-offline: ## Parcours complet hors ligne sur fixtures golden (§68.2)
-	$(PY) okxq replay run --dataset tests/fixtures/golden --config tests/fixtures/configs/smoke.fixture.yaml --assert-invariants --report reports/smoke-offline.json
+smoke-offline: ## Parcours complet hors ligne : 3 régimes × 2 scénarios + reproductibilité (§68.2)
+	$(PY) python scripts/smoke_offline.py
+
+golden: ## Régénère les jeux golden déterministes (graine 25200)
+	$(PY) python scripts/build_golden_dataset.py
+	$(PY) python scripts/build_golden_dataset.py --all-regimes
 
 build: ## Image Docker multi-stage
 	docker build -t okx-quant-jev:local -f infra/Dockerfile .
