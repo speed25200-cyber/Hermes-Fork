@@ -114,3 +114,53 @@ def verify_live_authorization(
         "gates technical/scientific/operator marqués franchis",
         f"empreinte manifeste {sha256_hex(manifest.canonical())[:16]}",
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveAuthorization:
+    """Preuve VÉRIFIÉE d'autorisation LIVE, exigée par l'adaptateur avant toute connexion privée (T64).
+
+    Ne se construit que via :func:`authorize_live` : elle porte les preuves rendues par
+    :func:`verify_live_authorization`, le compte, le hash de configuration et l'heure de vérification.
+    """
+
+    account_scope: str
+    config_hash: str | None
+    code_commit: str | None
+    verified_at: datetime
+    proofs: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.proofs or not any("HMAC" in p for p in self.proofs):
+            raise LiveGuardError("autorisation LIVE sans preuve de signature vérifiée")
+
+    def covers(self, cfg: AppConfig) -> bool:
+        return (
+            cfg.project.mode is Mode.LIVE
+            and cfg.project.live_enabled
+            and self.account_scope == cfg.account.scope
+            and (cfg.config_hash is None or self.config_hash == cfg.config_hash)
+        )
+
+
+def authorize_live(
+    cfg: AppConfig,
+    *,
+    manifest_path: Path | None,
+    operator_secret: str | None,
+    now: datetime,
+    code_commit: str | None,
+) -> LiveAuthorization:
+    """Vérifie le manifeste et rend l'objet d'autorisation ; lève ``LiveGuardError`` sinon."""
+    if cfg.project.mode is not Mode.LIVE:
+        raise LiveGuardError("authorize_live appelé hors mode LIVE", mode=cfg.project.mode.value)
+    proofs = verify_live_authorization(
+        cfg, manifest_path=manifest_path, operator_secret=operator_secret, now=now, code_commit=code_commit
+    )
+    return LiveAuthorization(
+        account_scope=cfg.account.scope,
+        config_hash=cfg.config_hash,
+        code_commit=code_commit,
+        verified_at=ensure_utc(now),
+        proofs=tuple(proofs),
+    )
