@@ -65,6 +65,13 @@ SECRET_VAR_NAMES: tuple[str, ...] = (
     "POSTGRES_PASSWORD",
     "PGPASSWORD",
     "OKXQ_BACKUP_PASSPHRASE",
+    # Accès à la MACHINE. Un mot de passe root committé donne la machine entière, donc tous les
+    # secrets qu'elle porte : les clés d'échange, la clé sémantique, la base. Il manquait à cette
+    # liste alors que c'est le secret le plus puissant du déploiement.
+    "VPS_PASSWORD",
+    "ROOT_PASSWORD",
+    "SSH_PASSWORD",
+    "SSHPASS",
 )
 
 # ── Propriétaire unique de chaque secret (§60). Tout autre service qui le reçoit est une anomalie.

@@ -441,3 +441,24 @@ def test_le_rapport_ne_recopie_jamais_la_valeur_du_secret(
     (depot / "fuite.env").write_text(f"OKX_API_SECRET={FAUX_SECRET_HEX}\n", encoding="utf-8")
     sc.main(["--root", str(depot)])
     assert FAUX_SECRET_HEX not in capsys.readouterr().out
+
+
+def test_machine_access_secrets_are_detected_too() -> None:
+    """Un mot de passe root committé donne la MACHINE, donc tous les secrets qu'elle porte.
+
+    Ce nom manquait à la liste surveillée alors que c'est le secret le plus puissant du déploiement :
+    les clés d'échange, la clé sémantique et la base vivent toutes sur cette machine. Un contrôle qui
+    attrape la clé d'API mais laisse passer l'accès à l'hôte protège la serrure en oubliant la porte.
+    """
+    valeur = "K7mQx4ZrLpWvNtBdHsYc"  # forme d'un mot de passe généré, sans marqueur de gabarit
+    for nom in ("VPS_PASSWORD", "ROOT_PASSWORD", "SSH_PASSWORD", "SSHPASS"):
+        assert sc.scan_line("faux.env", 1, f"{nom}={valeur}"), nom
+
+    # Contre-épreuve : une RÉFÉRENCE à un secret n'est pas un secret, et la signaler rendrait le
+    # contrôle inutilisable sur les fichiers de workflow qui doivent bien nommer leurs secrets.
+    for reference in (
+        "VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}",
+        "ROOT_PASSWORD=${ROOT_PASSWORD}",
+        "SSH_PASSWORD=remplacer-hors-git",
+    ):
+        assert not sc.scan_line("x.yml", 1, reference), reference

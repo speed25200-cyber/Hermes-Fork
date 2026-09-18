@@ -164,11 +164,20 @@ jobs:
           sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" "OKXQ_CONFIRM_WIPE=EFFACER bash -s" < deploy/uninstall_hermes.sh
 
       - name: 6. Installer et démarrer (profil ${{ inputs.profil }})
+        env:
+          # La clé TypeSafe vient du magasin de SECRETS, jamais d'une entrée de workflow : une entrée
+          # `workflow_dispatch` reste affichée dans la page du run et dans ses métadonnées, donc la
+          # coller là revient à la publier. Un secret, lui, n'apparaît nulle part.
+          TYPESAFE_KEY: ${{ secrets.TYPESAFE_API_KEY }}
         run: |
           JETON=$(jq -r '.inputs.jeton // empty' "$GITHUB_EVENT_PATH")
           if [ -n "$JETON" ]; then echo "::add-mask::$JETON"; fi
-          printf '%s\n' "$JETON" | sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" \
-            'IFS= read -r J; OKXQ_OPERATOR_KEY_POSE="$J" OKXQ_PROFILE='"$OKXQ_PROFILE"' bash /opt/okxq/deploy/install.sh'
+          if [ -n "${TYPESAFE_KEY:-}" ]; then echo "::add-mask::$TYPESAFE_KEY"; fi
+          # Les deux secrets passent par l'ENTRÉE STANDARD, une ligne chacun. Jamais par la ligne de
+          # commande : les arguments d'un processus sont lisibles par tout utilisateur de la machine
+          # (`ps`), et ils finissent dans l'historique du shell distant.
+          printf '%s\n%s\n' "$JETON" "${TYPESAFE_KEY:-}" | sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=40 "root@$VPS" \
+            'IFS= read -r J; IFS= read -r T; OKXQ_OPERATOR_KEY_POSE="$J" TYPESAFE_API_KEY_POSE="$T" OKXQ_PROFILE='"$OKXQ_PROFILE"' bash /opt/okxq/deploy/install.sh'
 
       - name: État final
         if: always()
