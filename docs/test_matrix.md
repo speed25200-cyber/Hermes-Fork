@@ -3,7 +3,7 @@
 <!-- Fichier GÉNÉRÉ par `scripts/test_matrix_status.py`. Ne pas éditer à la main : toute
      correction manuelle serait écrasée, et surtout elle ne serait adossée à aucune preuve. -->
 
-Source : `reports/junit.xml` — 557 cas collectés, 557 verts, 0 échecs, 0 erreurs, 0 sautés.
+Source : `reports/junit.xml` — 621 cas collectés, 621 verts, 0 échecs, 0 erreurs, 0 sautés.
 
 Sélection exécutée : `pytest -m "not integration and not connected"`. Les tests `integration` (PostgreSQL) et `connected` (réseau + clés OKX/TypeSafe) ne sont donc PAS dans ce rapport : les exigences qui en dépendent restent `NOT_RUN` faute d'accès, jamais `PASS`.
 
@@ -40,8 +40,8 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T20 | Stacking OOF | Aucun entraînement sur la fenêtre prédite | unit | `test_research_stacking::test_T20_un_composant_qui_connait_la_fenetre_predite_est_refuse`<br>`test_research_training::test_T20_les_predictions_oof_precedent_leur_propre_entrainement` | **PASS** | 2 cas verts |
 | T21 | Label censuré | Exclusion/masque explicite, pas rendement nul inventé | unit | `test_research_training::test_T21_les_labels_censures_ne_sont_jamais_remplaces_par_zero` | **PASS** | 1 cas vert |
 | T22 | Changement du test final après consultation | Statut indépendant perdu et revalidation requise | unit | `test_research_registry::test_T22_la_premiere_consultation_du_test_final_le_consomme`<br>`test_research_registry::test_T22_aucune_optimisation_apres_consultation_du_test_final`<br>`test_research_registry::test_T22_une_autre_execution_du_meme_plan_ne_rend_pas_la_periode_independante` | **PASS** | 3 cas verts |
-| T23 | Frais maker/taker et rebate | Signes, devises et montants exacts | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T24 | Prix exécutables + spread déduit à nouveau | Erreur de double comptage bloquée | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T23 | Frais maker/taker et rebate | Signes, devises et montants exacts | unit | `test_costs_fees::test_T23_les_frais_maker_et_taker_sont_des_debits_du_montant_exact`<br>`test_costs_fees::test_T23_un_taux_maker_negatif_est_un_rebate_encaisse_jamais_efface_par_abs`<br>`test_costs_fees::test_T23_le_cout_de_decision_est_loppose_du_flux_de_commission`<br>… (+7) | **PASS** | 10 cas verts |
+| T24 | Prix exécutables + spread déduit à nouveau | Erreur de double comptage bloquée | unit | `test_costs_fees::test_T24_le_spread_contenu_dans_le_prix_ne_peut_etre_deduit_une_seconde_fois`<br>`test_costs_fees::test_T24_la_convention_executable_deduit_les_couts_non_contenus_dans_le_prix`<br>`test_costs_fees::test_T24_la_convention_executable_doit_declarer_le_spread_comme_inclus`<br>… (+7) | **PASS** | 10 cas verts |
 | T25 | Funding traversé ou non | Flux uniquement aux règlements concernés | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T26 | Funding final utilisé comme feature antérieure | Fuite détectée | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T27 | Ordre maker non exécuté | Pas de position/PnL fictif | unit | `test_virtual_exchange::test_T27_T28_maker_order_needs_volume_not_a_touch` | **PASS** | 1 cas vert |
@@ -58,9 +58,9 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | T38 | Rejet de reduce-only | Pas de retry sans cette protection | unit | `test_virtual_exchange::test_T38_reduce_only_without_position_is_refused` | **PASS** | 1 cas vert |
 | T39 | Passage long -> short | Clôture et nouvelle ouverture distinguées, risques revérifiés | unit | `test_domain_positions::test_T39_long_to_short_flip_splits_close_and_open` | **PASS** | 1 cas vert |
 | T40 | Rounding casse la neutralité/marge | Candidat corrigé sous contraintes ou rejeté | unit | `test_portfolio_rounding::test_T40_rounding_that_breaks_neutrality_is_repaired_under_constraints`<br>`test_portfolio_rounding::test_T40_an_admissible_rounded_candidate_passes_untouched`<br>`test_portfolio_rounding::test_T40_rounding_that_breaks_the_exact_margin_is_repaired_under_constraints`<br>… (+8) | **PASS** | 11 cas verts |
-| T41 | Solveur timeout/infeasible/NaN | Aucune stratégie de secours non validée | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T42 | Une seule jambe d'un basket est exécutée | Risque transitoire plafonné et réconciliation | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
-| T43 | Ordres opposés/UNKNOWN en attente | Exposition pessimiste prise en compte | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
+| T41 | Solveur timeout/infeasible/NaN | Aucune stratégie de secours non validée | unit | `test_portfolio_optimizer::test_T41_a_failed_solve_keeps_the_previous_allocation_never_the_biggest_scores`<br>`test_portfolio_optimizer::test_T41_an_inaccurate_solution_is_reported_and_never_adopted`<br>`test_portfolio_optimizer::test_T41_non_finite_weights_never_reach_the_target`<br>… (+6) | **PASS** | 12 cas verts |
+| T42 | Une seule jambe d'un basket est exécutée | Risque transitoire plafonné et réconciliation | unit | `test_portfolio_optimizer::test_T42_a_single_leg_of_a_neutral_basket_is_reported_as_transient_risk`<br>`test_portfolio_optimizer::test_T42_a_basket_whose_single_leg_stays_inside_the_limits_is_not_flagged`<br>`test_portfolio_optimizer::test_T42_legs_that_do_not_move_are_not_counted_as_transient_risk`<br>… (+3) | **PASS** | 6 cas verts |
+| T43 | Ordres opposés/UNKNOWN en attente | Exposition pessimiste prise en compte | unit | `test_risk_budgets::test_T43_opposite_pending_orders_never_offset_each_other`<br>`test_risk_budgets::test_T43_net_exposure_takes_the_worst_of_the_two_worlds_across_instruments`<br>`test_risk_budgets::test_T43_every_non_terminal_state_counts_as_potentially_active`<br>… (+5) | **PASS** | 17 cas verts |
 | T44 | Risque journalier après redémarrage | Pertes et halt conservés | unit | `test_composition::test_T44_a_restart_never_resets_a_persisted_halt_or_daily_loss` | **PASS** | 1 cas vert |
 | T45 | Dépôt/retrait externe | Performance et high-water mark non artificiellement améliorés | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
 | T46 | Deux gateways concurrents | Un seul chemin de signature/envoi effectif | — | — | **NOT_RUN** | aucun test ne porte cet identifiant |
@@ -94,12 +94,12 @@ Un `PASS` signifie « ce comportement est vérifié sur fixtures hors ligne ». 
 | Statut | Nombre sur 70 |
 |---|---|
 | `FAIL` | 0 |
-| `NOT_RUN` | 16 |
-| `PASS` | 54 |
+| `NOT_RUN` | 11 |
+| `PASS` | 59 |
 
 Aucune exigence en échec dans cette exécution.
 
-**Exigences non exécutées (16)** : T23, T24, T25, T26, T36, T37, T41, T42, T43, T45, T46, T47, T48, T50, T51, T63.
+**Exigences non exécutées (11)** : T25, T26, T36, T37, T45, T46, T47, T48, T50, T51, T63.
 
 Chacune reste bloquante pour la capacité qu'elle devait valider (§71.1) : rien ici n'est présenté comme couvert par autre chose.
 

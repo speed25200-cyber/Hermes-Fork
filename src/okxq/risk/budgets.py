@@ -249,10 +249,27 @@ class ExposureSnapshot:
         return sum((self.asset(m) for m in members), ZERO)
 
     def beta(self, betas: Mapping[str, Decimal]) -> Decimal:
-        """Exposition bêta pessimiste : pire des deux mondes achats/ventes."""
-        buys = sum((betas.get(k, ZERO) * e.signed_if_buys for k, e in self.per_instrument.items()), ZERO)
-        sells = sum((betas.get(k, ZERO) * e.signed_if_sells for k, e in self.per_instrument.items()), ZERO)
-        return self._frac(max(abs(buys), abs(sells)))
+        """Exposition bêta pessimiste : pire cas choisi INSTRUMENT PAR INSTRUMENT.
+
+        POURQUOI pas deux scénarios globaux (« tous les achats s'exécutent » contre « toutes les
+        ventes s'exécutent ») comme pour le brut et le net : l'exposition bêta est une somme
+        PONDÉRÉE, et les bêtas peuvent être de signes opposés (un instrument de couverture a un bêta
+        négatif). Le maximum d'une somme sur un pavé est atteint en prenant pour CHAQUE instrument sa
+        borne la plus défavorable — pas en imposant le même scénario partout. Avec un bêta +1 sur un
+        achat en attente et un bêta −1 sur une vente en attente, les deux contributions s'ajoutent :
+        les deux scénarios globaux n'en voyaient qu'une, donc sous-estimaient l'exposition de moitié
+        et laissaient passer une violation de la limite bêta. Pour des bêtas de même signe, ce calcul
+        rend exactement le précédent (``signed_if_buys ≥ signed_if_sells`` par construction).
+        """
+        high = ZERO
+        low = ZERO
+        for inst_id, e in self.per_instrument.items():
+            beta_i = betas.get(inst_id, ZERO)
+            if_buys = beta_i * e.signed_if_buys
+            if_sells = beta_i * e.signed_if_sells
+            high += max(if_buys, if_sells)
+            low += min(if_buys, if_sells)
+        return self._frac(max(abs(high), abs(low)))
 
 
 def _capped_reduce_only(position: Decimal, side: Side, contracts: Decimal) -> Decimal:

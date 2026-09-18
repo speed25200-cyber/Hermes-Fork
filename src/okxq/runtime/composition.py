@@ -72,8 +72,10 @@ from okxq.features.incremental import IncrementalFeatureEngine
 from okxq.features.registry import FeatureEngine, default_registry
 from okxq.persistence.db import make_engine, make_session_factory
 from okxq.persistence.repositories import UnitOfWorkFactory
-from okxq.portfolio.costs import CostModel, FeeSchedule
+from okxq.portfolio.costs import ALL_COMPONENTS as ALL_COST_COMPONENTS
+from okxq.portfolio.costs import CostComponent, CostModel, FeeSchedule
 from okxq.portfolio.covariance import CovarianceEstimate, estimate_covariance
+from okxq.portfolio.forecasts import SIGNED_COMPONENTS as SIGNED_COST_COMPONENTS
 from okxq.portfolio.forecasts import EdgeBuilder as PortfolioEdgeBuilder
 from okxq.portfolio.forecasts import PortfolioLimits, assemble_portfolio_inputs
 from okxq.portfolio.optimizer import CvxpyPortfolioBuilder
@@ -287,9 +289,27 @@ class BookCostComponents:
             # Nombre de règlements de funding traversés sur l'horizon : un horizon d'une minute n'en
             # traverse normalement aucun, et supposer le contraire inventerait un coût.
             settlements_in_horizon=0,
+            # T24 : on ne demande au modèle que ce que le prix ne contient PAS déjà. En convention
+            # EXECUTABLE le spread est dans le prix ; le lui faire déduire quand même fabriquerait un
+            # coût inexistant — et le modèle le refuse (``DoubleCountingError``), ce qui rendait cette
+            # convention inutilisable dans la boucle.
+            deduct=tuple(c for c in ALL_COST_COMPONENTS if c.value not in self.included_in_price),
         )
-        # Les clés du modèle sont des `CostComponent` ; le protocole des edges attend des chaînes.
-        return {str(component): value for component, value in estimate.components.items()}
+        # Deux conventions de signe et deux vocabulaires se rencontrent ici, et les confondre rendait
+        # chaque estimation inexploitable. `okxq.portfolio.costs` rend des composantes SIGNÉES (négatif
+        # = coût, positif = gain) nommées comme `CostComponent` (« funding_expected ») ; le constructeur
+        # d'edges (§37) attend des MAGNITUDES de coût positives nommées comme `KNOWN_COMPONENTS`
+        # (« funding »). Sans cette traduction, `validate_components` refusait toute estimation issue
+        # d'un carnet réel (« composante de coût négative », puis « composante inconnue ») et la décision
+        # finissait en FAILED. Un gain sur une composante NON signée (rebate maker) n'est pas propagé en
+        # coût négatif : il est ramené à zéro, car §51 interdit qu'un rebate crée une incitation au
+        # churn ; seul le funding reste signé, un funding favorable étant un flux réellement encaissé.
+        out: dict[str, Decimal] = {}
+        for component, signed in estimate.components.items():
+            name = "funding" if component is CostComponent.FUNDING_EXPECTED else str(component)
+            cost = -signed
+            out[name] = cost if name in SIGNED_COST_COMPONENTS else max(cost, ZERO)
+        return out
 
 
 def _minimum_tradable_size(rt: Runtime) -> Callable[[MarketSnapshot, Forecast], Decimal]:
