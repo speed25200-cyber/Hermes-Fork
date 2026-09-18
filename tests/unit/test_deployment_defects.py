@@ -407,3 +407,46 @@ def test_the_rotation_travels_as_a_file_not_as_a_quoted_string() -> None:
     corps = script.read_text(encoding="utf-8")
     assert "--force-recreate --no-deps api" in corps
     assert 'if [ "$CODE" != "200" ]' in corps, "la rotation doit ÉCHOUER si elle ne révoque rien"
+
+
+def test_taking_over_the_okx_keys_renames_the_passphrase() -> None:
+    """L'ancien moteur nomme la phrase de passe `OKX_PASSPHRASE`, le nouveau `OKX_API_PASSPHRASE`.
+
+    Recopier sans renommer aurait produit une authentification qui échoue avec un message d'OKX peu
+    parlant — et on aurait cherché du côté de la signature HMAC, qui n'y serait pour rien. Le genre
+    de détail qui coûte une soirée.
+    """
+    racine = Path(__file__).resolve().parents[2]
+    script = (racine / "deploy" / "reprendre_cles_okx.sh").read_text(encoding="utf-8")
+    assert "lire OKX_PASSPHRASE" in script, "l'ancien nom doit être lu"
+    assert "OKX_API_PASSPHRASE=$PASSPHRASE" in script, "le nouveau nom doit être écrit"
+    # Le profil de région est déduit : sans lui, DEMO et LIVE refusent de démarrer, et le refus
+    # arriverait bien plus tard, au premier essai de connexion.
+    assert "OKX_ACCOUNT_REGION_PROFILE=$REGION" in script
+
+
+def test_the_okx_keys_only_ever_reach_the_gateway_file() -> None:
+    """Séparation des secrets : ces identifiants ne vont QUE dans `env/gateway.env`.
+
+    Un rôle non autorisé qui les trouverait dans son environnement refuserait de démarrer
+    (`assert_credentials_separation`). Le script ne doit donc écrire nulle part ailleurs.
+    """
+    racine = Path(__file__).resolve().parents[2]
+    script = (racine / "deploy" / "reprendre_cles_okx.sh").read_text(encoding="utf-8")
+    cibles = {ligne for ligne in script.splitlines() if "/opt/okxq/env/" in ligne and "CIBLE=" in ligne}
+    assert cibles == {"CIBLE=/opt/okxq/env/gateway.env"}, f"cibles inattendues : {cibles}"
+    assert "chmod 600" in script, "un fichier de secrets doit être en 0600"
+
+
+def test_taking_over_the_keys_does_not_switch_the_mode() -> None:
+    """Poser des clés n'active RIEN. Le script doit le dire, et ne toucher à aucun mode.
+
+    En PAPER, `build_exchange_adapter` rend un `VirtualExchange` et ne lit même pas ces variables :
+    les clés sont une préparation pour DEMO, pas un interrupteur.
+    """
+    racine = Path(__file__).resolve().parents[2]
+    script = (racine / "deploy" / "reprendre_cles_okx.sh").read_text(encoding="utf-8")
+    assert "OKXQ_MODE" not in script, "le script ne doit pas toucher au mode"
+    assert "n active PAS le trading" in script
+    for interdit in ("live_enabled", "acces_sans_cle", "LIVE=true"):
+        assert interdit not in script, f"le script touche à {interdit}"

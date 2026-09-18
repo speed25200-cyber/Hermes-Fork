@@ -14,6 +14,10 @@ on:
         description: "oui : poser TYPESAFE_API_KEY (secret du dépôt) dans env/jev-worker.env et redémarrer jev-worker"
         required: false
         default: ""
+      reprendre_cles_okx:
+        description: "oui : reprendre les cles OKX de l ancien Hermes (/root/hermes/.env) vers env/gateway.env. N ACTIVE RIEN : en PAPER elles ne sont pas lues."
+        required: false
+        default: ""
       tourner_cle_operateur:
         description: "oui : RÉVOQUER la clé opérateur en place et en générer une neuve (toutes les clés dérivées changent)"
         required: false
@@ -89,6 +93,12 @@ jobs:
             cd /opt/okxq && docker compose up -d --force-recreate --no-deps jev-worker
             echo "  cle TypeSafe posee dans env/jev-worker.env, jev-worker recree"
           '
+
+      - name: Reprendre les clés OKX de l'ancien Hermes
+        if: ${{ inputs.reprendre_cles_okx == 'oui' }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new "root@$VPS" \
+            bash -s < deploy/reprendre_cles_okx.sh
 
       - name: Tourner la clé opérateur
         if: ${{ inputs.tourner_cle_operateur == 'oui' }}
