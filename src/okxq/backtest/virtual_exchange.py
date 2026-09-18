@@ -183,6 +183,11 @@ class VirtualExchange:
         self.fees_paid = ZERO
         self.funding_paid = ZERO
         self.reservation = DepthReservation()
+        # Version de carnet par instrument : la réservation de profondeur n'est libérée que lorsqu'une
+        # NOUVELLE version de carnet est publiée, c'est-à-dire lorsqu'une profondeur est réellement
+        # observée à nouveau. La libérer à la fin d'un ordre permettrait à deux de nos ordres de
+        # consommer deux fois le même volume affiché (T30).
+        self._book_versions: dict[str, int] = {}
         self._events: list[tuple[datetime, int, ExchangeEvent]] = []
         self._seq = 0
         self._cancel_all_after_deadline: datetime | None = None
@@ -477,6 +482,7 @@ class VirtualExchange:
     ) -> None:
         """Avance la simulation : arrivées d'ordres, files maker, annulations, protections, CAA."""
         now = self._now()
+        self._release_reservations_on_new_book(books)
         self._expire_cancel_all_after(now)
         for order in list(self.orders.values()):
             if order.phase is _Phase.PENDING_ARRIVAL and order.arrives_at <= now:
@@ -485,6 +491,14 @@ class VirtualExchange:
             self._apply_trade_to_queues(trade, now)
         self._trigger_protections(now)
         self._apply_effective_cancels(now)
+
+    def _release_reservations_on_new_book(self, books: Mapping[str, BookView] | None) -> None:
+        """Une nouvelle version de carnet = profondeur réellement réobservée : la réservation tombe."""
+        views = books if books is not None else self.market.book_views()
+        for inst_id, view in views.items():
+            if self._book_versions.get(inst_id) != view.version:
+                self._book_versions[inst_id] = view.version
+                self.reservation.release_instrument(inst_id)
 
     def _expire_cancel_all_after(self, now: datetime) -> None:
         """Cancel All After annule les ORDRES en attente. Il ne ferme AUCUNE position (T60)."""
@@ -691,7 +705,6 @@ class VirtualExchange:
         order.reject_reason = reason
         if order.queue is not None:
             order.queue.cancel_remaining()
-        self.reservation.release_instrument(order.inst_id)
         kind = {
             OrderState.FILLED: OrderEventKind.FILL,
             OrderState.CANCELED: OrderEventKind.CANCEL,
