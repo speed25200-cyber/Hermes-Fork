@@ -324,23 +324,15 @@ def test_changing_an_env_file_recreates_the_container_instead_of_restarting_it()
     document = yaml.safe_load(texte)
     assert document["jobs"]["status"]["steps"], "workflow vide : ce test ne vérifierait rien"
 
-    assert "docker compose restart" not in texte, (
-        "un `restart` après avoir écrit un fichier d'environnement ne prend pas la nouvelle valeur"
-    )
-    assert texte.count("--force-recreate") >= 3, "les trois poses de clé doivent recréer leur service"
-
-
-def test_the_rotation_verifies_the_new_key_instead_of_assuming_it() -> None:
-    """Une révocation doit être CONSTATÉE, pas supposée.
-
-    Sans ce contrôle, l'étape se terminait en vert alors que rien n'avait été révoqué.
-    """
-    racine = Path(__file__).resolve().parents[2]
-    texte = (racine / ".github" / "workflows" / "vps-status.yml").read_text(encoding="utf-8")
-    debut = texte.index("Tourner la clé opérateur")
-    etape = texte[debut : debut + 3000]
-    assert "Authorization: Bearer" in etape, "la vérification doit présenter la nouvelle clé"
-    assert 'if [ "$CODE" != "200" ]' in etape, "l'étape doit ÉCHOUER si la nouvelle clé est refusée"
+    # La rotation vit maintenant dans `deploy/rotate_operator_key.sh` (voir le test sur les
+    # apostrophes) : on regarde donc les deux endroits.
+    rotation = (racine / "deploy" / "rotate_operator_key.sh").read_text(encoding="utf-8")
+    for nom, contenu in (("vps-status.yml", texte), ("rotate_operator_key.sh", rotation)):
+        assert "docker compose restart" not in contenu, (
+            f"{nom} : un `restart` après avoir écrit un fichier d'environnement ne relit pas la valeur"
+        )
+    poses = texte.count("--force-recreate") + rotation.count("--force-recreate")
+    assert poses >= 3, f"les trois poses de clé doivent recréer leur service (vu {poses})"
 
 
 def test_recreating_a_service_does_not_drag_its_dependencies_along() -> None:
@@ -367,3 +359,51 @@ def test_recreating_a_service_does_not_drag_its_dependencies_along() -> None:
     for ligne in lignes:
         assert "--no-deps" in ligne, f"recréation qui entraîne ses dépendances : {ligne}"
         assert "|| true" not in ligne, f"échec avalé sur une commande dont la suite dépend : {ligne}"
+
+
+def test_no_apostrophe_hides_inside_a_single_quoted_remote_block() -> None:
+    """Une apostrophe dans un commentaire français COUPE le script distant en deux.
+
+    Les blocs envoyés à `ssh` sont des chaînes entre guillemets SIMPLES. Une apostrophe la referme :
+    tout ce qui suit s'exécute alors sur le runner GitHub au lieu du serveur. C'est arrivé, et le
+    symptôme ne désignait pas la cause —
+
+        line 22: cd: /opt/okxq: No such file or directory
+
+    « /opt/okxq n'existe pas » était vrai : sur le runner. La moitié du script de rotation tournait
+    au mauvais endroit, en silence, après « L'échec n'est plus avalé ».
+
+    La règle porte sur les COMMENTAIRES, où le français se glisse. L'idiome délibéré `'"$VAR"'`,
+    qui interpole une variable du runner dans la commande distante, reste permis : il ferme et
+    rouvre la chaîne exprès, sur une ligne de commande, pas dans de la prose.
+    """
+    import re
+
+    racine = Path(__file__).resolve().parents[2]
+    fautifs: list[str] = []
+    for fichier in sorted((racine / ".github" / "workflows").glob("*.yml")):
+        texte = fichier.read_text(encoding="utf-8")
+        blocs = re.findall(r"ssh[^\n]*'\n(.*?)\n\s*'", texte, re.S)
+        for bloc in blocs:
+            for ligne in bloc.splitlines():
+                nue = ligne.strip()
+                if nue.startswith("#") and "'" in nue:
+                    fautifs.append(f"{fichier.name} : {nue}")
+    assert not fautifs, "apostrophe dans un commentaire de bloc distant :\n" + "\n".join(fautifs)
+
+
+def test_the_rotation_travels_as_a_file_not_as_a_quoted_string() -> None:
+    """Le moyen sûr d'envoyer un script distant : l'entrée standard, pas une chaîne citée.
+
+    `ssh ... bash -s < fichier` n'a aucun problème de guillemets, et le script se relit, se teste et
+    se vérifie avec `bash -n` comme n'importe quel fichier. C'est ce que font déjà `preflight.sh`,
+    `uninstall_hermes.sh` et `etat.sh`.
+    """
+    racine = Path(__file__).resolve().parents[2]
+    script = racine / "deploy" / "rotate_operator_key.sh"
+    assert script.is_file()
+    workflow = (racine / ".github" / "workflows" / "vps-status.yml").read_text(encoding="utf-8")
+    assert "bash -s < deploy/rotate_operator_key.sh" in workflow
+    corps = script.read_text(encoding="utf-8")
+    assert "--force-recreate --no-deps api" in corps
+    assert 'if [ "$CODE" != "200" ]' in corps, "la rotation doit ÉCHOUER si elle ne révoque rien"
