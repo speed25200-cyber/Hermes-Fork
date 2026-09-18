@@ -152,8 +152,61 @@ services:
         limits: { cpus: "1.00", memory: 512M, pids: 512 }
 
   # ══════════════════════════════════════════════════════════════════════════════════════════════════
+  moteur:
+    # Moteur COMPLET en un seul processus (`--role all`), pour le profil PAPER.
+    #
+    # POURQUOI un seul processus, alors que le découpage par rôle existe juste en dessous. L'état de
+    # marché (`MarketState`) vit EN MÉMOIRE dans le processus qui collecte. Seul le rôle `collector`
+    # collecte, et il n'existe aucun transport de sa mémoire vers celle des autres. Dans le découpage
+    # en six conteneurs, le processus qui DÉCIDE n'a donc jamais vu une seule donnée de marché : sa
+    # porte de données reste fermée, le kill switch passe en SOFT_HALT sur `data_stale`, et chaque
+    # frontière rend NO_TRADE. Indéfiniment, sans que rien ne soit en panne.
+    #
+    # Réunir les rôles dans un processus fait disparaître le problème : collecte, features, décision,
+    # risque et exécution simulée partagent la même mémoire, dans le même ordre.
+    #
+    # Ce choix est réservé à PAPER, et c'est important : en PAPER il n'existe AUCUN identifiant
+    # d'échange, donc réunir les rôles ne réunit aucun secret. En DEMO et en LIVE, le gateway détient
+    # des clés et doit rester seul (§60) — le découpage y est nécessaire, et il lui manque le
+    # transport de données de marché qui reste à construire.
+    <<: *okxq-app
+    profiles: ["paper"]
+    env_file:
+      - path: env/moteur.env
+        required: false
+    command:
+      - sh
+      - -c
+      - exec okxq "$${OKXQ_MODE_CLI:-paper}" run --config "$${OKXQ_CONFIG:-configs/paper.yaml}" --role all
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [data, edge]
+    volumes:
+      - okxq-data:/app/data
+      - okxq-artifacts:/app/artifacts
+      - okxq-reports:/app/reports
+      - okxq-runtime:/app/runtime
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,socket,sys; sys.exit(0 if b'--role' in pathlib.Path('/proc/1/cmdline').read_bytes() and socket.create_connection(('postgres', 5432), 3) else 1)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "1.50", memory: 1536M, pids: 1024 }
+        reservations: { memory: 384M }
+
+  # ══════════════════════════════════════════════════════════════════════════════════════════════════
   collector:
     <<: *okxq-app
+    # Découpage par rôle : réservé à DEMO et LIVE, où le gateway détient des clés et doit rester
+    # seul. Voir `moteur` ci-dessus pour PAPER, et le défaut connu du transport de données.
+    profiles: ["demo", "live"]
     # Données PUBLIQUES uniquement. Ce service ne reçoit aucune clé OKX : il n'en a pas besoin pour
     # lire le carnet et les trades, et lui en donner une élargirait le rayon d'un vol de clé (§60).
     env_file:
@@ -196,6 +249,9 @@ services:
   # ══════════════════════════════════════════════════════════════════════════════════════════════════
   strategy:
     <<: *okxq-app
+    # Découpage par rôle : réservé à DEMO et LIVE, où le gateway détient des clés et doit rester
+    # seul. Voir `moteur` ci-dessus pour PAPER, et le défaut connu du transport de données.
+    profiles: ["demo", "live"]
     # Recherche et inférence. Aucune clé d'échange : une sortie de modèle est une PROPOSITION, elle
     # passe par le risque puis par le gateway (§25, §41). Sans clé, ce service ne peut pas contourner.
     env_file:
@@ -240,6 +296,9 @@ services:
   # ══════════════════════════════════════════════════════════════════════════════════════════════════
   risk:
     <<: *okxq-app
+    # Découpage par rôle : réservé à DEMO et LIVE, où le gateway détient des clés et doit rester
+    # seul. Voir `moteur` ci-dessus pour PAPER, et le défaut connu du transport de données.
+    profiles: ["demo", "live"]
     # Service de risque INDÉPENDANT du modèle (§25, §41). Il détient l'autorité finale et n'a donc,
     # lui aussi, aucune clé d'échange : il autorise, il n'exécute pas.
     env_file:
@@ -276,6 +335,9 @@ services:
   # ══════════════════════════════════════════════════════════════════════════════════════════════════
   gateway:
     <<: *okxq-app
+    # Découpage par rôle : réservé à DEMO et LIVE, où le gateway détient des clés et doit rester
+    # seul. Voir `moteur` ci-dessus pour PAPER, et le défaut connu du transport de données.
+    profiles: ["demo", "live"]
     # LE SEUL service qui signe et envoie des ordres, donc LE SEUL à recevoir les clés OKX (§60).
     # env/gateway.env est le seul fichier du déploiement qui porte OKX_API_*.
     env_file:
@@ -319,6 +381,9 @@ services:
   # ══════════════════════════════════════════════════════════════════════════════════════════════════
   jev-worker:
     <<: *okxq-app
+    # Découpage par rôle : réservé à DEMO et LIVE, où le gateway détient des clés et doit rester
+    # seul. Voir `moteur` ci-dessus pour PAPER, et le défaut connu du transport de données.
+    profiles: ["demo", "live"]
     # Worker sémantique JEV / TypeSafe. Il reçoit SA clé et rien d'autre (§60) : pas de clé d'échange,
     # pas de clé opérateur. Il ne monte ni /app/data ni /app/artifacts — donc ni prix privés, ni
     # modèles, ni rapports : aucune position, aucune équité, aucune stratégie ne peut partir dans une
