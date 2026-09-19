@@ -254,14 +254,30 @@ class Normalizer:
         ``settled`` distingue la valeur estimée disponible avant règlement du montant réellement réglé.
         """
         realized = _s(row.get("realizedRate")) or _s(row.get("settFundingRate"))
+        # `settled` disait « un taux réglé est présent dans le message », alors qu'il doit dire « CE
+        # taux, à CETTE échéance, a été réglé ». Or le flux d'OKX livre dans le même message
+        # l'échéance À VENIR (`fundingTime`, dans le futur) et un taux déjà réglé de la période
+        # précédente. L'enregistrement produit était donc un « taux réglé » dont l'heure de règlement
+        # n'était pas encore arrivée : la plateforme le refusait, à juste titre, et toutes les
+        # décisions échouaient sur `CAUSALITY_VIOLATION`.
+        #
+        # On ne marque donc réglé que si l'échéance portée par l'enregistrement est PASSÉE au moment
+        # de l'observation. Sinon, c'est une estimation — ce qu'elle est réellement.
+        #
+        # Le choix est volontairement conservateur : au pire on renonce à un taux réglé et une
+        # feature se dégrade visiblement ; au mieux on n'affirme jamais un règlement qui n'a pas eu
+        # lieu. L'inverse fabriquerait une information, ce qui est toujours plus grave.
+        echeance = ms_to_datetime(row.get("fundingTime"))
+        observe_a = ms_to_datetime(row.get("ts")) or echeance
+        regle = bool(realized) and echeance is not None and observe_a is not None and echeance <= observe_a
         payload = {
             "inst_id": inst,
             "funding_rate": _s(row.get("fundingRate")),
             "next_funding_rate": _s(row.get("nextFundingRate")) or None,
             "funding_time_ms": _s(row.get("fundingTime")),
             "next_funding_time_ms": _s(row.get("nextFundingTime")) or None,
-            "settled": bool(realized),
-            "realized_rate": realized or None,
+            "settled": regle,
+            "realized_rate": realized if regle else None,
         }
         return self._envelope(
             "funding", payload, exchange_ts=ms_to_datetime(row.get("ts") or row.get("fundingTime"))
