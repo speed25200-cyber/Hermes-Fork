@@ -175,6 +175,47 @@ lui-même.
   processus continue, la santé passe `market_data` en FAULT, la décision est NO_TRADE avec
   `DATA_STALE`.
 
+## Bloquant observé en marche réelle : la causalité point-in-time et le flux continu
+
+Constaté sur le VPS le 19/09/2026, moteur PAPER en marche depuis dix minutes, dix décisions rendues :
+
+    rôles qui décident :             all
+    décisions (10 min) :             10
+    motifs de la dernière décision : CAUSALITY_VIOLATION
+
+La porte de données est bien ouverte — le motif n'est plus `DATA_STALE`, et le moteur est connecté à
+`wss://ws.okx.com`, 467 instruments découverts. Mais l'issue de ces décisions est **`FAILED`**, pas
+`NO_TRADE` : la boucle lève `CausalityError` avant d'atteindre le prédicteur.
+
+**Cause.** `FeatureEngine.compute` refuse de calculer si un événement a déjà été ingéré après la
+coupure demandée :
+
+    if self._last_available_at is not None and self._last_available_at > cutoff:
+        raise CausalityError("événement disponible après la coupure déjà ingéré : calcul refusé")
+
+Cette garde est juste en REJEU, où l'on contrôle l'ingestion : un événement postérieur à la coupure
+y signale un défaut. Elle est intenable en MARCHE CONTINUE : la tâche de drainage ingère en
+permanence, donc `_last_available_at` vaut toujours à peu près « maintenant », et toute coupure
+antérieure la déclenche. Ce n'est pas un défaut de câblage qu'un réglage corrigerait — aucune valeur
+de coupure ne satisfait à la fois la garde et la frontière de minute.
+
+**Ce qui n'est PAS en cause.** La sélection, elle, est déjà point-in-time : `_state` ne retient que
+`ts <= cutoff` (historique de carnet, trades, bougie intrabar, open interest), et
+`PointInTimeState.__post_init__` vérifie l'invariant sur l'état construit. Une exception : `_state`
+prend le carnet VIVANT (`b.book.state()`) et non son état à la coupure, alors que `b.book_states`
+conserve l'historique nécessaire.
+
+**Correction envisagée, NON appliquée** — elle touche le cœur de la garantie anti-anticipation, et
+une erreur y fausserait silencieusement toute recherche future :
+
+1. rendre la garde conditionnelle — stricte en rejeu, recherche et tests (défaut inchangé),
+   sélective en marche continue, où « j'ai des données plus récentes » ne doit pas valoir « j'ai
+   utilisé des données plus récentes » ;
+2. prendre le carnet dans `book_states` à la coupure, au lieu du carnet vivant.
+
+Tant que ce point n'est pas tranché, la plateforme tourne, observe et rapporte, mais **aucune
+décision n'aboutit**. Aucune conséquence financière : le mode est PAPER et l'échange est simulé.
+
 ## Prérequis externes (accès manquants dans cette session)
 
 - **Clés OKX DEMO + profil de région** : validation connectée du connecteur privé (P7). Sans elles,
