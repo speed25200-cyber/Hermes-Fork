@@ -306,3 +306,55 @@ def test_un_flux_complet_garde_bien_les_donnees_anterieures() -> None:
     assert len(renseignees) > 6, (
         f"trop peu de features calculées ({len(renseignees)}) : l'état a été vidé au lieu d'être borné"
     )
+
+
+# --- l'horodatage d'échange n'est pas l'instant de disponibilité ------------------------------------
+# La borne se lit sur `available_at`, jamais sur `ts`. Un relevé peut porter un `ts` ANTÉRIEUR à la
+# coupure et n'être ARRIVÉ qu'après — c'est le cas normal sur un flux : le réseau et le courtier
+# ajoutent toujours un délai. Une sélection qui borne `ts` laisse donc entrer des données reçues
+# après la coupure, et la vérification de l'état construit les rejette.
+#
+# Ce test manquait, et son absence a coûté trois cycles : la correction du carnet bornait `ts`, le
+# déploiement rendait le même CAUSALITY_VIOLATION, et le jeu d'essai ne le montrait pas parce qu'il
+# datait les deux instants à l'identique.
+
+
+def carnet_arrive_en_retard(*, ts: datetime, recu_a: datetime, seq: int, bid: str, ask: str) -> EventEnvelope:
+    """Un carnet dont l'horodatage d'échange précède la coupure, mais qui arrive après.
+
+    C'est exactement ce que produit un flux : `ts_ms` vient de l'échange, `available_at` est
+    l'instant où NOUS l'avons su.
+    """
+    env = enveloppe(
+        "book.snapshot",
+        available_at=recu_a,
+        seq=seq,
+        payload={
+            "ts_ms": str(int(ts.timestamp() * 1000)),
+            "seq_id": str(seq),
+            "bids": [[bid, "10"]],
+            "asks": [[ask, "10"]],
+        },
+    )
+    return env
+
+
+def test_un_carnet_horodate_avant_mais_recu_apres_ne_sert_pas() -> None:
+    """Le défaut : borner `ts` au lieu de `available_at` laisse entrer une donnée non disponible."""
+    inc = moteur(flux_continu=True)
+    inc.ingest(carnet(at=T0 + timedelta(seconds=30), seq=1, bid="100", ask="101"))
+    inc.ingest(echange(at=T0 + timedelta(seconds=40), seq=2, prix="100.5"))
+    # `ts` une seconde AVANT la coupure, reçu trois secondes APRÈS : indisponible à la coupure.
+    inc.ingest(
+        carnet_arrive_en_retard(ts=COUPURE - timedelta(seconds=1), recu_a=APRES, seq=3, bid="900", ask="901")
+    )
+    calcul = inc.compute(INST, COUPURE)
+
+    temoin = moteur(flux_continu=True)
+    temoin.ingest(carnet(at=T0 + timedelta(seconds=30), seq=1, bid="100", ask="101"))
+    temoin.ingest(echange(at=T0 + timedelta(seconds=40), seq=2, prix="100.5"))
+    attendu = temoin.compute(INST, COUPURE)
+
+    assert calcul.vector.values == attendu.vector.values, (
+        "un carnet reçu après la coupure a servi au calcul : sa date d'échange ne le rend pas disponible"
+    )

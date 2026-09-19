@@ -1689,12 +1689,20 @@ def _boundary_callback(rt: Runtime) -> Callable[[datetime, datetime], Awaitable[
         if loop is None:
             return None
         record = await loop.run_once(boundary, deadline)
+        # Le DÉTAIL de l'échec, et pas seulement son code. Un `CAUSALITY_VIOLATION` sans le champ
+        # fautif a coûté trois cycles de déploiement : le message existait — il nomme le champ — mais
+        # il restait dans l'enregistrement persisté, jamais dans le journal qu'on lit. On corrigeait
+        # donc au jugé, et on redéployait pour découvrir le champ suivant.
+        detail = None
+        if record.outcome == "FAILED" and record.rejected_alternatives:
+            detail = str(record.rejected_alternatives[-1].get("error", ""))[:300] or None
         log.info(
             "decision",
             decision_id=record.decision_id,
             outcome=record.outcome,
             reason_codes=",".join(record.reason_codes),
             intents=len(record.intents),
+            erreur=detail,
         )
         return record
 
