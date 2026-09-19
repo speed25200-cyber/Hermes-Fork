@@ -55,14 +55,18 @@ if [ -f "$DIR/env/api.env" ]; then
 fi
 
 echo
-echo "===== journaux applicatifs (20 dernières lignes par service) ====="
+echo "===== journaux applicatifs (contrôles de santé exclus) ====="
 # PostgreSQL est exclu VOLONTAIREMENT. Ses points de contrôle produisent une ligne toutes les cinq
 # minutes, sans rapport avec la plateforme, et noyaient tout le reste : un `tail` sur ce rapport ne
 # montrait plus que des « checkpoint complete ». Le diagnostic, lui, est en bas.
 APPLICATIFS=$(printf '%s' "$SERVICES" | tr ' ' '\n' | grep -v "^postgres$" | tr '\n' ' ')
 if [ -n "$APPLICATIFS" ] && cd "$DIR" 2>/dev/null; then
+  # `uvicorn.access` est exclu au même titre que PostgreSQL : un contrôle de santé toutes les 15 s
+  # produit quatre lignes par minute qui ne disent rien, et elles chassaient les journaux du MOTEUR
+  # hors de la fenêtre. On lisait donc un rapport où le seul processus qui décide était absent.
   # shellcheck disable=SC2086
-  docker compose logs --tail=20 --no-color $APPLICATIFS 2>/dev/null | tail -100 || true
+  docker compose logs --tail=60 --no-color $APPLICATIFS 2>/dev/null \
+    | grep -v "uvicorn.access" | tail -60 || true
 fi
 
 echo
@@ -130,15 +134,18 @@ dire "décisions (10 min) :" "$NB"
 # Les deux portes qui rendent NO_TRADE même quand tout va bien. Sans ces lignes, on lit « NO_TRADE »
 # et on cherche une panne là où il n'y en a pas : la plateforme refuse d'agir parce qu'elle n'a
 # aucun modèle validé, ce qui est le comportement voulu et non un défaut.
+# Ces deux indicateurs sont émis UNE FOIS, au démarrage. Les chercher dans une fenêtre de dix
+# minutes les faisait passer au vert dès que le processus avait plus de dix minutes — sans que rien
+# n'ait changé. On ne conclut donc au positif que si on a la preuve ; sinon on dit qu'on ne sait pas.
 if printf '%s' "$JOURNAUX" | grep -q '"event": "predictor_indisponible"'; then
   dire "prédicteur :" "INDISPONIBLE — aucun modèle désigné (OKXQ_MODEL_ARTIFACT)"
 else
-  dire "prédicteur :" "disponible"
+  dire "prédicteur :" "non signalé sur 10 min (indicateur émis au démarrage)"
 fi
 if printf '%s' "$JOURNAUX" | grep -q '"event": "entrees_non_autorisees"'; then
   dire "entrées :" "NON AUTORISÉES (séquence de démarrage incomplète)"
 else
-  dire "entrées :" "autorisées par la séquence de démarrage"
+  dire "entrées :" "non signalé sur 10 min (indicateur émis au démarrage)"
 fi
 HALT=$(printf '%s' "$JOURNAUX" | grep '"event": "halt_change"' | tail -1 | grep -o '"apres": "[A-Z_]*"' | cut -d'"' -f4)
 dire "dernier changement de halt :" "${HALT:-aucun}"
@@ -151,6 +158,11 @@ dire "motifs de la dernière décision :" "${DERNIERE:-—}"
 # La distinction est tout le diagnostic.
 ISSUE=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | tail -1 | grep -o '"outcome": "[A-Z_]*"' | cut -d'"' -f4)
 dire "issue de la dernière décision :" "${ISSUE:-—}"
+DETAIL=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | grep '"outcome": "FAILED"' \
+  | tail -1 | grep -o '"erreur": "[^"]*"' | cut -d'"' -f4)
+if [ -n "$DETAIL" ]; then
+  dire "détail du dernier échec :" "$DETAIL"
+fi
 ECHOUEES=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | grep -c '"outcome": "FAILED"')
 if [ "${ECHOUEES:-0}" -gt 0 ]; then
   dire "décisions EN ÉCHEC (10 min) :" "$ECHOUEES — la boucle n'aboutit pas ; ce n'est PAS une abstention"
