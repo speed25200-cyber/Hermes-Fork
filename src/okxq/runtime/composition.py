@@ -27,7 +27,7 @@ import os
 import signal
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -57,6 +57,7 @@ from okxq.domain.events import (
     ApprovedOrder,
     EdgeEstimate,
     Forecast,
+    JevEvaluation,
     MarketSnapshot,
     OrderIntent,
     PortfolioInputs,
@@ -77,8 +78,10 @@ from okxq.exchange.okx.capabilities import (
 )
 from okxq.exchange.okx.rest_public import OkxPublicRestClient
 from okxq.exchange.okx.websocket_public import SubscriptionArg
+from okxq.features.events import JEV_MAX_AGE_S
 from okxq.features.incremental import IncrementalFeatureEngine
 from okxq.features.registry import FeatureEngine, default_registry
+from okxq.jev.cache import JevFeatureStore
 from okxq.persistence.db import make_engine, make_session_factory
 from okxq.persistence.models import AccountSnapshot
 from okxq.persistence.repositories import UnitOfWorkFactory
@@ -395,11 +398,16 @@ class LiveFeatureProvider:
         universe: Callable[[], UniverseView],
         equity_version: Callable[[], str],
         reference_prices: Callable[[], Mapping[str, Decimal]],
+        jev_pour: Callable[[str, datetime], Sequence[JevEvaluation]] | None = None,
     ) -> None:
         self._engine = engine
         self._universe = universe
         self._equity_version = equity_version
         self._prices = reference_prices
+        # Sans ce rappel, `compute` n'a JAMAIS reçu d'évaluation JEV : les features JEV étaient donc
+        # toutes nulles en marche réelle, quoi qu'ait produit le worker. Toute la chaîne existait —
+        # client, worker, cache, features — sauf le fil qui relie le cache au calcul.
+        self._jev_pour = jev_pour
 
     async def snapshot(self, cutoff_at: datetime) -> MarketSnapshot:
         cutoff_at = ensure_utc(cutoff_at, field="cutoff_at")
@@ -409,7 +417,32 @@ class LiveFeatureProvider:
         quality: dict[str, list[Any]] = {}
         versions: dict[str, str] = {}
         for inst in instruments:
-            computation = self._engine.compute(inst, cutoff_at, eligible=view.eligible, peers=instruments)
+            # La causalité des évaluations est déjà tenue en amont (`features_committed_at <= cutoff`
+            # dans la requête), et une seconde fois en aval par `select_evaluation`. On ne la refait
+            # pas ici : on transmet.
+            evaluations: Sequence[JevEvaluation] = ()
+            if self._jev_pour is not None:
+                try:
+                    evaluations = self._jev_pour(inst, cutoff_at)
+                except Exception as exc:
+                    # JEV est une source d'information SECONDAIRE. Laisser son indisponibilité
+                    # remonter ferait échouer la décision entière et en ferait un point de panne :
+                    # une base lente ou un cache corrompu suffirait à empêcher la plateforme de
+                    # réduire une position. Sans évaluation, les features JEV sont absentes et le
+                    # masque le dit — dégradation déclarée, pas panne silencieuse.
+                    log.warning(
+                        "jev_lecture_impossible",
+                        inst_id=inst,
+                        detail=repr(exc),
+                        effet="features JEV absentes pour cette décision",
+                    )
+            computation = self._engine.compute(
+                inst,
+                cutoff_at,
+                eligible=view.eligible,
+                peers=instruments,
+                jev_evaluations=evaluations,
+            )
             features[inst] = computation.vector
             versions[inst] = computation.vector.schema_hash
             # Les masques disent POURQUOI une feature manque ; on les remonte tels quels, sans les
@@ -1277,7 +1310,22 @@ def build_decision_loop(rt: Runtime, *, predictor: Any | None = None) -> Decisio
         current_contracts=lambda: {inst: state.signed_contracts for inst, state in positions_now().items()},
         inputs_of_target=lambda target: last_inputs.get(target.snapshot_id),
     )
+    # Le cache JEV est la SEULE source d'évaluations pour la décision : le worker y écrit, la boucle
+    # y lit. Aucun passage direct du worker au décideur, qui ferait dépendre la décision d'un
+    # processus vivant plutôt que d'un état persisté et rejouable.
+    jev_cache = JevFeatureStore(rt.session_factory)
+
+    def jev_pour(inst: str, cutoff: datetime) -> Sequence[JevEvaluation]:
+        """Évaluations utilisables pour cet instrument à cette coupure.
+
+        `max_age` borne la fraîcheur au même horizon que les features (`JEV_MAX_AGE_S`) : au-delà,
+        `select_evaluation` les écarterait de toute façon, et les charger coûterait pour rien.
+        """
+        fenetre = timedelta(seconds=JEV_MAX_AGE_S)
+        return [r.evaluation for r in jev_cache.evaluations_for(inst, cutoff, max_age=fenetre)]
+
     provider = LiveFeatureProvider(
+        jev_pour=jev_pour,
         engine=rt.features,
         universe=lambda: UniverseView(
             universe_version="runtime-univers",
