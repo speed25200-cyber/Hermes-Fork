@@ -175,6 +175,41 @@ lui-même.
   processus continue, la santé passe `market_data` en FAULT, la décision est NO_TRADE avec
   `DATA_STALE`.
 
+## Corrigé en marche réelle : la causalité point-in-time face à un flux continu
+
+Constaté sur le VPS le 19/09/2026, moteur PAPER connecté au flux public d'OKX, 467 instruments,
+dix décisions en dix minutes — **toutes en `FAILED` sur `CAUSALITY_VIOLATION`**. La porte de données
+était bien ouverte ; la boucle n'atteignait simplement jamais le prédicteur.
+
+**Cause.** `IncrementalFeatureEngine.compute` refusait de calculer dès qu'un événement postérieur à
+la coupure avait été ingéré. Juste en REJEU, où l'ordre de lecture est contrôlé et où un événement
+postérieur signale un défaut du jeu de données. Intenable en MARCHE CONTINUE : `drain_into_state`
+ingère sans arrêt, donc au moment où la frontière de minute demande son calcul, des événements
+postérieurs sont forcément déjà entrés. Aucune valeur de coupure ne satisfait les deux — ce n'était
+pas un réglage à ajuster. Ce que le refus constatait n'était d'ailleurs pas « j'ai utilisé des
+données trop récentes » mais « j'en ai en mémoire », ce qui sur un flux est vrai en permanence.
+
+**Correction appliquée, additive.**
+
+1. `IncrementalFeatureEngine(..., flux_continu=True)` lève ce refus — et lui seul. Le défaut reste
+   `False` : rejeu, recherche et tests gardent le comportement strict, à l'identique.
+2. `_state` reprend l'état de carnet AU PLUS TARD à la coupure (`book_states`) au lieu du carnet
+   vivant, qui sur un flux est postérieur. Quand le carnet vivant est antérieur ou égal à la
+   coupure — toujours le cas en rejeu — c'est lui qui est retenu : le rejeu est inchangé.
+3. `build_runtime` construit le moteur avec `flux_continu=True` : un processus en marche est par
+   définition alimenté par un flux qui ne s'arrête pas.
+
+**Ce qui porte la garantie point-in-time n'a pas bougé** : la SÉLECTION (`_state` ne retient que
+`ts <= cutoff`) et la VÉRIFICATION de l'état construit (`PointInTimeMarketState.__post_init__` lève
+encore si quoi que ce soit dépasse la coupure). Le refus retiré n'était pas ce rempart.
+
+**Vérification** (`tests/unit/test_causalite_flux_continu.py`) : le rejeu refuse toujours ; la marche
+continue aboutit ; le vecteur calculé avec un événement postérieur est IDENTIQUE à celui calculé sans
+lui (valeurs, noms, masques) — c'est la preuve d'absence d'anticipation ; un carnet est bien retenu ;
+et un carnet uniquement postérieur ne sert jamais de repli.
+
+895 tests, 2 xfail déclarés, aucun ignoré.
+
 ## Prérequis externes (accès manquants dans cette session)
 
 - **Clés OKX DEMO + profil de région** : validation connectée du connecteur privé (P7). Sans elles,

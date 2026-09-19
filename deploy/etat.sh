@@ -144,3 +144,16 @@ HALT=$(printf '%s' "$JOURNAUX" | grep '"event": "halt_change"' | tail -1 | grep 
 dire "dernier changement de halt :" "${HALT:-aucun}"
 DERNIERE=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | tail -1 | grep -o '"reason_codes": "[^"]*"' | cut -d'"' -f4)
 dire "motifs de la dernière décision :" "${DERNIERE:-—}"
+
+# L'ISSUE, et pas seulement les motifs. `NO_TRADE` veut dire « j'ai regardé et je m'abstiens » ;
+# `FAILED` veut dire « je n'ai pas pu aller au bout ». Les deux affichaient le même genre de motif
+# dans ce rapport, et on lisait une abstention volontaire là où la boucle plantait à chaque minute.
+# La distinction est tout le diagnostic.
+ISSUE=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | tail -1 | grep -o '"outcome": "[A-Z_]*"' | cut -d'"' -f4)
+dire "issue de la dernière décision :" "${ISSUE:-—}"
+ECHOUEES=$(printf '%s' "$JOURNAUX" | grep '"event": "decision"' | grep -c '"outcome": "FAILED"')
+if [ "${ECHOUEES:-0}" -gt 0 ]; then
+  dire "décisions EN ÉCHEC (10 min) :" "$ECHOUEES — la boucle n'aboutit pas ; ce n'est PAS une abstention"
+else
+  dire "décisions en échec (10 min) :" "0"
+fi

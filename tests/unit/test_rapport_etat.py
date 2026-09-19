@@ -32,6 +32,11 @@ DECISION = (
     '"reason_codes": "SOFT_HALT", "intents": 0, "event": "decision", "mode": "PAPER", '
     '"role": "all", "account_scope": "paper-local", "level": "info"}'
 )
+ECHEC = (
+    '{"decision_id": "dec_01m2xxxxxxxxxxxxxxxxxxxxxx", "outcome": "FAILED", '
+    '"reason_codes": "CAUSALITY_VIOLATION", "intents": 0, "event": "decision", "mode": "PAPER", '
+    '"role": "all", "account_scope": "paper-local", "level": "info"}'
+)
 PREDICTEUR = (
     '{"raison": "[PROTOCOL_VIOLATION] aucun modèle désigné", "effet": "NO_TRADE", '
     '"event": "predictor_indisponible", "mode": "PAPER", "role": "all", "level": "warning"}'
@@ -93,6 +98,7 @@ case "${{1:-}}" in
     for s in $nommes; do
       if [ "$s" = "{SOUS_PROFIL}" ]; then
         echo '{SOUS_PROFIL}-1  | {DECISION}'
+        echo '{SOUS_PROFIL}-1  | {ECHEC}'
         echo '{SOUS_PROFIL}-1  | {PREDICTEUR}'
       else
         echo "$s-1  | {{\\"event\\": \\"bruit\\", \\"level\\": \\"info\\"}}"
@@ -125,19 +131,29 @@ def lancer(tmp_path: Path) -> str:
     return res.stdout
 
 
+def valeur(sortie: str, libelle: str) -> str:
+    """La valeur d'une ligne « libellé : valeur » du diagnostic.
+
+    Compter les mots d'une ligne rendait les tests sensibles à la formulation du libellé : un test
+    qui casse quand on reformule une phrase ne teste pas le comportement.
+    """
+    ligne = next(li for li in sortie.splitlines() if libelle in li)
+    return ligne.split(":", 1)[1].strip()
+
+
 def test_le_diagnostic_voit_les_decisions_dun_service_sous_profil(tmp_path: Path) -> None:
     """Le défaut exact : `moteur` est sous `profiles: ["paper"]`, donc invisible sans être nommé."""
     sortie = lancer(tmp_path)
     assert "décisions (10 min) :" in sortie, "la ligne de comptage des décisions a disparu"
-    ligne = next(li for li in sortie.splitlines() if "décisions (10 min)" in li)
-    assert ligne.split()[-1] == "1", f"le rapport ne voit pas la décision du moteur : {ligne!r}"
+    assert valeur(sortie, "  décisions (10 min)") == "2", "le rapport ne voit pas les décisions du moteur"
 
 
 def test_le_diagnostic_rapporte_le_motif_de_la_derniere_decision(tmp_path: Path) -> None:
     """« NO_TRADE » sans motif n'apprend rien ; le motif dit s'il faut chercher une panne."""
     sortie = lancer(tmp_path)
-    ligne = next(li for li in sortie.splitlines() if "motifs de la dernière décision" in li)
-    assert "SOFT_HALT" in ligne, f"motif absent : {ligne!r}"
+    assert valeur(sortie, "motifs de la dernière décision") == "CAUSALITY_VIOLATION", (
+        "le motif de la DERNIÈRE décision n'est pas rapporté"
+    )
 
 
 def test_le_diagnostic_nomme_le_role_qui_decide(tmp_path: Path) -> None:
@@ -179,3 +195,16 @@ def test_le_diagnostic_est_la_derniere_section(tmp_path: Path) -> None:
     sections = [li for li in sortie.splitlines() if li.startswith("=====")]
     assert sections, "le rapport n'a plus de sections"
     assert "diagnostic" in sections[-1], f"le diagnostic n'est pas en dernier : {sections[-1]!r}"
+
+
+def test_le_diagnostic_distingue_un_echec_dune_abstention(tmp_path: Path) -> None:
+    """`NO_TRADE` et `FAILED` ne veulent pas dire la même chose, et le rapport les confondait.
+
+    « Je m'abstiens » est le comportement voulu ; « je n'ai pas pu aller au bout » est une panne.
+    Les deux portaient un motif d'allure identique, et on lisait une abstention volontaire là où la
+    boucle échouait à chaque minute sur une violation de causalité.
+    """
+    sortie = lancer(tmp_path)
+    assert valeur(sortie, "issue de la dernière décision") == "FAILED", "l'issue n'est pas rapportée"
+    compte = valeur(sortie, "ÉCHEC (10 min)").split()[0]
+    assert compte == "1", f"le compte des décisions en échec est faux : {compte!r}"
