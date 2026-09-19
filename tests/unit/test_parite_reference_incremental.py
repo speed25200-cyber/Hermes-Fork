@@ -167,7 +167,8 @@ def test_la_reference_elle_meme_ignore_les_evenements_recus_apres_la_coupure() -
 def test_la_parite_tient_quel_que_soit_le_retard(retard_s: int) -> None:
     """Un délai de livraison plus ou moins long ne doit rien changer à l'accord des deux moteurs."""
     tard = COUPURE - timedelta(seconds=2)
-    evs = flux_avec_retard()[:5] + [
+    evs = [
+        *flux_avec_retard()[:5],
         carnet(ts=tard, recu_a=COUPURE + timedelta(seconds=retard_s), seq=6, bid="900", ask="901"),
     ]
     assert par_reference(evs) == par_incremental(evs), f"divergence avec un retard de {retard_s} s"
