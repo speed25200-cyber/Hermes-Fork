@@ -5,8 +5,18 @@ Mêmes règles de fenêtrage que ``okxq.features.batch`` (parité T16) :
 - trades : ``ts ∈ (cutoff-300 s, cutoff]`` ; bougies : clôturées, ``open+60 <= cutoff``, dernière version
   disponible par ouverture, 61 dernières ; funding : 16 derniers reçus ; OI : ``ts > cutoff-4200 s``.
 
-Le moteur refuse de calculer si un événement ingéré est disponible APRÈS la coupure (``CausalityError``) :
-c'est l'appelant (scheduler 60 s ou replay) qui garantit l'ordre ``(available_at, ingest_seq)``.
+En REJEU (défaut), le moteur refuse de calculer si un événement ingéré est disponible APRÈS la
+coupure (``CausalityError``) : l'appelant contrôle l'ordre ``(available_at, ingest_seq)``, et un
+événement postérieur signale un défaut du jeu de données.
+
+En MARCHE CONTINUE (``flux_continu=True``), ce refus est levé — et lui seul. La tâche de drainage
+ingère en permanence : des événements postérieurs à la coupure sont toujours déjà entrés quand la
+frontière de minute demande son calcul, et aucune coupure ne peut satisfaire les deux. Ce que ce
+refus constatait n'était pas « j'ai utilisé des données trop récentes » mais « j'en ai en mémoire ».
+
+La garantie point-in-time reste portée par ce qui la porte vraiment, dans les deux cas :
+la SÉLECTION (``_state`` ne retient que ``ts <= cutoff``, carnet compris) et la VÉRIFICATION de
+l'état construit (``PointInTimeMarketState.__post_init__`` lève si quoi que ce soit dépasse).
 """
 
 from __future__ import annotations
@@ -103,9 +113,27 @@ class _Buffers:
 
 
 class IncrementalFeatureEngine:
-    def __init__(self, engine: FeatureEngine, *, max_levels: int = 5) -> None:
+    def __init__(self, engine: FeatureEngine, *, max_levels: int = 5, flux_continu: bool = False) -> None:
+        """``flux_continu`` : le moteur est alimenté par un flux qui ne s'arrête pas.
+
+        En REJEU on contrôle l'ingestion : rien n'entre après la coupure qu'on va demander, et un
+        événement postérieur signale un défaut du jeu de données ou de l'ordre de lecture. Le refus
+        est alors la bonne réponse, et c'est le défaut.
+
+        En MARCHE CONTINUE, la tâche de drainage ingère en permanence : au moment où la frontière de
+        minute demande son calcul, des événements postérieurs à la coupure sont FORCÉMENT déjà
+        entrés. Aucune valeur de coupure ne satisfait à la fois ce refus et la frontière — la
+        plateforme rendait donc `CAUSALITY_VIOLATION` à chaque minute, indéfiniment.
+
+        Ce drapeau ne relâche PAS la garantie point-in-time. Ce qui la porte, c'est la SÉLECTION
+        (`_state` ne retient que `ts <= cutoff`) et la VÉRIFICATION de l'état construit
+        (`PointInTimeState.__post_init__` lève encore si quoi que ce soit dépasse la coupure). Le
+        refus levé ici ne disait pas « j'ai utilisé des données trop récentes » mais « j'en ai en
+        mémoire » — ce qui, sur un flux, est vrai en permanence et n'apprend rien.
+        """
         self.engine = engine
         self.max_levels = max_levels
+        self.flux_continu = flux_continu
         self._buf: dict[str, _Buffers] = {}
         self._last_available_at: datetime | None = None
         self._last_cutoff: datetime | None = None
@@ -168,7 +196,24 @@ class IncrementalFeatureEngine:
             ((ts, h) for ts, _st, h in b.book_states if h is not None and cs - HISTORY_WINDOW_S < ts <= cs),
             key=lambda t: t[0],
         )
-        book = b.book.state() if b.book is not None else None
+        # Le carnet VIVANT reflète la dernière mise à jour reçue, qui sur un flux est postérieure à
+        # la coupure. Le prendre tel quel faisait échouer la vérification de l'état construit
+        # (« book disponible après la coupure ») — à juste titre. On reprend donc son état AU PLUS
+        # TARD à la coupure, que `book_states` conserve déjà.
+        #
+        # L'ordre des deux branches préserve le rejeu à l'identique : là, le carnet vivant est par
+        # construction antérieur ou égal à la coupure, et c'est lui qui est retenu — y compris quand
+        # sa dernière mise à jour est trop ancienne pour figurer encore dans `book_states`.
+        book = None
+        if b.book is not None:
+            vivant = b.book.state()
+            if vivant is not None and vivant.ts.timestamp() <= cs:
+                book = vivant
+            else:
+                for ts_st, st, _h in reversed(b.book_states):
+                    if ts_st <= cs:
+                        book = st
+                        break
         if book is not None:
             arr = np.array([[ts, h[0], h[1], h[2]] for ts, h in hist_pts], dtype=float).reshape(-1, 4)
             history: MidHistory | None = MidHistory(arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3])
@@ -244,7 +289,7 @@ class IncrementalFeatureEngine:
         available_at: datetime | None = None,
     ) -> FeatureComputation:
         cutoff = ensure_utc(cutoff)
-        if self._last_available_at is not None and self._last_available_at > cutoff:
+        if not self.flux_continu and self._last_available_at is not None and self._last_available_at > cutoff:
             raise CausalityError(
                 "événement disponible après la coupure déjà ingéré : calcul refusé", cutoff=cutoff.isoformat()
             )

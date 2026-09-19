@@ -175,46 +175,40 @@ lui-même.
   processus continue, la santé passe `market_data` en FAULT, la décision est NO_TRADE avec
   `DATA_STALE`.
 
-## Bloquant observé en marche réelle : la causalité point-in-time et le flux continu
+## Corrigé en marche réelle : la causalité point-in-time face à un flux continu
 
-Constaté sur le VPS le 19/09/2026, moteur PAPER en marche depuis dix minutes, dix décisions rendues :
+Constaté sur le VPS le 19/09/2026, moteur PAPER connecté au flux public d'OKX, 467 instruments,
+dix décisions en dix minutes — **toutes en `FAILED` sur `CAUSALITY_VIOLATION`**. La porte de données
+était bien ouverte ; la boucle n'atteignait simplement jamais le prédicteur.
 
-    rôles qui décident :             all
-    décisions (10 min) :             10
-    motifs de la dernière décision : CAUSALITY_VIOLATION
+**Cause.** `IncrementalFeatureEngine.compute` refusait de calculer dès qu'un événement postérieur à
+la coupure avait été ingéré. Juste en REJEU, où l'ordre de lecture est contrôlé et où un événement
+postérieur signale un défaut du jeu de données. Intenable en MARCHE CONTINUE : `drain_into_state`
+ingère sans arrêt, donc au moment où la frontière de minute demande son calcul, des événements
+postérieurs sont forcément déjà entrés. Aucune valeur de coupure ne satisfait les deux — ce n'était
+pas un réglage à ajuster. Ce que le refus constatait n'était d'ailleurs pas « j'ai utilisé des
+données trop récentes » mais « j'en ai en mémoire », ce qui sur un flux est vrai en permanence.
 
-La porte de données est bien ouverte — le motif n'est plus `DATA_STALE`, et le moteur est connecté à
-`wss://ws.okx.com`, 467 instruments découverts. Mais l'issue de ces décisions est **`FAILED`**, pas
-`NO_TRADE` : la boucle lève `CausalityError` avant d'atteindre le prédicteur.
+**Correction appliquée, additive.**
 
-**Cause.** `FeatureEngine.compute` refuse de calculer si un événement a déjà été ingéré après la
-coupure demandée :
+1. `IncrementalFeatureEngine(..., flux_continu=True)` lève ce refus — et lui seul. Le défaut reste
+   `False` : rejeu, recherche et tests gardent le comportement strict, à l'identique.
+2. `_state` reprend l'état de carnet AU PLUS TARD à la coupure (`book_states`) au lieu du carnet
+   vivant, qui sur un flux est postérieur. Quand le carnet vivant est antérieur ou égal à la
+   coupure — toujours le cas en rejeu — c'est lui qui est retenu : le rejeu est inchangé.
+3. `build_runtime` construit le moteur avec `flux_continu=True` : un processus en marche est par
+   définition alimenté par un flux qui ne s'arrête pas.
 
-    if self._last_available_at is not None and self._last_available_at > cutoff:
-        raise CausalityError("événement disponible après la coupure déjà ingéré : calcul refusé")
+**Ce qui porte la garantie point-in-time n'a pas bougé** : la SÉLECTION (`_state` ne retient que
+`ts <= cutoff`) et la VÉRIFICATION de l'état construit (`PointInTimeMarketState.__post_init__` lève
+encore si quoi que ce soit dépasse la coupure). Le refus retiré n'était pas ce rempart.
 
-Cette garde est juste en REJEU, où l'on contrôle l'ingestion : un événement postérieur à la coupure
-y signale un défaut. Elle est intenable en MARCHE CONTINUE : la tâche de drainage ingère en
-permanence, donc `_last_available_at` vaut toujours à peu près « maintenant », et toute coupure
-antérieure la déclenche. Ce n'est pas un défaut de câblage qu'un réglage corrigerait — aucune valeur
-de coupure ne satisfait à la fois la garde et la frontière de minute.
+**Vérification** (`tests/unit/test_causalite_flux_continu.py`) : le rejeu refuse toujours ; la marche
+continue aboutit ; le vecteur calculé avec un événement postérieur est IDENTIQUE à celui calculé sans
+lui (valeurs, noms, masques) — c'est la preuve d'absence d'anticipation ; un carnet est bien retenu ;
+et un carnet uniquement postérieur ne sert jamais de repli.
 
-**Ce qui n'est PAS en cause.** La sélection, elle, est déjà point-in-time : `_state` ne retient que
-`ts <= cutoff` (historique de carnet, trades, bougie intrabar, open interest), et
-`PointInTimeState.__post_init__` vérifie l'invariant sur l'état construit. Une exception : `_state`
-prend le carnet VIVANT (`b.book.state()`) et non son état à la coupure, alors que `b.book_states`
-conserve l'historique nécessaire.
-
-**Correction envisagée, NON appliquée** — elle touche le cœur de la garantie anti-anticipation, et
-une erreur y fausserait silencieusement toute recherche future :
-
-1. rendre la garde conditionnelle — stricte en rejeu, recherche et tests (défaut inchangé),
-   sélective en marche continue, où « j'ai des données plus récentes » ne doit pas valoir « j'ai
-   utilisé des données plus récentes » ;
-2. prendre le carnet dans `book_states` à la coupure, au lieu du carnet vivant.
-
-Tant que ce point n'est pas tranché, la plateforme tourne, observe et rapporte, mais **aucune
-décision n'aboutit**. Aucune conséquence financière : le mode est PAPER et l'échange est simulé.
+895 tests, 2 xfail déclarés, aucun ignoré.
 
 ## Prérequis externes (accès manquants dans cette session)
 

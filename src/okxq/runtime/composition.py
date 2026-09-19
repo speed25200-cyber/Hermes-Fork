@@ -993,7 +993,12 @@ def build_runtime(
     health = HealthRegistry(clock=the_clock, mode=cfg.mode.value)
     metrics = Metrics()
     market = MarketState()
-    features = IncrementalFeatureEngine(FeatureEngine(default_registry()))
+    # `flux_continu=True` : un processus en marche est alimenté par `drain_into_state`, qui ingère
+    # sans jamais s'arrêter. Au moment où la frontière de minute demande son calcul, des événements
+    # postérieurs à la coupure sont forcément déjà entrés — le rejeu, lui, garde le refus par défaut.
+    # La garantie point-in-time reste portée par la sélection (`ts <= cutoff`) et par la
+    # vérification de l'état construit, toutes deux inchangées.
+    features = IncrementalFeatureEngine(FeatureEngine(default_registry()), flux_continu=True)
     ledger = Ledger(
         session_factory,
         account_scope=cfg.account.scope,
