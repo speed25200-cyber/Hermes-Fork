@@ -5,6 +5,13 @@ Mêmes règles de fenêtrage que ``okxq.features.batch`` (parité T16) :
 - trades : ``ts ∈ (cutoff-300 s, cutoff]`` ; bougies : clôturées, ``open+60 <= cutoff``, dernière version
   disponible par ouverture, 61 dernières ; funding : 16 derniers reçus ; OI : ``ts > cutoff-4200 s``.
 
+DEUX bornes, sur DEUX instants différents, et les confondre est le piège de ce fichier :
+- la FENÊTRE se mesure sur ``ts``, l'horodatage d'échange : jusqu'où on remonte dans le temps du marché ;
+- la DISPONIBILITÉ se lit sur ``available_at`` : ce qu'on savait à la coupure.
+Un relevé peut porter un ``ts`` antérieur à la coupure et n'arriver qu'après — c'est le cas NORMAL sur
+un flux, où le réseau ajoute toujours un délai. Ne borner que ``ts`` fait donc entrer dans l'état des
+données qu'on ne connaissait pas encore : de l'anticipation, silencieuse et indétectable en aval.
+
 En REJEU (défaut), le moteur refuse de calculer si un événement ingéré est disponible APRÈS la
 coupure (``CausalityError``) : l'appelant contrôle l'ordre ``(available_at, ingest_seq)``, et un
 événement postérieur signale un défaut du jeu de données.
@@ -83,7 +90,9 @@ class _Buffers:
     book_states: deque[tuple[float, BookState, tuple[float, float, float] | None]] = field(
         default_factory=deque
     )
-    trades: deque[tuple[float, float, float, int]] = field(default_factory=deque)
+    # (ts, prix, quantité, sens, available_at) : sans le dernier terme, un trade arrivé après la
+    # coupure était indiscernable d'un trade connu à temps.
+    trades: deque[tuple[float, float, float, int, float]] = field(default_factory=deque)
     candles: dict[float, CandleRec] = field(default_factory=dict)
     # Historiques courts, et non « dernière valeur » : il faut pouvoir répondre « laquelle était
     # disponible À la coupure ? », pas seulement « laquelle est la plus récente ? ».
@@ -94,7 +103,13 @@ class _Buffers:
     oi: deque[OiRec] = field(default_factory=deque)
 
     def closed_candles(self, cutoff_s: float, bars: int = CANDLE_BARS) -> CandleWindow:
-        opens = sorted(o for o in self.candles if o + 60.0 <= cutoff_s)[-bars:]
+        # Close avant la coupure ne veut pas dire connue avant la coupure : l'échange publie la
+        # bougie après l'avoir close, et sur un flux cette publication peut tomber après.
+        opens = sorted(
+            o
+            for o, c in self.candles.items()
+            if o + 60.0 <= cutoff_s and c.available_at.timestamp() <= cutoff_s
+        )[-bars:]
         if not opens:
             return empty_candles()
         recs = [self.candles[o] for o in opens]
@@ -193,7 +208,9 @@ class IncrementalFeatureEngine:
             if st is not None:
                 b.book_states.append((st.ts.timestamp(), st, history_point(st, b.v)))
         elif isinstance(rec, TradeRec):
-            b.trades.append((rec.ts.timestamp(), rec.price, rec.qty, rec.side_sign))
+            b.trades.append(
+                (rec.ts.timestamp(), rec.price, rec.qty, rec.side_sign, rec.available_at.timestamp())
+            )
         elif isinstance(rec, CandleRec):
             if rec.confirmed:
                 b.candles[rec.open_ts.timestamp()] = rec
@@ -222,8 +239,17 @@ class IncrementalFeatureEngine:
         cs = cutoff.timestamp()
         b = self._buf.setdefault(inst, _Buffers())
         b.evict(cs)
+        # Deux bornes, et elles ne portent PAS sur le même instant :
+        #   - la FENÊTRE se mesure sur `ts` (jusqu'où on remonte dans le temps du marché) ;
+        #   - la DISPONIBILITÉ se lit sur `available_at` (ce qu'on savait à la coupure).
+        # Ne borner que `ts` faisait entrer dans l'historique des points appris APRÈS la coupure —
+        # antérieurs côté échange, mais inconnus de nous au moment de décider.
         hist_pts = sorted(
-            ((ts, h) for ts, _st, h in b.book_states if h is not None and cs - HISTORY_WINDOW_S < ts <= cs),
+            (
+                (ts, h)
+                for ts, st, h in b.book_states
+                if h is not None and cs - HISTORY_WINDOW_S < ts <= cs and st.available_at.timestamp() <= cs
+            ),
             key=lambda t: t[0],
         )
         # Le carnet VIVANT reflète la dernière mise à jour reçue, qui sur un flux est postérieure à
@@ -234,14 +260,19 @@ class IncrementalFeatureEngine:
         # L'ordre des deux branches préserve le rejeu à l'identique : là, le carnet vivant est par
         # construction antérieur ou égal à la coupure, et c'est lui qui est retenu — y compris quand
         # sa dernière mise à jour est trop ancienne pour figurer encore dans `book_states`.
+        # La borne se lit sur `available_at`, PAS sur `ts`. `ts` est l'horodatage d'échange ; une mise
+        # à jour peut très bien porter un `ts` antérieur à la coupure et n'être ARRIVÉE qu'après —
+        # c'est même le cas normal sur un flux. Filtrer sur `ts` laissait donc passer des carnets
+        # reçus après la coupure, et la vérification de l'état construit les rejetait : la
+        # correction précédente n'a rien changé au symptôme parce qu'elle bornait le mauvais instant.
         book = None
         if b.book is not None:
             vivant = b.book.state()
-            if vivant is not None and vivant.ts.timestamp() <= cs:
+            if vivant is not None and vivant.available_at.timestamp() <= cs:
                 book = vivant
             else:
-                for ts_st, st, _h in reversed(b.book_states):
-                    if ts_st <= cs:
+                for _ts_st, st, _h in reversed(b.book_states):
+                    if st.available_at.timestamp() <= cs:
                         book = st
                         break
         if book is not None:
@@ -249,7 +280,11 @@ class IncrementalFeatureEngine:
             history: MidHistory | None = MidHistory(arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3])
         else:
             history = None
-        tr = sorted((t for t in b.trades if cs - TRADE_LOOKBACK_S < t[0] <= cs), key=lambda t: t[0])
+        # Fenêtre sur `ts`, disponibilité sur `available_at` : deux bornes, deux instants.
+        tr = sorted(
+            (t for t in b.trades if cs - TRADE_LOOKBACK_S < t[0] <= cs and t[4] <= cs),
+            key=lambda t: t[0],
+        )
         trades = (
             TradeWindow(
                 np.array([t[0] for t in tr]),

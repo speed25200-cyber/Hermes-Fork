@@ -60,6 +60,17 @@ ui-test: ## Tests frontend (node:test) et smoke Playwright si disponible
 security-check: ## Scan de secrets, dépendances et permissions
 	$(PY) python scripts/security_check.py
 
+verifier: ## TOUT ce que la CI exige, dans l'ordre et sans raccourci — à lancer avant chaque push
+# Les cibles existaient déjà, séparément, et rien n'obligeait à les enchaîner. J'ai poussé une
+# branche en ayant lu « No fixes available » comme un succès alors que ruff signalait une erreur :
+# la CI a refusé, et le cycle a coûté un aller-retour complet. Une seule commande qui échoue au
+# premier manquement vaut mieux qu'une discipline qui dépend de la lecture attentive de quatre
+# sorties à une heure du matin.
+	$(MAKE) lint
+	$(MAKE) typecheck
+	$(MAKE) security-check
+	$(MAKE) test
+
 db-up: ## Démarre PostgreSQL local (compose) pour les tests d'intégration
 	docker compose -f compose.yaml up -d postgres
 
