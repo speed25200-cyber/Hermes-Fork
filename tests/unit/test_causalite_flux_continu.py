@@ -170,3 +170,139 @@ def test_un_carnet_uniquement_posterieur_ne_sert_jamais_de_repli() -> None:
         "un carnet postérieur à la coupure a servi de repli : anticipation"
     )
     assert calcul.vector.cutoff_at == COUPURE, "le calcul doit aboutir sans carnet, pas échouer"
+
+
+# --- le flux complet ------------------------------------------------------------------------------
+# Le carnet n'était que le premier champ fautif. `intrabar`, `mark`, `index`, le financement et
+# l'open interest n'existaient qu'en UN exemplaire — la dernière valeur reçue — ou sans borne haute.
+# Sur un flux, la dernière valeur reçue est TOUJOURS postérieure à la coupure : la vérification de
+# l'état construit les rejetait un par un. Corriger le carnet seul ne changeait donc rien, et le
+# déploiement a rendu exactement le même `CAUSALITY_VIOLATION` qu'avant.
+
+
+def prix(genre: str, *, at: datetime, seq: int, valeur: str) -> EventEnvelope:
+    champ = "mark_px" if genre == "mark_price" else "idx_px"
+    return enveloppe(
+        genre,
+        available_at=at,
+        seq=seq,
+        payload={"ts_ms": str(int(at.timestamp() * 1000)), champ: valeur},
+    )
+
+
+def bougie_en_cours(*, at: datetime, seq: int, cloture: str) -> EventEnvelope:
+    ouverture = at.replace(second=0, microsecond=0)
+    return enveloppe(
+        "candle.1m",
+        available_at=at,
+        seq=seq,
+        payload={
+            "ts_ms": str(int(ouverture.timestamp() * 1000)),
+            "open": "100",
+            "high": cloture,
+            "low": "99",
+            "close": cloture,
+            "vol_contracts": "5",
+            "vol_quote": "500",
+            "confirm": "0",
+        },
+    )
+
+
+def interet_ouvert(*, at: datetime, seq: int, contrats: str) -> EventEnvelope:
+    return enveloppe(
+        "open_interest",
+        available_at=at,
+        seq=seq,
+        payload={"ts_ms": str(int(at.timestamp() * 1000)), "oi_contracts": contrats},
+    )
+
+
+def financement(*, at: datetime, seq: int, taux: str) -> EventEnvelope:
+    prochain = at + timedelta(hours=8)
+    return enveloppe(
+        "funding",
+        available_at=at,
+        seq=seq,
+        payload={
+            "funding_time_ms": str(int(at.timestamp() * 1000)),
+            "next_funding_time_ms": str(int(prochain.timestamp() * 1000)),
+            "funding_rate": taux,
+            "settled": True,
+        },
+    )
+
+
+def avant_la_coupure(inc: IncrementalFeatureEngine) -> None:
+    """Tout ce qu'un flux livre dans la minute qui précède la frontière."""
+    inc.ingest(carnet(at=T0 + timedelta(seconds=30), seq=1, bid="100", ask="101"))
+    inc.ingest(echange(at=T0 + timedelta(seconds=40), seq=2, prix="100.5"))
+    inc.ingest(prix("mark_price", at=T0 + timedelta(seconds=45), seq=3, valeur="100.4"))
+    inc.ingest(prix("index_price", at=T0 + timedelta(seconds=46), seq=4, valeur="100.3"))
+    inc.ingest(bougie_en_cours(at=T0 + timedelta(seconds=50), seq=5, cloture="100.6"))
+    inc.ingest(interet_ouvert(at=T0 + timedelta(seconds=52), seq=6, contrats="1000"))
+    inc.ingest(financement(at=T0 + timedelta(seconds=55), seq=7, taux="0.0001"))
+
+
+def apres_la_coupure(inc: IncrementalFeatureEngine) -> None:
+    """Et tout ce qu'il continue de livrer juste après, pendant qu'on calcule."""
+    inc.ingest(carnet(at=APRES, seq=8, bid="900", ask="901"))
+    inc.ingest(prix("mark_price", at=APRES, seq=9, valeur="900.4"))
+    inc.ingest(prix("index_price", at=APRES, seq=10, valeur="900.3"))
+    inc.ingest(bougie_en_cours(at=APRES, seq=11, cloture="900.6"))
+    inc.ingest(interet_ouvert(at=APRES, seq=12, contrats="9999"))
+    inc.ingest(financement(at=APRES, seq=13, taux="0.9"))
+
+
+def test_un_flux_complet_aboutit_au_lieu_de_violer_la_causalite() -> None:
+    """Le cas réel, avec TOUS les types d'événements — pas seulement le carnet.
+
+    C'est ce test qui manquait : corriger le seul carnet laissait `intrabar`, `mark`, `index`, le
+    financement et l'open interest postérieurs dans l'état, et la vérification les rejetait un par
+    un. Le déploiement rendait le même `CAUSALITY_VIOLATION`, et la correction paraissait sans effet.
+    """
+    inc = moteur(flux_continu=True)
+    avant_la_coupure(inc)
+    apres_la_coupure(inc)
+    calcul = inc.compute(INST, COUPURE)
+    assert calcul.vector.cutoff_at == COUPURE
+
+
+def test_un_flux_complet_ne_laisse_fuir_aucune_donnee_posterieure() -> None:
+    """La preuve d'absence d'anticipation, sur le flux entier.
+
+    Toutes les valeurs postérieures sont absurdement éloignées (900 contre 100, un financement de
+    90 % contre 0,01 %). Si l'une d'elles entrait dans le calcul, le vecteur différerait.
+    """
+    sans = moteur(flux_continu=True)
+    avant_la_coupure(sans)
+    attendu = sans.compute(INST, COUPURE)
+
+    avec = moteur(flux_continu=True)
+    avant_la_coupure(avec)
+    apres_la_coupure(avec)
+    obtenu = avec.compute(INST, COUPURE)
+
+    assert obtenu.vector.names == attendu.vector.names
+    assert obtenu.vector.values == attendu.vector.values, (
+        "une donnée postérieure à la coupure a changé le calcul : anticipation"
+    )
+    assert obtenu.vector.masks == attendu.vector.masks
+
+
+def test_un_flux_complet_garde_bien_les_donnees_anterieures() -> None:
+    """Aboutir en jetant tout serait une fausse victoire : on décide alors sur du vide.
+
+    Les features de prix de marque et de bougie n'existent que si ces champs ont été retenus. Sans
+    cette vérification, un `_state` qui rendrait systématiquement `None` passerait les deux tests
+    précédents avec les honneurs.
+    """
+    inc = moteur(flux_continu=True)
+    avant_la_coupure(inc)
+    apres_la_coupure(inc)
+    calcul = inc.compute(INST, COUPURE)
+    valeurs = dict(zip(calcul.vector.names, calcul.vector.values, strict=True))
+    renseignees = [n for n, v in valeurs.items() if v is not None]
+    assert len(renseignees) > 6, (
+        f"trop peu de features calculées ({len(renseignees)}) : l'état a été vidé au lieu d'être borné"
+    )
