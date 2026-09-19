@@ -34,8 +34,15 @@ DECISION = (
 )
 ECHEC = (
     '{"decision_id": "dec_01m2xxxxxxxxxxxxxxxxxxxxxx", "outcome": "FAILED", '
-    '"reason_codes": "CAUSALITY_VIOLATION", "intents": 0, "event": "decision", "mode": "PAPER", '
+    '"reason_codes": "CAUSALITY_VIOLATION", "intents": 0, '
+    '"erreur": "[CAUSALITY_VIOLATION] mark disponible apres la coupure", '
+    '"event": "decision", "mode": "PAPER", '
     '"role": "all", "account_scope": "paper-local", "level": "info"}'
+)
+#: Le bruit qui chassait le moteur hors de la fenêtre : quatre contrôles de santé par minute.
+ACCES = (
+    '{"event": "127.0.0.1:1 - \\"GET /health/live HTTP/1.1\\" 200", '
+    '"_record": "<LogRecord: uvicorn.access, 20, httptools_impl.py, 482>", "level": "info"}'
 )
 PREDICTEUR = (
     '{"raison": "[PROTOCOL_VIOLATION] aucun modèle désigné", "effet": "NO_TRADE", '
@@ -100,6 +107,10 @@ case "${{1:-}}" in
         echo '{SOUS_PROFIL}-1  | {DECISION}'
         echo '{SOUS_PROFIL}-1  | {ECHEC}'
         echo '{SOUS_PROFIL}-1  | {PREDICTEUR}'
+      elif [ "$s" = "api" ]; then
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+          echo 'api-1  | {ACCES}'
+        done
       else
         echo "$s-1  | {{\\"event\\": \\"bruit\\", \\"level\\": \\"info\\"}}"
       fi
@@ -208,3 +219,43 @@ def test_le_diagnostic_distingue_un_echec_dune_abstention(tmp_path: Path) -> Non
     assert valeur(sortie, "issue de la dernière décision") == "FAILED", "l'issue n'est pas rapportée"
     compte = valeur(sortie, "ÉCHEC (10 min)").split()[0]
     assert compte == "1", f"le compte des décisions en échec est faux : {compte!r}"
+
+
+def test_le_diagnostic_nomme_le_champ_fautif_dun_echec(tmp_path: Path) -> None:
+    """Le code d'erreur seul ne suffit pas : `CAUSALITY_VIOLATION` ne dit pas QUEL champ dépasse.
+
+    Le message existait depuis toujours, mais il restait dans l'enregistrement persisté. On corrigeait
+    donc au jugé et on redéployait pour découvrir le champ suivant — trois cycles perdus.
+    """
+    sortie = lancer(tmp_path)
+    detail = valeur(sortie, "détail du dernier échec")
+    assert "mark" in detail, f"le champ fautif n'est pas rapporté : {detail!r}"
+
+
+def test_les_controles_de_sante_ne_chassent_pas_le_moteur(tmp_path: Path) -> None:
+    """Vingt lignes d'accès HTTP par service suffisaient à faire disparaître le moteur du rapport.
+
+    Un contrôle de santé toutes les quinze secondes ne dit rien et occupe toute la place. Sans cette
+    exclusion, la section des journaux ne montrait que du bruit, et le processus qui décide était
+    absent du seul endroit où on aurait pu voir ce qu'il faisait.
+    """
+    sortie = lancer(tmp_path)
+    debut = sortie.index("journaux applicatifs")
+    fin = sortie.index("disque et mémoire")
+    section = sortie[debut:fin]
+    assert "uvicorn.access" not in section, "les contrôles de santé polluent encore les journaux"
+    assert f"{SOUS_PROFIL}-1" in section, "le moteur reste absent des journaux applicatifs"
+
+
+def test_un_indicateur_de_demarrage_absent_nest_pas_annonce_comme_bon(tmp_path: Path) -> None:
+    """Un rapport qui passe au vert tout seul ment.
+
+    `prédicteur` et `entrées` sont émis UNE FOIS au démarrage. Les chercher dans une fenêtre de dix
+    minutes les faisait basculer au vert dès que le processus avait plus de dix minutes, sans que
+    rien n'ait changé. On a lu « prédicteur : disponible » sur une plateforme sans aucun modèle.
+    """
+    sortie = lancer(tmp_path)
+    entrees = valeur(sortie, "  entrées :")
+    assert "autorisées par la séquence" not in entrees, (
+        "l'absence de signal est présentée comme une autorisation"
+    )
