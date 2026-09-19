@@ -189,13 +189,25 @@ postérieurs sont forcément déjà entrés. Aucune valeur de coupure ne satisfa
 pas un réglage à ajuster. Ce que le refus constatait n'était d'ailleurs pas « j'ai utilisé des
 données trop récentes » mais « j'en ai en mémoire », ce qui sur un flux est vrai en permanence.
 
+**Le carnet n'était que le premier champ fautif.** Une première correction ne l'a traité que lui, et
+le déploiement a rendu exactement le même `CAUSALITY_VIOLATION` : `intrabar`, `mark`, `index`, le
+financement et l'open interest souffraient du même défaut. Les trois premiers n'existaient qu'en UN
+exemplaire — la dernière valeur reçue, donc postérieure à la coupure sur un flux — le financement
+était repris en entier, et l'open interest n'avait pas de borne haute. La vérification de l'état
+construit les rejetait un par un.
+
 **Correction appliquée, additive.**
 
 1. `IncrementalFeatureEngine(..., flux_continu=True)` lève ce refus — et lui seul. Le défaut reste
    `False` : rejeu, recherche et tests gardent le comportement strict, à l'identique.
-2. `_state` reprend l'état de carnet AU PLUS TARD à la coupure (`book_states`) au lieu du carnet
-   vivant, qui sur un flux est postérieur. Quand le carnet vivant est antérieur ou égal à la
-   coupure — toujours le cas en rejeu — c'est lui qui est retenu : le rejeu est inchangé.
+2. `_state` sélectionne À LA COUPURE, et plus « la dernière valeur reçue », pour TOUS les champs :
+   carnet (via `book_states`), bougie en cours, prix de marque et prix d'indice (historiques courts
+   de 64 valeurs, là où un seul exemplaire était gardé), financement (filtré sur `available_at`) et
+   open interest (borne haute ajoutée, elle manquait). En rejeu, rien n'a été ingéré au-delà de la
+   coupure : la dernière disponible EST la dernière tout court, donc le comportement est inchangé.
+   Un champ sans valeur disponible à la coupure rend `None` plutôt que de se rabattre sur une valeur
+   postérieure — décider sans prix de marque est une dégradation visible et bornée, décider avec un
+   prix du futur est une faute silencieuse.
 3. `build_runtime` construit le moteur avec `flux_continu=True` : un processus en marche est par
    définition alimenté par un flux qui ne s'arrête pas.
 
@@ -208,7 +220,7 @@ continue aboutit ; le vecteur calculé avec un événement postérieur est IDENT
 lui (valeurs, noms, masques) — c'est la preuve d'absence d'anticipation ; un carnet est bien retenu ;
 et un carnet uniquement postérieur ne sert jamais de repli.
 
-895 tests, 2 xfail déclarés, aucun ignoré.
+898 tests, 2 xfail déclarés, aucun ignoré.
 
 ## Prérequis externes (accès manquants dans cette session)
 

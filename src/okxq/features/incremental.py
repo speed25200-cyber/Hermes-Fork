@@ -69,6 +69,13 @@ from okxq.features.state import (
 CANDLE_RETENTION_S = 4 * CANDLE_BARS * 60
 
 
+#: Combien de valeurs récentes garder pour les champs qui n'existaient qu'en UN exemplaire (la
+#: dernière reçue). Sur un flux, la dernière reçue est postérieure à la coupure : sans un peu
+#: d'historique, il n'y a RIEN à retenir à la coupure et le prix de marque disparaît des features.
+#: 64 valeurs couvrent largement l'écart entre la frontière de minute et l'instant du calcul.
+DERNIERES_VALEURS = 64
+
+
 @dataclass
 class _Buffers:
     v: float = 1.0
@@ -78,9 +85,11 @@ class _Buffers:
     )
     trades: deque[tuple[float, float, float, int]] = field(default_factory=deque)
     candles: dict[float, CandleRec] = field(default_factory=dict)
-    intrabar: CandleRec | None = None
-    mark: PriceRec | None = None
-    index: PriceRec | None = None
+    # Historiques courts, et non « dernière valeur » : il faut pouvoir répondre « laquelle était
+    # disponible À la coupure ? », pas seulement « laquelle est la plus récente ? ».
+    intrabars: deque[CandleRec] = field(default_factory=lambda: deque(maxlen=DERNIERES_VALEURS))
+    marks: deque[PriceRec] = field(default_factory=lambda: deque(maxlen=DERNIERES_VALEURS))
+    indexes: deque[PriceRec] = field(default_factory=lambda: deque(maxlen=DERNIERES_VALEURS))
     funding: deque[FundingRecord] = field(default_factory=lambda: deque(maxlen=FUNDING_KEEP))
     oi: deque[OiRec] = field(default_factory=deque)
 
@@ -110,6 +119,27 @@ class _Buffers:
             self.book_states.popleft()
         for o in [o for o in self.candles if o < cutoff_s - CANDLE_RETENTION_S]:
             del self.candles[o]
+
+
+def _dernier_disponible[T: (CandleRec, PriceRec)](valeurs: deque[T], cutoff_s: float) -> T | None:
+    """Le dernier enregistrement DISPONIBLE à la coupure, ou ``None`` s'il n'y en a aucun.
+
+    « Disponible » se lit sur ``available_at`` : c'est l'instant où l'information était connue. Un
+    relevé dont l'horodatage d'échange précède la coupure mais qui n'est arrivé qu'après ne peut pas
+    servir — l'utiliser serait exactement l'anticipation qu'on interdit.
+
+    Rendre ``None`` plutôt que se rabattre sur la valeur la plus récente est délibéré : décider sans
+    prix de marque est une dégradation visible et bornée ; décider avec un prix du futur est une
+    faute silencieuse qui contamine tout ce qui en découle.
+    """
+    for rec in reversed(valeurs):
+        if rec.available_at.timestamp() <= cutoff_s:
+            return rec
+    return None
+
+
+def _point_prix(rec: PriceRec | None) -> PricePoint | None:
+    return PricePoint(rec.ts, rec.available_at, rec.value) if rec is not None else None
 
 
 class IncrementalFeatureEngine:
@@ -168,12 +198,12 @@ class IncrementalFeatureEngine:
             if rec.confirmed:
                 b.candles[rec.open_ts.timestamp()] = rec
             else:
-                b.intrabar = rec
+                b.intrabars.append(rec)
         elif isinstance(rec, PriceRec):
             if rec.kind == "mark":
-                b.mark = rec
+                b.marks.append(rec)
             else:
-                b.index = rec
+                b.indexes.append(rec)
         elif isinstance(rec, FundingRec):
             b.funding.append(rec.record)
         elif isinstance(rec, OiRec):
@@ -230,8 +260,11 @@ class IncrementalFeatureEngine:
             if tr
             else empty_trades()
         )
+        # Bougie en cours, prix de marque et prix d'indice : la DERNIÈRE reçue est postérieure à la
+        # coupure sur un flux. On retient la dernière DISPONIBLE à la coupure. En rejeu, rien n'a été
+        # ingéré au-delà, donc c'est la dernière tout court : comportement inchangé.
+        ib = _dernier_disponible(b.intrabars, cs)
         intrabar: Candle | None = None
-        ib = b.intrabar
         if ib is not None and ib.open_ts.timestamp() <= cs < ib.open_ts.timestamp() + 60:
             intrabar = Candle(
                 ib.open_ts,
@@ -244,7 +277,9 @@ class IncrementalFeatureEngine:
                 ib.volume_quote,
                 False,
             )
-        oi_recs = sorted((o for o in b.oi if o.ts.timestamp() > cs - OI_LOOKBACK_S), key=lambda o: o.ts)
+        # Borne HAUTE sur l'open interest : elle manquait. Seule la borne basse était posée, si bien
+        # qu'un relevé postérieur à la coupure entrait dans l'état — et la vérification le rejetait.
+        oi_recs = sorted((o for o in b.oi if cs - OI_LOOKBACK_S < o.ts.timestamp() <= cs), key=lambda o: o.ts)
         oi = (
             OiWindow(
                 np.array([o.ts.timestamp() for o in oi_recs]), np.array([o.oi_contracts for o in oi_recs])
@@ -260,9 +295,10 @@ class IncrementalFeatureEngine:
             trades=trades,
             closed_candles=b.closed_candles(cs),
             intrabar=intrabar,
-            mark=PricePoint(b.mark.ts, b.mark.available_at, b.mark.value) if b.mark else None,
-            index=PricePoint(b.index.ts, b.index.available_at, b.index.value) if b.index else None,
-            funding=list(b.funding),
+            mark=_point_prix(_dernier_disponible(b.marks, cs)),
+            index=_point_prix(_dernier_disponible(b.indexes, cs)),
+            # Le financement était repris en entier : un versement annoncé après la coupure y entrait.
+            funding=[f for f in b.funding if f.available_at <= cutoff],
             open_interest=oi,
             announcements=[a for a in announcements if a.available_at <= cutoff],
             announcement_feed_available=announcement_feed_available,
