@@ -1,7 +1,0 @@
-# SHADOW : mêmes décisions que PAPER, archivées avant le résultat de marché (forward test §15, §40),
-# aucun ordre envoyé nulle part.
-extends: base.yaml
-project:
-  mode: SHADOW
-account:
-  scope: shadow-local

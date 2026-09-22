@@ -1,9 +1,0 @@
-# LIVE — DÉSACTIVÉ. Ce fichier existe pour documenter le profil ; il ne peut pas démarrer :
-# live_enabled est faux, et l'activation exige le manifeste d'approbation signé (§71) vérifié au démarrage.
-extends: base.yaml
-project:
-  mode: LIVE
-  live_enabled: false
-account:
-  scope: okx-live-unapproved
-  region_profile: from_env
