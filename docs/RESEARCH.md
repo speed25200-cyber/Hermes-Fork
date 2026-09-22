@@ -1,0 +1,82 @@
+# État de l'art : ce qui a guidé la conception
+
+Synthèse d'une revue de littérature faite en septembre 2026 (articles 2013-2026). Les nombres cités sont
+ceux des résumés publiés ; ils motivent des choix, ils ne sont pas des promesses.
+
+## 1. Quels signaux ont une preuve hors échantillon, nette de coûts ?
+
+| Famille | Ce que dit la littérature | Usage dans Hermes |
+|---|---|---|
+| Momentum transversal | Facteurs marché, taille, momentum (Liu, Tsyvinski, Wu 2022) ; momentum jusqu'à 2-4 semaines puis retournement ; facteur de tendance crypto robuste aux coûts sur les grandes capitalisations (Fieberg et al. 2025). Réplication nette de coûts sur perpétuels Binance : écarts peu distinguables de zéro (2026). | Variables lentes (`ret_168`, `ret_336`, `trend_*`), jamais une stratégie seule. |
+| Retournement court terme | Présent surtout dans les petites capitalisations illiquides ; c'est une prime de fourniture de liquidité, plus forte en période de stress (Farag et al. 2025). | Variables `iret_*` résiduelles, conditionnées par la volatilité et la dispersion. |
+| Funding / base | Le carry peut dépasser 40 %/an et un carry élevé prédit des krachs (Schmeling, Schrimpf, Todorov) ; deux facteurs (log-base + prix-volume) expliquent la plupart des prédicteurs de perpétuels (Cao et al.) ; le trade de base décroît (Sharpe négatif en 2025 selon Borri et al.). | Cible **nette du funding** ; variables `funding_*`, `premium_*` ; le carry fait partie du rendement. |
+| Flux d'ordres agresseur | +1 σ de flux → +0,2 % le lendemain, +0,9 % sur la semaine (Anastasopoulos et al. 2026) ; les stratégies de microstructure pure ne survivent pas aux frais de détail. | Déséquilibre agrégé sur 1-72 h (`flow_*`), persistance, divergence flux/prix. |
+| Intérêt ouvert | Pas de preuve robuste publiée ; données parfois mal déclarées. | Optionnel (`include_metrics`), en interaction seulement. |
+| Avance du BTC | Prévisibilité croisée réelle mais surtout à l'échelle de minutes sur les grands noms. | Retours du marché et résiduels. |
+| Heure du jour | Effets de quelques points de base (horloge de New York depuis les ETF). | Variables calendaires ; exécution hors des bords d'heure. |
+
+**Mise en garde centrale** (Junior 2026) : sur 10 perpétuels Binance, un classement XGBoost obtient un IC
+de rang +0,024 (t = 3,55) **et** un Sharpe net de −2,91. Un IC significatif avec une rotation non maîtrisée
+perd de l'argent. D'où l'optimiseur à coûts et l'amortissement par la persistance du signal.
+
+## 2. Modèles
+
+- Sur la section transversale crypto, toutes les méthodes d'apprentissage ajoutent de la valeur, la
+  complexité supplémentaire peu (Cakici et al. 2024) ; un petit nombre de caractéristiques porte la
+  prévisibilité.
+- Modèles de fondation (Chronos, TimesFM, Moirai) en zéro-shot : R² négatif, précision directionnelle
+  ≈ 50 %, battus par LightGBM/CatBoost (Rahimikia et al. 2025) ; ils ne battent significativement la marche
+  aléatoire que dans 2 tâches sur 10 (Noguer i Alonso 2026). **Non retenus comme prédicteurs.**
+- « Vertu de la complexité » contestée : les prévisions se réduisent à du momentum synchronisé sur la
+  volatilité (Nagel 2025). Une attention transversale aide sur de grands panels actions (Kelly et al. 2025) ;
+  30-100 actifs sur quelques années est petit — d'où un réseau **optionnel**, en diversifieur.
+- **Choix** : LightGBM (Huber sur cibles gauss-rangées, grosses feuilles, arrêt précoce sur l'IC), Ridge de
+  référence, ensemble pondéré par l'IC de validation.
+
+## 3. Cibles et pertes
+
+Rendement futur total (prix **et** funding), résiduel d'un bêta glissant, divisé par la volatilité ex ante,
+rangé en scores normaux à chaque instant ; mélange des horizons 4, 8 et 24 h (un ensemble d'horizons en une
+seule cible). Sélection sur la performance **nette** et non sur l'erreur quadratique.
+
+## 4. Validation
+
+Purge d'au moins l'horizon de la cible et embargo (López de Prado 2018) ; CPCV disponible (meilleure que le
+walk-forward sur données synthétiques selon Arian et al. 2024) ; Sharpe dégonflé (Bailey & López de Prado
+2014), PBO (Bailey et al. 2017), historique minimal (2012), SPA de Hansen (2005). Chaque essai est compté.
+
+## 5. Portefeuille
+
+Alpha = IC × σ × score (Grinold) ; portefeuille visé moyenne-variance à coûts, trading partiel vers la
+cible (Gârleanu & Pedersen 2013) ; zones de non-trading (NBIM) ; covariance facteur + EWMA rétrécie
+(Ledoit & Wolf) ; volatilité cible ; fraction de Kelly implicitement ≤ ½ ; réduction du risque en drawdown
+(Grossman & Zhou) ; plafonds par nom en part du volume quotidien.
+
+## 6. Exécution
+
+Les ordres taker subissent une sélection adverse liée à la latence (Albers et al. 2025) ; les ordres maker
+se remplissent surtout quand on a tort (« dilemme du teneur de marché ») : mesurer son propre taux de
+remplissage. Politique retenue : post-only au meilleur prix avec réalignement, bascule en IOC borné après
+un délai, pas de trade si l'alpha est inférieur au coût attendu. Impact en racine carrée (préfacteur ≈ 0,5-1
+en unités de volatilité quotidienne ; Donier & Bonart 2015).
+
+## Références principales
+
+- Liu, Tsyvinski, Wu (2022), *Common Risk Factors in Cryptocurrency*, Journal of Finance.
+- Cakici, Shahzad, Będowska-Sójka, Zaremba (2024), *Machine learning and the cross-section of cryptocurrency returns*, IRFA.
+- Fieberg, Liedtke, Poddig, Walker, Zaremba (2025), *A Trend Factor for the Cross Section of Cryptocurrency Returns*, JFQA.
+- Schmeling, Schrimpf, Todorov, *Crypto Carry*, Management Science.
+- Anastasopoulos, Gradojevic, Liu, Maynard, Tsiakas (2026), *Order flow and cryptocurrency returns*, JFM.
+- Farag, Luo, Yarovaya, Zięba (2025), *Returns from liquidity provision in cryptocurrency markets*, JBF.
+- Rahimikia, Ni, Wang (2025), *Re(Visiting) Time Series Foundation Models in Finance*, arXiv 2511.18578.
+- Nagel (2025), *Seemingly Virtuous Complexity in Return Prediction*, NBER w34104.
+- Kelly, Kuznetsov, Malamud, Xu (2025), *Artificial Intelligence Asset Pricing Models*, NBER w33351.
+- Gârleanu, Pedersen (2013), *Dynamic Trading with Predictable Returns and Transaction Costs*, JF.
+- Jensen, Kelly, Malamud, Pedersen (2026), *Machine Learning and the Implementable Efficient Frontier*, RFS.
+- Bailey, López de Prado (2014), *The Deflated Sharpe Ratio* ; Bailey et al. (2017), *The Probability of Backtest Overfitting*.
+- López de Prado (2018), *Advances in Financial Machine Learning*.
+- Hansen (2005), *A Test for Superior Predictive Ability*, JBES.
+- Ledoit, Wolf (2020), *Analytical nonlinear shrinkage of large-dimensional covariance matrices*, Ann. Stat.
+- Donier, Bonart (2015), *A Million Metaorder Analysis of Market Impact on the Bitcoin*.
+- Albers, Cucuringu, Howison, Shestopaloff (2025), *The Market Maker's Dilemma*, arXiv 2502.18625.
+- Junior (2026), *Failure of Cross-Sectional Alpha Screening on Cryptocurrency Perpetual Futures*, SSRN.

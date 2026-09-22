@@ -1,0 +1,25 @@
+[Unit]
+Description=Hermes trading engine (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/opt/hermes
+EnvironmentFile=/etc/hermes/hermes.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/hermes/.venv/bin/hermes live run -c configs/%i.yaml --mode %i --model artifacts/models/champion
+Restart=always
+RestartSec=30
+# Durcissement : le moteur n'écrit que dans son dossier.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/hermes/state /opt/hermes/data /opt/hermes/artifacts /opt/hermes/reports
+MemoryMax=3G
+
+[Install]
+WantedBy=multi-user.target

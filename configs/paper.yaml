@@ -1,0 +1,10 @@
+# Papier : décisions réelles sur flux live Binance, exécution simulée. Aucune clé nécessaire.
+execution:
+  venue: paper
+live:
+  state_dir: state
+  model_dir: artifacts/models/champion
+  paper_initial_equity: 10000
+  capital_fraction: 1.0
+risk:
+  kill_switch_file: state/KILL

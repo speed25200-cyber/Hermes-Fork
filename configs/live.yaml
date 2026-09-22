@@ -1,0 +1,24 @@
+# ARGENT RÉEL. Le moteur refuse de démarrer si le modèle installé n'a pas franchi la porte de promotion.
+# Commencer avec une fraction du capital, puis augmenter si le suivi réel confirme le backtest.
+execution:
+  venue: okx
+  okx_demo: false
+  td_mode: cross
+  maker_first: true
+  maker_timeout_s: 90
+  chase_interval_s: 10
+  max_chases: 8
+  taker_slippage_cap_bps: 15
+  dead_man_switch_s: 60
+live:
+  state_dir: state
+  capital_fraction: 0.25
+  allow_unpromoted: false
+risk:
+  exchange_leverage: 5
+  daily_loss_limit: 0.03
+  drawdown_soft: 0.08
+  drawdown_hard: 0.20
+  es_limit_daily: 0.035
+  stop_loss_daily_sigmas: 4.0
+  kill_switch_file: state/KILL

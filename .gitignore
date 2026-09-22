@@ -1,0 +1,27 @@
+# Environnements et caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Données, modèles et état d'exécution : jamais dans le dépôt
+/data/
+/artifacts/
+/state/
+/runtime/
+*.parquet
+*.sqlite
+*.sqlite3
+*.db
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key

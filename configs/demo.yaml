@@ -1,0 +1,18 @@
+# Compte démo OKX (x-simulated-trading). Clés démo dans OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSPHRASE.
+execution:
+  venue: okx
+  okx_demo: true
+  td_mode: cross
+  maker_first: true
+  maker_timeout_s: 90
+  chase_interval_s: 10
+  max_chases: 8
+  taker_slippage_cap_bps: 15
+  dead_man_switch_s: 60
+live:
+  state_dir: state
+  capital_fraction: 1.0
+risk:
+  exchange_leverage: 5
+  stop_loss_daily_sigmas: 4.0
+  kill_switch_file: state/KILL

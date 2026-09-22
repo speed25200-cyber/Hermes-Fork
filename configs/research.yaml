@@ -1,0 +1,61 @@
+# Recherche sur données réelles : archives Binance USDT-M, barres 1h, univers point-in-time top 50.
+# Budget : ~1 h sur 4 cœurs (réentraînement trimestriel, 2 graines LightGBM, 40 répliques nulles).
+name: hermes-research
+seed: 42
+data:
+  source: binance_archive
+  cache_dir: data
+  bar: 1h
+  start: "2020-01-01"
+  include_premium: true
+  include_metrics: false
+  universe:
+    top_n: 50
+    liquidity_lookback_days: 30
+    min_history_days: 60
+    reselect_every_days: 7
+labels:
+  horizons: [4, 8, 24]
+  primary_horizon: 8
+  residualize: beta
+model:
+  gbm:
+    learning_rate: 0.05
+    n_estimators: 1000
+    early_stopping_rounds: 100
+    num_leaves: 31
+    min_data_in_leaf: 3000
+    feature_fraction: 0.6
+    lambda_l2: 10.0
+    seeds: [1, 2]
+  linear:
+    alpha: 300.0
+  ensemble: ic_weighted
+  market_model: true
+validation:
+  expanding: true
+  min_train_bars: 8760      # 1 an avant la première prédiction
+  test_bars: 2160           # réentraînement tous les 90 jours
+  val_bars: 1440            # 60 jours d'arrêt précoce purgé
+  embargo_bars: 24
+  train_stride: 4
+portfolio:
+  vol_target_annual: 0.20
+  gross_max: 2.5
+  net_max: 0.25
+  weight_max: 0.15
+  beta_neutral: true
+  holding_horizon: 8
+  cost_aversion: 1.0
+  ic_ref: 0.03
+costs:
+  maker_fee: 0.0002
+  taker_fee: 0.0005
+  maker_fill_ratio: 0.6
+  min_half_spread_bps: 1.0
+  impact_coef: 0.7
+risk:
+  daily_loss_limit: 0.03
+  drawdown_soft: 0.10
+  drawdown_hard: 0.25
+  es_limit_daily: 0.04

@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes weekly retraining
+
+[Timer]
+OnCalendar=Sun *-*-* 02:30:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,21 @@
+name: VPS status
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VPS: ${{ vars.VPS_HOST || '178.104.191.79' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+      - name: État
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+        run: sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "root@$VPS" bash -s < deploy/status.sh

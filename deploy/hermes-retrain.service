@@ -1,0 +1,12 @@
+[Unit]
+Description=Hermes weekly retraining (walk-forward research + champion/challenger)
+After=network-online.target
+
+[Service]
+Type=oneshot
+# root pour pouvoir (re)démarrer le moteur ; la recherche elle-même tourne sous l'utilisateur hermes.
+User=root
+WorkingDirectory=/opt/hermes
+ExecStart=/opt/hermes/deploy/retrain.sh
+Nice=10
+TimeoutStartSec=6h
