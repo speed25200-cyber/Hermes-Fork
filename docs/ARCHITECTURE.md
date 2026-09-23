@@ -13,9 +13,15 @@ nom de variable (`ret_60m`) désigne la même chose quelle que soit la bougie.
 
 | Unité | Horizons de prédiction | Particularités |
 |---|---|---|
-| 15 min (défaut) | 30 min, 1 h, 2 h | agrégats 1 min optionnels dans chaque bougie (variance réalisée, sauts, asymétrie, flux de fin de barre, VWAP) |
-| 30 min | 1 h, 2 h, 4 h | agrégé exactement depuis le 15 min |
-| 1 min | 5, 15, 30 min | top 15 contrats seulement, fenêtres ≤ 3 jours, exécution en quelques secondes |
+| 15 min (défaut) | 30 min, 1 h, 2 h — ou 4 h, 8 h, 24 h (`research_15m_long`) | agrégats 1 min optionnels dans chaque bougie (variance réalisée, sauts, asymétrie, flux de fin de barre, VWAP) |
+| 30 min | 1 h, 2 h, 4 h — ou 4 h, 8 h, 24 h (`research_30m_long`) | agrégé exactement depuis le 15 min |
+| 1 min | 5, 15, 30 min — ou 1 h, 4 h, 8 h avec décision toutes les 5 min (`research_1m_long`) | top 15 contrats seulement, fenêtres ≤ 3 jours, exécution en quelques secondes |
+
+La **bougie** fixe la résolution des données et la cadence de décision (éventuellement une bougie sur k,
+`portfolio.rebalance_every`, sur une grille alignée sur l'horloge identique en recherche et en live) ;
+l'**horizon** fixe ce que le modèle prédit et combien de temps une position est censée être tenue. Les
+deux sont indépendants : les mesures (`docs/RESULTS.md`) montrent qu'à coûts OKX un horizon court ne paie
+pas ses transactions même avec un IC élevé.
 
 L'univers point-in-time est calculé à résolution **journalière** avec des dates de resélection
 calendaires : la recherche et le moteur live sélectionnent les mêmes contrats aux mêmes dates, même si le
@@ -31,7 +37,7 @@ Le même code sert à la recherche, au backtest, au papier et au réel : ce qui 
                         walk-forward purgé : LightGBM + Ridge (+ Transformer transversal)
                                                         │  scores hors échantillon uniquement
                                                         ▼
-        IC réalisé causal ──► alpha = IC × σ_résiduelle × score  (Grinold)
+        score lissé (EWMA) ──► IC réalisé causal ──► alpha = IC × σ_résiduelle × score  (Grinold)
                                                         │
                                                         ▼
         optimiseur moyenne-variance à coûts L1 (zone de non-trading), bêta-neutre, cible de volatilité

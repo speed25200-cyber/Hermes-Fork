@@ -85,6 +85,32 @@ def training_hash(cfg: HermesConfig) -> str:
     return hashlib.sha256(json.dumps(keep, sort_keys=True).encode()).hexdigest()[:12]
 
 
+def _resumable(saved: str, current: str) -> bool:
+    """A saved walk-forward is reusable when training settings, panel start and contract set match and it
+    covers at least the current panel (a longer history is truncated, never extended)."""
+    parts0, parts1 = _marker_parts(saved), _marker_parts(current)
+    if parts0 is None or parts1 is None:
+        return False
+    return (
+        parts0[0] == parts1[0]
+        and parts0[1] == parts1[1]
+        and parts0[3] == parts1[3]
+        and pd.Timestamp(parts0[2]) >= pd.Timestamp(parts1[2])
+    )
+
+
+def _marker_parts(marker: str) -> tuple[str, str, str, str] | None:
+    """(training hash, panel start, panel end, contracts) from ``hash:start:end:n`` (timestamps contain ':')."""
+    try:
+        head, n = marker.rsplit(":", 1)
+        h, stamps = head.split(":", 1)
+        # Each timestamp is 'YYYY-MM-DD HH:MM:SS+00:00': split the two on the '+00:00:' boundary.
+        start, end = stamps.split("+00:00:", 1)
+        return h, start + "+00:00", end, n
+    except ValueError:
+        return None
+
+
 def _ledger_records(ledger: Path) -> list[dict[str, object]]:
     """Trial records: one JSON file per run in the ledger directory (parallel jobs never conflict), plus the
     legacy ``trials.jsonl`` next to it if present."""
@@ -185,9 +211,9 @@ def run_research(
     wf_dir = out / "walkforward"
     marker = wf_dir / "training_hash"
     thash = f"{training_hash(cfg)}:{panel.index[0]}:{panel.index[-1]}:{len(panel.symbols)}"
-    if resume and marker.exists() and marker.read_text() == thash:
+    if resume and marker.exists() and _resumable(marker.read_text(), thash):
         log.info("resuming from the saved walk-forward in %s", wf_dir)
-        wf = WalkForwardResult.load(wf_dir)
+        wf = WalkForwardResult.load(wf_dir).restricted_to(ds.panel.index, ds.panel.symbols)
     else:
         # The marker is only valid for a complete save: remove it (and stale artefacts) before retraining.
         if wf_dir.exists():

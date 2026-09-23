@@ -54,6 +54,26 @@ class WalkForwardResult:
             self.feature_importance.to_frame("gain").to_parquet(d / "importance.parquet")
         (d / "folds.json").write_text(json.dumps(self.folds, indent=1))
 
+    def restricted_to(self, index: pd.DatetimeIndex, symbols: list[str]) -> WalkForwardResult:
+        """The same predictions on a panel that ends earlier (every fold only ever saw its own past, so a
+        walk-forward over a longer history stays valid, truncated, on a shorter one)."""
+
+        def frame(x: pd.DataFrame) -> pd.DataFrame:
+            return x.reindex(index=index, columns=symbols)
+
+        def series(x: pd.Series | None) -> pd.Series | None:
+            return None if x is None else x.reindex(index)
+
+        return WalkForwardResult(
+            score=frame(self.score),
+            model_scores={k: frame(v) for k, v in self.model_scores.items()},
+            prior_ic=self.prior_ic.reindex(index),
+            folds=self.folds,
+            feature_importance=self.feature_importance,
+            market_score=series(self.market_score),
+            market_prior_ic=series(self.market_prior_ic),
+        )
+
     @classmethod
     def load(cls, directory: str | Path) -> WalkForwardResult:
         d = Path(directory)

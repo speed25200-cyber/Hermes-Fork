@@ -152,7 +152,11 @@ def _run_parallel(
     jobs: list[tuple[str, int | dict[str, object]]], workers: int
 ) -> list[tuple[str, pd.Series, dict[str, float]]]:
     if workers <= 1 or len(jobs) <= 1:
-        return [_bt_job(j) for j in jobs]
+        out = []
+        for i, j in enumerate(jobs):
+            out.append(_bt_job(j))
+            log.info("backtest %d/%d done (%s)", i + 1, len(jobs), out[-1][0])
+        return out
     import multiprocessing as mp
     from concurrent.futures.process import BrokenProcessPool
 
@@ -163,6 +167,7 @@ def _run_parallel(
             for fut, i in futures.items():
                 try:
                     done[i] = fut.result()
+                    log.info("backtest %d/%d done (%s)", len(done), len(jobs), done[i][0])
                 except BrokenProcessPool:
                     break
     except BrokenProcessPool:
@@ -249,6 +254,45 @@ class Evaluation:
         }
 
 
+def evaluation_window(ds: Dataset, wf: WalkForwardResult, cfg: HermesConfig) -> tuple[Dataset, WalkForwardResult]:
+    """Dataset and predictions restricted to what the evaluation reads: the out-of-sample period plus the
+    look-back the backtest needs before it (181 days of daily returns for the historical ES, covariance
+    warm-up), and the contracts that are members there. Same results, a fraction of the memory per worker."""
+    from dataclasses import replace
+
+    from hermes.features.library import FeatureSet
+    from hermes.labels.targets import Targets
+
+    idx = ds.mask.index
+    t0 = int(idx.searchsorted(wf.oof_start))
+    warm = max(2 * cfg.days(cfg.portfolio.cov_halflife_days), cfg.days(181)) + cfg.bars_per_day
+    lo = max(0, t0 - warm)
+    if lo == 0:
+        return ds, wf
+    all_cols = ds.mask.columns
+    cols = all_cols[ds.mask.iloc[lo:].to_numpy().any(axis=0)]
+
+    def frame(x: pd.DataFrame) -> pd.DataFrame:
+        x = x.iloc[lo:]
+        return x[cols] if list(x.columns) == list(all_cols) else x
+
+    feats = FeatureSet(
+        frames={},
+        market={k: v.iloc[lo:] for k, v in ds.feats.market.items()},
+        aux={k: frame(v) for k, v in ds.feats.aux.items()},
+    )
+    targets = Targets(
+        residual={h: frame(x) for h, x in ds.targets.residual.items()},
+        total={},
+        market={h: x.iloc[lo:] for h, x in ds.targets.market.items()},
+        horizon=ds.targets.horizon,
+    )
+    ds2 = replace(
+        ds, panel=ds.panel.iloc(slice(lo, None)).subset(list(cols)), mask=frame(ds.mask), feats=feats, targets=targets
+    )
+    return ds2, wf.restricted_to(idx[lo:], list(cols))
+
+
 def evaluate(
     ds: Dataset,
     wf: WalkForwardResult,
@@ -256,7 +300,10 @@ def evaluate(
     n_null: int | None = None,
     workers: int | None = None,
     grid: list[dict[str, object]] | None = None,
+    restrict: bool = True,
 ) -> tuple[Evaluation, BacktestResult]:
+    if restrict:
+        ds, wf = evaluation_window(ds, wf, cfg)
     v = cfg.validation
     bpy = cfg.bars_per_year
     start = wf.oof_start

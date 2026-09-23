@@ -85,3 +85,41 @@ def test_research_run_end_to_end_report_resume_and_compare(cfg_small, tmp_path, 
     _, wf2, _ = run_research(cfg2, out, panel=panel, n_null=2, workers=1, ledger=ledger, save_model=False)
     assert (out / "walkforward" / "training_hash").read_text() == marker
     np.testing.assert_allclose(wf2.score.to_numpy(), wf.score.to_numpy(), rtol=1e-5, atol=1e-6)
+
+
+def test_resume_accepts_a_longer_saved_history_only():
+    from hermes.research.run import _resumable
+
+    saved = "abc:2022-06-01 00:00:00+00:00:2026-08-31 23:45:00+00:00:289"
+    shorter = "abc:2022-06-01 00:00:00+00:00:2026-08-31 22:45:00+00:00:289"
+    assert _resumable(saved, shorter)  # truncated: every fold only saw its own past
+    assert not _resumable(shorter, saved)  # never extended
+    assert not _resumable(saved, shorter.replace(":289", ":288"))
+    assert not _resumable(saved, "xyz" + shorter[3:])
+
+
+@pytest.mark.slow
+def test_evaluation_window_gives_the_same_backtest():
+    """Restricting the evaluation to the out-of-sample window (+ look-back) changes memory, not results."""
+    import pandas as pd
+
+    from hermes.backtest.engine import run_backtest
+    from hermes.config import load_config
+    from hermes.research.evaluate import evaluation_window, make_signal
+    from hermes.research.walkforward import WalkForwardResult
+
+    cfg = load_config(None, **{"data.bar": "1h", "data.universe.top_n": 8, "data.universe.min_history_days": 3})
+    panel = make_synthetic_panel(n_assets=10, n_bars=24 * 260, bar="1h", seed=31, signal_strength=1.0)
+    ds = build_dataset(panel, cfg)
+    rng = np.random.default_rng(0)
+    oos = ds.mask.index[24 * 220]
+    tgt = ds.targets.primary
+    score = (tgt + rng.normal(0, 3, tgt.shape)).where(ds.mask).where(ds.mask.index.to_series() >= oos, axis=0)
+    wf = WalkForwardResult(score=score, model_scores={}, prior_ic=pd.Series(0.03, index=ds.mask.index))
+    ds2, wf2 = evaluation_window(ds, wf, cfg)
+    assert len(ds2.mask.index) < len(ds.mask.index)
+    runs = []
+    for d, w in ((ds, wf), (ds2, wf2)):
+        sig = make_signal(w.score, d, w.prior_ic, cfg)
+        runs.append(run_backtest(d.panel, d.mask, d.feats.aux, sig, cfg, start=w.oof_start).returns)
+    np.testing.assert_allclose(runs[0].to_numpy(), runs[1].reindex(runs[0].index).to_numpy(), atol=1e-9)
