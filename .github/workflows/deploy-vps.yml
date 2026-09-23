@@ -27,7 +27,7 @@ on:
         type: boolean
         default: false
       retire_old:
-        description: "Arrêter les anciens moteurs (okxq Docker, service Node 'hermes') — ne ferme AUCUNE position"
+        description: "EFFACER les anciens systèmes (okxq : Docker, base, /opt/okxq ; ancien Node : /root/hermes, services) — refusé si une clé OKX y est posée"
         type: boolean
         default: false
 

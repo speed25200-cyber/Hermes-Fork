@@ -7,8 +7,8 @@ Type=simple
 User=hermes
 Group=hermes
 WorkingDirectory=/opt/hermes
-# Port 8900 : le 8899 est pris par l'ancien moteur (okxq) sur ce VPS. HERMES_DASHBOARD_PORT le remplace.
-Environment=HERMES_DASHBOARD_PORT=8900
+# Port 8899 (celui qu'ouvrait l'ancien système, effacé par retire_old.sh) ; HERMES_DASHBOARD_PORT le remplace.
+Environment=HERMES_DASHBOARD_PORT=8899
 EnvironmentFile=/etc/hermes/hermes.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 # Écoute publique seulement si HERMES_DASHBOARD_TOKEN est défini (sinon le service refuse de démarrer).

@@ -64,10 +64,11 @@ for m in paper demo live; do
 done
 if grep -q '^HERMES_DASHBOARD_TOKEN=.' "$ETC/hermes.env"; then
   DPORT=$(sed -n 's/^HERMES_DASHBOARD_PORT=//p' "$ETC/hermes.env" | tail -1)
-  DPORT=${DPORT:-8900}
-  # Pare-feu actif (ufw) : ouvrir le port du tableau de bord, protégé par son jeton.
+  DPORT=${DPORT:-8899}
+  # Pare-feu actif (ufw) : ouvrir le port du tableau de bord (protégé par son jeton), fermer l'ancien 8900.
   if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow "$DPORT/tcp" >/dev/null && echo "ufw : port $DPORT ouvert"
+    [ "$DPORT" = 8900 ] || ufw delete allow 8900/tcp >/dev/null 2>&1 || true
   fi
   systemctl enable "hermes-dashboard@$MODE" >/dev/null && systemctl restart "hermes-dashboard@$MODE"
   echo "tableau de bord : http://<vps>:$DPORT/?token=<HERMES_DASHBOARD_TOKEN>"

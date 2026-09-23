@@ -213,7 +213,7 @@ def live_status(state: Path = typer.Option(Path("state/paper"), help="Dossier d'
 def live_dashboard(
     state: Path = typer.Option(Path("state/paper"), help="Dossier d'état du mode"),
     host: str = typer.Option("127.0.0.1", help="Adresse d'écoute (hors localhost : HERMES_DASHBOARD_TOKEN requis)"),
-    port: int = typer.Option(8900),
+    port: int = typer.Option(8899),
 ) -> None:
     """Tableau de bord en lecture seule (équité, positions, risque, événements)."""
     from hermes.live.dashboard import serve

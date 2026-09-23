@@ -62,9 +62,9 @@ une durée de cycle supérieure à la bougie est journalisée.
 ## Tableau de bord
 
 Lecture seule, processus séparé du moteur. Si le secret `HERMES_DASHBOARD_TOKEN` est défini, il est servi
-sur `http://<vps>:8900/?token=<jeton>` (puis un cookie de session ; port ouvert dans ufw s'il est actif, le
-8899 étant pris par l'ancien moteur) ; sinon il n'écoute que localement (`ssh -L 8900:127.0.0.1:8900 root@<vps>`
-puis `hermes live dashboard`). Il affiche équité, expositions,
+sur `http://<vps>:8899/?token=<jeton>` (puis un cookie de session ; port ouvert dans ufw s'il est actif) ; sinon
+il n'écoute que localement (`ssh -L 8899:127.0.0.1:8899 root@<vps>` puis `hermes live dashboard`). Les anciens
+systèmes du VPS (okxq, ancien moteur Node) s'effacent avec l'option `retire_old` du déploiement. Il affiche équité, expositions,
 IC estimé, drawdown, part maker, positions, état du risque et événements, ainsi que deux contrôles de
 qualité :
 
