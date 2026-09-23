@@ -126,6 +126,30 @@ def _uniq_bars(minutes: tuple[int, ...], bar: str) -> list[tuple[int, int]]:
     return out
 
 
+FUNDING_INTERVALS = np.array([1.0, 2.0, 4.0, 8.0])
+
+
+def funding_interval_hours(funding_rate: pd.DataFrame, bars_per_day: int) -> pd.DataFrame:
+    """Settlement interval of each contract, in hours (1, 2, 4 or 8), from the settlements seen so far.
+
+    ``funding_rate`` holds one value per settlement (NaN elsewhere). At each settlement the gap to the previous
+    one is measured; the interval is the smallest gap of the last 24 hours (a missing settlement does not double
+    it), snapped down to 1/2/4/8 h and carried forward. 8 h before the first gap is known (Binance's default).
+    """
+    hours = ((funding_rate.index - funding_rate.index[0]).total_seconds() / 3600.0).to_numpy()
+    t = pd.DataFrame(
+        np.where(funding_rate.notna().to_numpy(), hours[:, None], np.nan),
+        index=funding_rate.index,
+        columns=funding_rate.columns,
+    )
+    gap = (t - t.ffill().shift(1)).where(funding_rate.notna())
+    g = gap.rolling(bars_per_day, min_periods=1).min().where(funding_rate.notna()).to_numpy()
+    k = np.searchsorted(FUNDING_INTERVALS, np.where(np.isfinite(g), g, 8.0) + 1e-6, side="right") - 1
+    snapped = np.where(np.isfinite(g), FUNDING_INTERVALS[np.clip(k, 0, 3)], np.nan)
+    out = pd.DataFrame(snapped, index=funding_rate.index, columns=funding_rate.columns)
+    return out.ffill().fillna(8.0)
+
+
 def build_features(panel: Panel, mask: pd.DataFrame, cfg: FeatureConfig) -> FeatureSet:
     """Compute the full feature set for the panel's timeframe. ``mask`` (universe membership) is only used
     for cross-sectional statistics, so that the market and the ranks are defined over what was tradable.
@@ -256,9 +280,17 @@ def build_features(panel: Panel, mask: pd.DataFrame, cfg: FeatureConfig) -> Feat
         F["ib_rskew_day"] = F["ib_rskew"].rolling(day, min_periods=mpd).mean()
 
     # ---------------- carry & positioning ----------------
+    interval = None
     if "funding_rate" in panel:
         fr = panel["funding_rate"]
         last_fr = fr.ffill(limit=bars_per_day * 2)
+        if cfg.funding_per_8h:
+            # Since late 2023 Binance settles more and more contracts every 4 h (or 1-2 h): the last settled rate
+            # is put on an 8-hour basis so it means the same thing across contracts and years. Sums over a
+            # window stay per settlement: they are the cash actually paid.
+            interval = funding_interval_hours(fr, bars_per_day).astype("float64")
+            last_fr = last_fr * (8.0 / interval)
+            F["funding_short_interval"] = (interval < 8.0).astype("float64")
         F["funding_last"] = (last_fr * 1e4).clip(-100, 100)
         for m, w in _uniq_bars(cfg.funding_minutes, bar):
             F[f"funding_sum_{m}m"] = (fr.fillna(0).rolling(w, min_periods=1).sum() * 1e4).clip(-300, 300)
@@ -348,7 +380,14 @@ def build_features(panel: Panel, mask: pd.DataFrame, cfg: FeatureConfig) -> Feat
         M["hour_cos"] = pd.Series(np.cos(2 * np.pi * hour / 24), index=close.index)
         M["dow_sin"] = pd.Series(np.sin(2 * np.pi * dow / 7), index=close.index)
         M["dow_cos"] = pd.Series(np.cos(2 * np.pi * dow / 7), index=close.index)
-        M["to_funding"] = pd.Series(((8 - np.mod(hour, 8)) % 8) / 8.0, index=close.index)
+        if interval is None:
+            M["to_funding"] = pd.Series(((8 - np.mod(hour, 8)) % 8) / 8.0, index=close.index)
+        else:  # each contract's own settlement clock (settlements fall on UTC multiples of the interval)
+            h = np.asarray(hour, dtype="float64")[:, None]
+            iv = interval.to_numpy()
+            F["to_funding"] = pd.DataFrame(
+                np.mod(iv - np.mod(h, iv), iv) / iv, index=close.index, columns=close.columns
+            )
 
     frames = {k: v.astype("float32") for k, v in F.items()}
     market = {k: v.astype("float32") for k, v in M.items()}

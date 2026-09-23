@@ -79,6 +79,11 @@ class FeatureConfig(_Strict):
     market_features: bool = True
     time_features: bool = True
     intrabar: bool = Field(True, description="Use 1-minute aggregates when the panel carries them")
+    funding_per_8h: bool = Field(
+        False,
+        description="Put the last settled funding rate on an 8-hour basis (contracts settling every 1-4 h), flag "
+        "those contracts and give each its own time to settlement",
+    )
 
 
 class LabelConfig(_Strict):
@@ -108,7 +113,7 @@ class GBMConfig(_Strict):
     bagging_freq: int = 1
     lambda_l2: float = 10.0
     max_bin: int = 63
-    early_stopping_rounds: int = 150
+    early_stopping_rounds: int = Field(150, ge=0, description="0: no early stopping, n_estimators trees")
     seeds: tuple[int, ...] = (1, 2, 3)
     objective: Literal["regression", "huber"] = "huber"
     n_jobs: int = 0

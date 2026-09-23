@@ -144,7 +144,8 @@ def train_fold_models(
     lcb: dict[str, float] = {}
     overlap = max(1, H // cfg.bars(v.train_sample_minutes))
     if cfg.model.gbm.enabled:
-        # Early stopping on one seed decides the number of trees; every seed is then fit on core + val.
+        # Early stopping on one seed decides the number of trees (unless it is fixed in advance); every seed is
+        # then fit on core + val.
         es_cfg = cfg.model.gbm.model_copy(update={"seeds": cfg.model.gbm.seeds[:1]})
         g = GBMModel(es_cfg, refit_full=False).fit(tr, va)
         ics["gbm"] = g.val_ic
@@ -157,7 +158,10 @@ def train_fold_models(
             None if tr.weight is None else np.concatenate([tr.weight, va.weight]),
         )  # type: ignore[list-item]
         scale = len(full) / max(len(tr), 1)
-        gcfg = cfg.model.gbm.model_copy(update={"n_estimators": max(20, int(np.mean(g.best_iterations) * scale))})
+        n_trees = max(20, int(np.mean(g.best_iterations) * scale))
+        if cfg.model.gbm.early_stopping_rounds == 0:  # fixed in advance: the validation block only measures
+            n_trees = cfg.model.gbm.n_estimators
+        gcfg = cfg.model.gbm.model_copy(update={"n_estimators": n_trees})
         g_full = GBMModel(gcfg).fit(full)
         g_full.best_iterations, g_full.val_ic = g.best_iterations, g.val_ic
         models["gbm"] = g_full

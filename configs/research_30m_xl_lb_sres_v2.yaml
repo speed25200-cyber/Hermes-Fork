@@ -1,0 +1,85 @@
+# research_30m_xl_lb_sres avec trois corrections d'hygiène, en un seul essai (docs/RESULTS.md, § 10, V2) :
+# - funding sur base 8 h : depuis fin 2023 Binance règle de plus en plus de contrats toutes les 4 h (57-69 % de
+#   l'univers en 2026, 0 % avant l'automne 2023) ; le dernier taux réglé changeait de sens au fil des années ;
+# - nombre d'arbres fixé d'avance (300) : l'IC de validation ne prédit pas celui du pli suivant (corrélation
+#   -0,04 sur 19 plis) et 7 plis s'arrêtaient au plancher de 20 arbres ;
+# - ensemble à poids égaux, pour la même raison.
+# Aucun de ces choix n'a été réglé sur 2026. Un essai de plus au registre (DSR).
+name: hermes-30m-xl-lb-sres-v2
+seed: 42
+data:
+  source: binance_archive
+  cache_dir: data
+  bar: 30m
+  source_bar: 15m
+  start: "2022-06-01"
+  include_premium: true
+  intrabar: false
+  universe:
+    top_n: 30
+    liquidity_lookback_days: 30
+    min_history_days: 60
+    reselect_every_days: 7
+features:
+  return_minutes: [30, 60, 120, 240, 480, 1440, 4320, 10080, 20160, 43200]
+  vol_minutes: [240, 1440, 4320]
+  flow_minutes: [60, 240, 1440]
+  funding_minutes: [480, 1440, 4320, 10080, 43200]
+  trend_pairs_minutes: [[240, 1440], [1440, 5760], [5760, 20160]]
+  range_minutes: [1440, 10080, 43200]
+  day_minutes: 1440
+  long_minutes: 10080
+  zscore_minutes: 43200
+  vol_halflife_minutes: 1440
+  max_lookback_minutes: 43200
+  funding_per_8h: true
+labels:
+  horizons: [16, 48, 96]
+  primary_horizon: 48
+  residualize: style
+model:
+  gbm:
+    learning_rate: 0.05
+    n_estimators: 300
+    early_stopping_rounds: 0
+    num_leaves: 31
+    min_data_in_leaf: 3000
+    feature_fraction: 0.6
+    lambda_l2: 10.0
+    seeds: [1, 2]
+  linear:
+    alpha: 300.0
+  ensemble: equal
+  market_model: true
+validation:
+  expanding: true
+  min_train_days: 365
+  test_days: 60
+  val_days: 45
+  embargo_minutes: 2880
+  train_sample_minutes: 60
+portfolio:
+  vol_target_annual: 0.20
+  gross_max: 2.5
+  net_max: 0.25
+  weight_max: 0.15
+  beta_neutral: true
+  holding_horizon: 48
+  signal_halflife: 0.5
+  cost_scale_floor: 0.5
+  style_neutral: true
+  style_risk: 1.0
+  cost_aversion: 2.0
+  ic_ref: 0.03
+  cov_halflife_days: 7
+costs:
+  maker_fee: 0.0002
+  taker_fee: 0.0005
+  maker_fill_ratio: 0.6
+  min_half_spread_bps: 1.0
+  impact_coef: 0.7
+risk:
+  daily_loss_limit: 0.03
+  drawdown_soft: 0.10
+  drawdown_hard: 0.25
+  es_limit_daily: 0.04

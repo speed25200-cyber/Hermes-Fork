@@ -4,7 +4,9 @@ Choices that matter on noisy, non-stationary data:
 
 * very large ``min_data_in_leaf`` and strong L2: a leaf must be supported by thousands of samples;
 * early stopping on the **cross-sectional IC** of a purged validation block (not on MSE), then a refit on
-  the full window with the selected number of trees scaled by the extra data;
+  the full window with the selected number of trees scaled by the extra data -- or, with
+  ``early_stopping_rounds: 0``, a number of trees fixed in advance (a noisy validation block then decides
+  nothing);
 * Huber loss on Gauss-ranked targets: outliers cannot dominate;
 * several seeds averaged (bagging over the stochastic parts of the fit).
 """
@@ -55,7 +57,7 @@ class GBMModel:
         for seed in self.cfg.seeds:
             params = self._params(seed)
             n_iter = self.cfg.n_estimators
-            if val is not None and len(val) > 0:
+            if val is not None and len(val) > 0 and self.cfg.early_stopping_rounds > 0:
                 dtrain = lgb.Dataset(data.X, data.y, weight=data.weight, free_raw_data=False)
                 dval = lgb.Dataset(val.X, val.y, reference=dtrain)
                 vb = val.groups

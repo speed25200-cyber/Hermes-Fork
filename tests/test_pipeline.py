@@ -34,6 +34,20 @@ def test_planted_signal_survives_style_residual_targets(cfg_small):
 
 
 @pytest.mark.slow
+def test_fixed_tree_count_and_equal_ensemble_find_the_planted_signal(cfg_small):
+    cfg = with_overrides(
+        cfg_small,
+        {"model.gbm.early_stopping_rounds": 0, "model.gbm.n_estimators": 60, "model.ensemble": "equal"},
+    )
+    panel = make_synthetic_panel(n_assets=16, n_bars=96 * 75, bar="15m", seed=11, signal_strength=1.0)
+    ds = build_dataset(panel, cfg)
+    wf = walk_forward_train(ds, cfg)
+    s = ic_summary(cross_sectional_ic(wf.score.stack(), ds.targets.residual[4].stack()), horizon=4)
+    assert s["ic_mean"] > 0.03 and s["ic_t"] > 3
+    assert all(f["gbm_trees"] == [60] for f in wf.folds)  # never early-stopped
+
+
+@pytest.mark.slow
 def test_noise_has_no_out_of_sample_ic(cfg_small):
     panel = make_synthetic_panel(n_assets=16, n_bars=96 * 75, bar="15m", seed=12, signal_strength=0.0)
     ds = build_dataset(panel, cfg_small)
