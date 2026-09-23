@@ -16,8 +16,8 @@ def test_forward_sum_window():
 
 
 def test_targets_include_funding_and_are_residual(small_panel):
-    mask = universe_mask(small_panel, UniverseConfig(top_n=10, min_history_days=5), 24)
-    feats = build_features(small_panel, mask, FeatureConfig(), 24)
+    mask = universe_mask(small_panel, UniverseConfig(top_n=10, min_history_days=3))
+    feats = build_features(small_panel, mask, FeatureConfig())
     tg = build_targets(small_panel, feats, mask, LabelConfig(residualize="mean", vol_normalize=False))
     res = tg.residual[8]
     # Mean-residualised targets sum to ~0 across members at each time.

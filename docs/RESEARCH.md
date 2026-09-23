@@ -45,6 +45,25 @@ Purge d'au moins l'horizon de la cible et embargo (López de Prado 2018) ; CPCV 
 walk-forward sur données synthétiques selon Arian et al. 2024) ; Sharpe dégonflé (Bailey & López de Prado
 2014), PBO (Bailey et al. 2017), historique minimal (2012), SPA de Hansen (2005). Chaque essai est compté.
 
+Détails qui décident si la porte sait dire « non » (corrigés après revue adversariale) :
+
+- **DSR** : les variantes de la grille de robustesse sont très corrélées ; elles comptent pour
+  `N_eff = ρ + (1 − ρ) N` essais (ρ = corrélation moyenne de leurs P&L), multipliés par les configurations
+  du registre ; la dispersion des Sharpe entre essais n'est jamais prise sous la variance d'échantillonnage
+  d'un Sharpe quotidien sous le nul (`1/(T−1)`), sans quoi la déflation disparaît.
+- **Test nul** : p-valeur de permutation exacte `(1 + #{nul ≥ observé}) / (n + 1)` (Phipson & Smyth 2010),
+  dont le niveau est garanti quel que soit le nombre de répliques ; blocs de permutation d'une semaine
+  calendaire quelle que soit la bougie.
+- **Sharpe annualisé** : variance de long terme de Newey-West (noyau de Bartlett, largeur automatique) ;
+  l'autocorrélation positive pénalise, la négative ne gonfle jamais le Sharpe.
+- **t de l'IC** : calculé sur les IC moyens **journaliers** (les IC barre à barre sont très dépendants :
+  cibles qui se chevauchent, scores persistants, régimes) avec Newey-West.
+- **Stress de coûts** : le livre est construit avec les coûts estimés habituels mais chaque transaction paie
+  le double (frais, spread, impact) — une exécution pire que prévu, pas un livre ré-optimisé.
+- **Années positives** : les années de moins de 90 jours hors échantillon ne votent pas.
+- **Latence** : la simulation exécute à la clôture de la bougie ; la porte exige en plus un Sharpe positif
+  avec **une bougie entière** de retard, plus sévère que le retard réel (quelques secondes).
+
 ## 5. Portefeuille
 
 Alpha = IC × σ × score (Grinold) ; portefeuille visé moyenne-variance à coûts, trading partiel vers la
@@ -74,6 +93,7 @@ en unités de volatilité quotidienne ; Donier & Bonart 2015).
 - Gârleanu, Pedersen (2013), *Dynamic Trading with Predictable Returns and Transaction Costs*, JF.
 - Jensen, Kelly, Malamud, Pedersen (2026), *Machine Learning and the Implementable Efficient Frontier*, RFS.
 - Bailey, López de Prado (2014), *The Deflated Sharpe Ratio* ; Bailey et al. (2017), *The Probability of Backtest Overfitting*.
+- Phipson, Smyth (2010), *Permutation P-values Should Never Be Zero*. Newey, West (1994), *Automatic Lag Selection in Covariance Matrix Estimation*.
 - López de Prado (2018), *Advances in Financial Machine Learning*.
 - Hansen (2005), *A Test for Superior Predictive Ability*, JBES.
 - Ledoit, Wolf (2020), *Analytical nonlinear shrinkage of large-dimensional covariance matrices*, Ann. Stat.

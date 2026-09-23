@@ -59,29 +59,30 @@ class CostModel:
         m = self.cfg.maker_fill_ratio
         return m * self.cfg.maker_fee + (1 - m) * self.cfg.taker_fee
 
+    def __post_init__(self) -> None:
+        # Numpy views for the per-bar hot path (the backtest calls these tens of thousands of times).
+        self._hs = np.nan_to_num(self.half_spread.to_numpy(dtype=np.float64), nan=10e-4)
+        self._sig = np.nan_to_num(self.sigma_daily.to_numpy(dtype=np.float64), nan=0.05)
+        self._adv = self.adv.to_numpy(dtype=np.float64)
+
+    def adv_at(self, t: int) -> np.ndarray:
+        return self._adv[t]
+
     def linear_rate(self, t: int, trade_dollars: np.ndarray | float = 0.0) -> np.ndarray:
         """Per-unit cost rate for each contract at bar position ``t`` for a typical trade size."""
-        hs = self.half_spread.iloc[t].to_numpy()
-        sig = self.sigma_daily.iloc[t].to_numpy()
-        adv = self.adv.iloc[t].to_numpy()
         q = np.abs(np.asarray(trade_dollars, float))
-        impact = (
-            self.cfg.impact_coef
-            * np.nan_to_num(sig, nan=0.05)
-            * np.sqrt(np.where(np.isfinite(adv) & (adv > 0), q / adv, 1.0))
-        )
-        rate = self.fee_blend + (1 - self.cfg.maker_fill_ratio) * np.nan_to_num(hs, nan=10e-4) + impact
-        return rate
+        adv = self._adv[t]
+        part = np.where(np.isfinite(adv) & (adv > 0), q / np.where(adv > 0, adv, 1.0), 1.0)
+        impact = self.cfg.impact_coef * self._sig[t] * np.sqrt(part)
+        return self.fee_blend + (1 - self.cfg.maker_fill_ratio) * self._hs[t] + impact
 
     def trade_cost(self, t: int, dollars: np.ndarray) -> tuple[float, float, float]:
         """Total cost of trading ``dollars`` (signed) at bar ``t``: (fees, spread, impact) in dollars."""
         q = np.abs(dollars)
         m = self.cfg.maker_fill_ratio
         fees = float(np.sum(q) * self.fee_blend)
-        hs = np.nan_to_num(self.half_spread.iloc[t].to_numpy(), nan=10e-4)
-        spread = float(np.sum(q * (1 - m) * hs))
-        sig = np.nan_to_num(self.sigma_daily.iloc[t].to_numpy(), nan=0.05)
-        adv = self.adv.iloc[t].to_numpy()
-        part = np.where(np.isfinite(adv) & (adv > 0), q / adv, 1.0)
-        impact = float(np.sum(q * self.cfg.impact_coef * sig * np.sqrt(part)))
+        spread = float(np.sum(q * (1 - m) * self._hs[t]))
+        adv = self._adv[t]
+        part = np.where(np.isfinite(adv) & (adv > 0), q / np.where(adv > 0, adv, 1.0), 1.0)
+        impact = float(np.sum(q * self.cfg.impact_coef * self._sig[t] * np.sqrt(part)))
         return fees, spread, impact

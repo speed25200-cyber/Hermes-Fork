@@ -22,6 +22,14 @@ arrondis, stops) → `live` avec `capital_fraction` 0,25, puis augmentation si l
    tourne en arrière-plan (~1 h) et démarre le moteur dès que le premier modèle existe.
 3. Workflow **VPS status** : services, état publié, journaux, derniers rapports.
 
+Sans GitHub Actions (quota épuisé, compte bloqué…), le même déploiement depuis n'importe quel poste
+disposant d'un accès SSH root au VPS :
+
+```bash
+VPS=178.104.191.79 MODE=paper TRAIN=1 bash deploy/deploy.sh
+# demo / live : exporter d'abord OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE dans le shell
+```
+
 Sur le VPS :
 
 ```bash
@@ -31,15 +39,33 @@ cat /opt/hermes/state/paper/status.json   # équité, positions, IC estimé, ris
 systemctl start hermes-retrain            # réentraîner maintenant (sinon chaque dimanche 02:30 UTC)
 ```
 
+## Unité de temps
+
+Le moteur trade l'unité de temps du modèle installé (15 min par défaut). Pour changer : entraîner avec
+`configs/research_30m.yaml` ou `configs/research_1m.yaml` (ou choisir `/etc/hermes/research_config` sur le
+VPS pour le réentraînement hebdomadaire), puis installer le modèle. L'exécution s'adapte seule : la phase
+passive (post-only) dure au plus 15 % de la bougie, puis bascule en IOC borné. En 1 min, un cycle de
+décision prend quelques secondes (≈ 3,5 s pour les variables sur 40 contrats × 12 000 bougies, ~1 Go) ;
+une durée de cycle supérieure à la bougie est journalisée.
+
+## Tableau de bord
+
+Lecture seule, processus séparé du moteur. Si le secret `HERMES_DASHBOARD_TOKEN` est défini, il est servi
+sur `http://<vps>:8899/?token=<jeton>` (puis un cookie de session) ; sinon il n'écoute que localement
+(`ssh -L 8899:127.0.0.1:8899 root@<vps>` puis `hermes live dashboard`). Il affiche équité, expositions,
+IC estimé, drawdown, part maker, positions, état du risque et événements.
+
 ## Arrêt d'urgence
 
 ```bash
 sudo -u hermes /opt/hermes/.venv/bin/hermes live kill --state-root /opt/hermes/state
 ```
 
-Au cycle suivant, le moteur aplatit le livre en mode urgent (IOC) et s'arrête de trader. Pour reprendre
-(décision humaine) : `hermes live resume --mode <mode>`. L'arrêt automatique se déclenche aussi au
-drawdown dur (`risk.drawdown_hard`).
+Au cycle suivant, le moteur aplatit le livre en mode urgent (IOC) et s'arrête de trader. Ce contrôle a
+lieu **avant** toute donnée de marché et tout calcul du modèle : il agit même si le flux Binance ou le
+modèle est en panne (il est aussi rejoué après un cycle en échec). Pour reprendre (décision humaine) :
+`hermes live resume --mode <mode>`. L'arrêt automatique se déclenche aussi au drawdown dur
+(`risk.drawdown_hard`).
 
 Même si le processus meurt : les ordres en attente sont annulés par OKX en moins d'une minute
 (dead-man switch `cancel-all-after`) et chaque position porte un stop catastrophe côté exchange
@@ -49,13 +75,20 @@ Même si le processus meurt : les ordres en attente sont annulés par OKX en moi
 
 ```bash
 pip install -e ".[dev]"
-hermes data download -c configs/research.yaml
-hermes research run -c configs/research.yaml --out reports/mon-essai
+hermes data download -c configs/research_15m.yaml
+hermes research run -c configs/research_15m.yaml --out reports/mon-essai
 hermes model install reports/mon-essai/model        # devient le champion
 ```
 
 Ou le workflow **Research** sur un runner GitHub (publie le rapport sur la branche et le modèle en
-artefact). Chaque configuration testée est ajoutée à `reports/trials.jsonl` : le DSR en tient compte.
+artefact). Chaque essai est inscrit dans `reports/trials/` (un fichier par exécution) : le DSR compte les
+configurations distinctes. Relancer une recherche dans le même dossier réutilise le walk-forward sauvegardé
+tant que seuls les réglages d'évaluation changent (coûts, portefeuille, risque, seuils de la porte).
+
+Réentraînement hebdomadaire sur le VPS : pour la **même** configuration, la nouvelle évaluation (plus de
+données) remplace toujours le champion ; un champion promu qui échoue désormais la porte est **rétrogradé**
+et le moteur réel aplatit le livre. Une configuration différente ne remplace un champion promu que si elle
+est promue.
 
 ## Paramètres qui comptent
 
@@ -69,7 +102,8 @@ artefact). Chaque configuration testée est ajoutée à `reports/trials.jsonl` :
 | `risk.drawdown_soft` / `drawdown_hard` | 10 % / 25 % | réduction linéaire du risque puis arrêt |
 | `risk.es_limit_daily` | 4 % | expected shortfall 97,5 % à un jour maximal |
 | `risk.exchange_leverage` | 5 | levier posé sur OKX (marge croisée) ; le levier *effectif* est `gross`, bien plus bas |
-| `live.capital_fraction` | 1 (0,25 en live) | part de l'équité du compte utilisée |
+| `live.capital_fraction` | 1 (0,25 en live) | part de l'équité du compte allouée à la stratégie ; drawdown et perte journalière sont mesurés sur la NAV de cette part (rendement du compte ÷ fraction), pas sur le compte dilué. Après un virement : `hermes live resume --mode <mode>` (repart de l'équité actuelle) |
+| `live.history_days` | dérivé | historique de bougies gardé en live : par défaut le préchauffage exact des variables de recherche (≈ 37 jours en 15 min, ≈ 8 jours en 1 min) |
 
 ## Sécurité
 

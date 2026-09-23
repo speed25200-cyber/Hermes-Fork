@@ -209,3 +209,71 @@ def test_paper_broker_accounting(tmp_path):
     # Restart keeps the book.
     pb2 = PaperBroker(tmp_path / "acc.json", 1.0, 0.0002, 0.0005)
     assert abs(pb2.cash - pb.cash) < 1e-9 and not pb2.qty
+
+
+def test_rounding_absorbs_float_residue():
+    inst = Instrument.from_okx({**INST, "lotSz": "0.1", "minSz": "0.1"})
+    assert inst.round_size_down(0.3 - 0.1) == 0.2  # 0.19999999999999998 is two lots, not one
+    assert inst.round_size_down(0.1 + 0.2) == 0.3
+
+
+class AmbiguousOKX(FakeOKX):
+    """The first POST reaches the exchange (the order exists) but the answer is lost: HTTP 502."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.lost_answer = True
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        resp = super().handler(request)
+        if request.url.path == "/api/v5/trade/order" and request.method == "POST" and self.lost_answer:
+            self.lost_answer = False
+            return httpx.Response(502, text="bad gateway")
+        return resp
+
+
+def test_ambiguous_post_is_reconciled_not_forgotten():
+    from hermes.execution.okx_broker import Child
+
+    fake = AmbiguousOKX(fill_after=1)
+    b = _broker(fake)
+    ch = Child("BTCUSDT", b.instruments["BTCUSDT"], "buy", 0.05, False)
+    fills, remaining = asyncio.run(b._execute_child(ch, urgent=False))
+    # The order that the exchange did accept is tracked and filled; no second order is sent on top of it.
+    assert remaining == 0 and sum(f.qty for f in fills) == 0.05
+    assert sum(1 for o in fake.orders.values() if o["ordType"] == "post_only") == 1
+
+
+class StopsOKX(FakeOKX):
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        ok = lambda data: httpx.Response(200, json={"code": "0", "msg": "", "data": data})  # noqa: E731
+        path = request.url.path
+        if path == "/api/v5/trade/orders-algo-pending":
+            self.calls.append(f"{request.method} {path}")
+            return ok([{"instId": "ETH-USDT-SWAP", "algoId": "1", "side": "sell", "tag": "hermes"}])
+        return super().handler(request)
+
+
+def test_protect_never_cancels_stops_it_cannot_relate_to_a_position():
+    fake = StopsOKX()
+    b = _broker(fake)
+    asyncio.run(b.protect({}))
+    assert not any("cancel-algos" in c for c in fake.calls)
+
+
+def test_unknown_instrument_position_is_mapped_and_closable():
+    class PosOKX(FakeOKX):
+        def handler(self, request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/api/v5/account/positions":
+                row = {"instId": "ETH-USDT-SWAP", "pos": "3", "markPx": "2000", "avgPx": "1900"}
+                return httpx.Response(200, json={"code": "0", "msg": "", "data": [row]})
+            return super().handler(request)
+
+    b = _broker(PosOKX())
+    b.catalog = {"ETH-USDT-SWAP": Instrument.from_okx({**INST, "instId": "ETH-USDT-SWAP"})}
+    pos = asyncio.run(b.positions())
+    assert "ETHUSDT" in pos and pos["ETHUSDT"].contracts == 3
+    # A model symbol registered later for the same contract takes over the derived mapping.
+    assert b.register(["ETHUSDT"]) == ["ETHUSDT"]
+    kids = b.plan({}, pos, {"ETHUSDT": 2000.0})
+    assert len(kids) == 1 and kids[0].reduce_only and kids[0].side == "sell"

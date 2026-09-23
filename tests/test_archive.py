@@ -84,3 +84,16 @@ def test_klines_via_mock_transport(tmp_path):
         ),
     )
     assert len(arch2.klines("BTCUSDT", "1h", date(2024, 1, 1), date(2024, 1, 31))) == 2
+
+
+def test_panel_is_trimmed_where_funding_history_ends(small_panel):
+    from hermes.data.store import trim_to_funding
+
+    p = small_panel.subset(["BTCUSDT", "ETHUSDT"])
+    fr = p["funding_rate"].copy() if "funding_rate" in p else pd.DataFrame(np.nan, index=p.index, columns=p.symbols)
+    fr[:] = np.nan
+    fr.iloc[: len(fr) // 2 : 32] = 1e-4  # settlements only in the first half (monthly archives lag)
+    q = trim_to_funding(p.with_fields({"funding_rate": fr}))
+    last = fr.notna().any(axis=1)[lambda x: x].index[-1]
+    assert q.index[-1] == last.floor("D") + pd.Timedelta(days=1) - p.bar_delta
+    assert len(q.index) < len(p.index)

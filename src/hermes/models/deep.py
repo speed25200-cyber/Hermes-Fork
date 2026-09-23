@@ -108,7 +108,7 @@ class DeepModel:
         out = np.zeros((len(rows), X.shape[1]), dtype=np.float32)
         ok = rows >= 0
         if ok.any():
-            Z = (X[rows[ok]] - self.mu) / self.sd
+            Z = (X[rows[ok]].astype(np.float32) - self.mu) / self.sd
             out[ok] = np.clip(np.nan_to_num(Z, nan=0.0, posinf=0.0, neginf=0.0), -5, 5)
         return out
 
@@ -154,8 +154,9 @@ class DeepModel:
         rows = pos[train_t].reshape(-1)
         rows = rows[rows >= 0]
         sample = rows if len(rows) <= 200_000 else rng.choice(rows, 200_000, replace=False)
-        self.mu = np.nan_to_num(np.nanmean(X[sample], axis=0)).astype(np.float32)
-        sd = np.nanstd(X[sample], axis=0)
+        xs = X[sample].astype(np.float32)
+        self.mu = np.nan_to_num(np.nanmean(xs, axis=0)).astype(np.float32)
+        sd = np.nanstd(xs, axis=0)
         self.sd = np.where(np.isfinite(sd) & (sd > 1e-9), sd, 1.0).astype(np.float32)
         if warm_start is not None and warm_start.net is not None:
             self.net = copy.deepcopy(warm_start.net)

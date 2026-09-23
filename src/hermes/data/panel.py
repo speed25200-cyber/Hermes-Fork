@@ -13,6 +13,7 @@ Conventions, relied upon by every other module:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,8 +24,18 @@ import pandas as pd
 PRICE_FIELDS = ("open", "high", "low", "close")
 CORE_FIELDS = (*PRICE_FIELDS, "volume", "quote_volume", "trades", "taker_buy_quote")
 OPTIONAL_FIELDS = ("funding_rate", "premium", "oi_value", "ls_top", "ls_account", "taker_ls_ratio")
+INTRABAR_FIELDS = ("ib_rv", "ib_bv", "ib_rskew", "ib_flow_last", "ib_flow_std", "ib_vwap", "ib_upfrac")
 
-BAR_TO_OFFSET = {"15m": "15min", "30m": "30min", "1h": "1h", "2h": "2h", "4h": "4h", "1d": "1D"}
+BAR_TO_OFFSET = {
+    "1m": "1min",
+    "5m": "5min",
+    "15m": "15min",
+    "30m": "30min",
+    "1h": "1h",
+    "2h": "2h",
+    "4h": "4h",
+    "1d": "1D",
+}
 
 
 @dataclass
@@ -107,13 +118,14 @@ class Panel:
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         for name, df in self.fields.items():
-            df.astype("float64").to_parquet(directory / f"{name}.parquet")
-        pd.Series({"bar": self.bar}).to_json(directory / "_panel.json")
+            df.astype("float32").to_parquet(directory / f"{name}.parquet")
+        (directory / "_panel.json").write_text(json.dumps({"bar": self.bar}))
 
     @classmethod
     def load(cls, directory: str | Path) -> Panel:
         directory = Path(directory)
-        bar = pd.read_json(directory / "_panel.json", typ="series")["bar"]
+        # Plain JSON: pandas.read_json would parse "1h" as a timestamp.
+        bar = json.loads((directory / "_panel.json").read_text())["bar"]
         fields = {p.stem: pd.read_parquet(p) for p in sorted(directory.glob("*.parquet"))}
         for df in fields.values():
             if df.index.tz is None:
@@ -143,7 +155,7 @@ class Panel:
                     cols[sym] = s.reindex(index)
                 else:
                     cols[sym] = pd.Series(np.nan, index=index)
-            out[name] = pd.DataFrame(cols, index=index, dtype="float64")
+            out[name] = pd.DataFrame(cols, index=index, dtype="float32")
         for name in CORE_FIELDS:
             if name not in out:
                 out[name] = pd.DataFrame(np.nan, index=index, columns=symbols)
@@ -171,6 +183,8 @@ def resample_panel(panel: Panel, bar: str) -> Panel:
     }
     out = {}
     for name, df in panel.fields.items():
+        if name in INTRABAR_FIELDS:
+            continue  # not additive: recomputed from 1-minute data for the new bar (hermes.data.intrabar)
         how = rules.get(name, "last")
         r = df.resample(offset, label="left", closed="left")
         agg = getattr(r, how)(min_count=1) if how in ("sum",) else getattr(r, how)()
@@ -178,17 +192,20 @@ def resample_panel(panel: Panel, bar: str) -> Panel:
     return Panel(out, bar=bar, meta=dict(panel.meta))
 
 
-def clean_panel(panel: Panel, max_gap: int = 3) -> Panel:
-    """Fill short *interior* gaps (exchange maintenance, missing archive rows) with a flat bar.
+def clean_panel(panel: Panel, max_gap: int | None = None) -> Panel:
+    """Fill short gaps (exchange maintenance, missing archive rows, a failed live request) with a flat bar.
 
     A missing bar inside a contract's life would otherwise look like a delisting and force an exit and a
-    costly re-entry one bar later. Prices are carried forward for at most ``max_gap`` bars, activity fields
-    are set to zero; leading/trailing gaps (before listing, after delisting) are left untouched.
+    costly re-entry one bar later. The rule is **causal**, identical in research and live: after a listed
+    contract's last bar, its price is carried forward for at most ``max_gap`` bars (default: 45 minutes, at
+    least 3 bars), activity fields set to zero. Whether the series later resumes plays no role -- that would
+    be information from the future. Before listing nothing is filled.
     """
+    if max_gap is None:
+        max_gap = max(3, round(45 * 60 / pd.Timedelta(BAR_TO_OFFSET[panel.bar]).total_seconds()))
     close = panel["close"]
-    interior = close.ffill().notna() & close.bfill().notna()
     filled_close = close.ffill(limit=max_gap)
-    fill = close.isna() & interior & filled_close.notna()
+    fill = close.isna() & filled_close.notna()
     if not fill.to_numpy().any():
         return panel
     fields = dict(panel.fields)

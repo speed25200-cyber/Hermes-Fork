@@ -13,25 +13,27 @@ import pandas as pd
 
 
 class EwmaCovariance:
-    """Incremental EWMA second-moment matrix over a fixed symbol set (NaN returns treated as 0)."""
+    """Incremental EWMA second-moment matrix over a fixed symbol set (NaN returns treated as 0).
+
+    Missing returns count as zero, which keeps the matrix positive semi-definite by construction (a sum of
+    outer products): no per-bar spectral repair is needed. Contracts with short history get understated
+    variances here, which the blend with the factor model (built on their own ex-ante volatility) corrects.
+    """
 
     def __init__(self, n: int, halflife: int):
         self.lam = 0.5 ** (1.0 / halflife)
         self.S = np.zeros((n, n))
-        self.w = np.zeros((n, n))  # accumulated weight per pair, for bias correction
         self.count = 0
 
     def update(self, r: np.ndarray) -> None:
-        ok = np.isfinite(r).astype(float)
         x = np.nan_to_num(r)
-        self.S = self.lam * self.S + (1 - self.lam) * np.outer(x, x)
-        self.w = self.lam * self.w + (1 - self.lam) * np.outer(ok, ok)
+        self.S *= self.lam
+        self.S += (1 - self.lam) * np.outer(x, x)
         self.count += 1
 
     def matrix(self, idx: np.ndarray) -> np.ndarray:
-        S = self.S[np.ix_(idx, idx)]
-        W = self.w[np.ix_(idx, idx)]
-        return np.where(W > 1e-6, S / np.maximum(W, 1e-6), 0.0)
+        debias = 1.0 - self.lam**self.count if self.count else 1.0
+        return self.S[np.ix_(idx, idx)] / max(debias, 1e-12)
 
 
 def factor_covariance(beta: np.ndarray, mkt_var: float, ivol: np.ndarray) -> np.ndarray:
@@ -41,14 +43,12 @@ def factor_covariance(beta: np.ndarray, mkt_var: float, ivol: np.ndarray) -> np.
 def blended_covariance(
     beta: np.ndarray, mkt_var: float, ivol: np.ndarray, sample: np.ndarray | None, shrink: float = 0.3
 ) -> np.ndarray:
+    """(1-d) * factor + d * sample: positive definite as long as the sample is PSD and ivol > 0."""
     F = factor_covariance(beta, mkt_var, ivol)
     if sample is None or shrink <= 0:
         return F
     S = (1 - shrink) * F + shrink * sample
-    # Guard against indefiniteness from the pairwise-available sample.
-    vals, vecs = np.linalg.eigh((S + S.T) / 2)
-    vals = np.maximum(vals, 1e-12)
-    return (vecs * vals) @ vecs.T
+    return (S + S.T) / 2
 
 
 def market_variance(mkt: pd.Series, halflife: int) -> pd.Series:

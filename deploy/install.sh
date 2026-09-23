@@ -27,7 +27,7 @@ if [ ! -t 0 ]; then
   TMP="$(mktemp)"
   cat > "$TMP"
   if [ -s "$TMP" ]; then
-    grep -E '^(OKX_API_KEY|OKX_API_SECRET|OKX_API_PASSPHRASE|OKX_BASE_URL|HERMES_TELEGRAM_TOKEN|HERMES_TELEGRAM_CHAT)=' "$TMP" > "$ETC/hermes.env" || true
+    grep -E '^(OKX_API_KEY|OKX_API_SECRET|OKX_API_PASSPHRASE|OKX_BASE_URL|HERMES_TELEGRAM_TOKEN|HERMES_TELEGRAM_CHAT|HERMES_DASHBOARD_TOKEN)=' "$TMP" > "$ETC/hermes.env" || true
   fi
   rm -f "$TMP"
 fi
@@ -37,6 +37,7 @@ chown root:hermes "$ETC/hermes.env"; chmod 640 "$ETC/hermes.env"
 
 echo "$MODE" > "$ETC/mode"
 install -m 644 "$APP/deploy/hermes@.service" /etc/systemd/system/hermes@.service
+install -m 644 "$APP/deploy/hermes-dashboard@.service" /etc/systemd/system/hermes-dashboard@.service
 install -m 644 "$APP/deploy/hermes-retrain.service" /etc/systemd/system/hermes-retrain.service
 install -m 644 "$APP/deploy/hermes-retrain.timer" /etc/systemd/system/hermes-retrain.timer
 chown -R hermes:hermes "$APP"
@@ -48,6 +49,14 @@ for m in paper demo live; do
 done
 systemctl enable hermes-retrain.timer >/dev/null
 systemctl start hermes-retrain.timer
+
+for m in paper demo live; do
+  [ "$m" = "$MODE" ] || systemctl disable --now "hermes-dashboard@$m" 2>/dev/null || true
+done
+if grep -q '^HERMES_DASHBOARD_TOKEN=.' "$ETC/hermes.env"; then
+  systemctl enable "hermes-dashboard@$MODE" >/dev/null && systemctl restart "hermes-dashboard@$MODE"
+  echo "tableau de bord : http://<vps>:8899/?token=<HERMES_DASHBOARD_TOKEN>"
+fi
 
 if [ -f "$APP/artifacts/models/champion/bundle.json" ]; then
   systemctl enable "hermes@$MODE" >/dev/null

@@ -13,19 +13,19 @@ from hermes.validation.metrics import cross_sectional_ic, ic_summary
 
 @pytest.mark.slow
 def test_planted_signal_is_found_out_of_sample(cfg_small):
-    panel = make_synthetic_panel(n_assets=16, n_bars=24 * 200, seed=11, signal_strength=1.0)
+    panel = make_synthetic_panel(n_assets=16, n_bars=96 * 75, bar="15m", seed=11, signal_strength=1.0)
     ds = build_dataset(panel, cfg_small)
     wf = walk_forward_train(ds, cfg_small)
-    s = ic_summary(cross_sectional_ic(wf.score.stack(), ds.targets.residual[8].stack()), horizon=8)
+    s = ic_summary(cross_sectional_ic(wf.score.stack(), ds.targets.residual[4].stack()), horizon=4)
     assert s["ic_mean"] > 0.03 and s["ic_t"] > 3
 
 
 @pytest.mark.slow
 def test_noise_has_no_out_of_sample_ic(cfg_small):
-    panel = make_synthetic_panel(n_assets=16, n_bars=24 * 200, seed=12, signal_strength=0.0)
+    panel = make_synthetic_panel(n_assets=16, n_bars=96 * 75, bar="15m", seed=12, signal_strength=0.0)
     ds = build_dataset(panel, cfg_small)
     wf = walk_forward_train(ds, cfg_small)
-    s = ic_summary(cross_sectional_ic(wf.score.stack(), ds.targets.residual[8].stack()), horizon=8)
+    s = ic_summary(cross_sectional_ic(wf.score.stack(), ds.targets.residual[4].stack()), horizon=4)
     assert abs(s["ic_t"]) < 3
     # The sizing prior is a lower confidence bound: on noise it is zero in most folds.
     priors = [f["prior_ic"] for f in wf.folds]
@@ -34,7 +34,7 @@ def test_noise_has_no_out_of_sample_ic(cfg_small):
 
 @pytest.mark.slow
 def test_bundle_roundtrip(cfg_small, tmp_path):
-    panel = make_synthetic_panel(n_assets=12, n_bars=24 * 120, seed=13)
+    panel = make_synthetic_panel(n_assets=12, n_bars=96 * 45, bar="15m", seed=13)
     ds = build_dataset(panel, cfg_small)
     b = train_final(ds, cfg_small, promoted=False, evaluation={})
     b.save(tmp_path / "m")

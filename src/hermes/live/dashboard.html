@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hermes</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--ink:#e7e9ee;--mute:#8b93a3;--pos:#3fb68b;--neg:#e5616b;--line:#2a2f3a;--acc:#6aa6ff}
+@media (prefers-color-scheme: light){:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#5d6573;--line:#e3e6eb;--acc:#2d6be4}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}h1{font-size:18px;margin:4px 0 12px}h2{font-size:13px;color:var(--mute);font-weight:600;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.kpi{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}.sub{color:var(--mute);font-size:12px}
+.pos{color:var(--pos)}.neg{color:var(--neg)}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td,th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left}
+svg{width:100%;height:180px}.row{display:grid;grid-template-columns:2fr 1fr;gap:10px}@media(max-width:800px){.row{grid-template-columns:1fr}}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
+</style></head><body><main>
+<h1>Hermes <span id="mode" class="badge"></span> <span id="upd" class="sub"></span></h1>
+<div class="grid" id="kpis"></div>
+<div class="row"><div class="card"><h2>Équité</h2><svg id="eq" viewBox="0 0 600 180" preserveAspectRatio="none"></svg></div>
+<div class="card"><h2>Risque</h2><table id="risk"></table></div></div>
+<div class="row" style="margin-top:10px"><div class="card"><h2>Positions</h2><table id="pos"></table></div>
+<div class="card"><h2>Événements</h2><table id="ev"></table></div></div>
+</main><script>
+const f=(x,d=2)=>x==null||isNaN(x)?"—":Number(x).toLocaleString("fr-FR",{maximumFractionDigits:d,minimumFractionDigits:d});
+const esc=x=>String(x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const pct=x=>x==null?"—":f(100*x,2)+" %";
+async function j(u){const r=await fetch(u,{credentials:"same-origin"});return r.json()}
+async function load(){
+ const s=await j("api/status"),e=await j("api/equity"),v=await j("api/events");
+ document.getElementById("mode").textContent=s.mode||"?";document.getElementById("upd").textContent="barre "+(s.bar||"—");
+ const k=[["Équité (USDT)",f(s.equity)],["Exposition brute",f(s.gross)+"×"],["Exposition nette",f(s.net)+"×"],
+  ["IC estimé",f(s.ic_est,4)],["Drawdown",pct((s.risk||{}).drawdown)],["Part maker",pct((s.execution||{}).maker_share)]];
+ document.getElementById("kpis").innerHTML=k.map(([a,b])=>`<div class="card"><div class="sub">${a}</div><div class="kpi">${b}</div></div>`).join("");
+ const r=s.risk||{};document.getElementById("risk").innerHTML=Object.entries(r).map(([a,b])=>`<tr><td>${esc(a)}</td><td>${f(b,4)}</td></tr>`).join("")+
+  (s.notes||[]).map(n=>`<tr><td colspan=2>${esc(n)}</td></tr>`).join("");
+ const p=Object.entries(s.positions||{}).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+ document.getElementById("pos").innerHTML="<tr><th>Contrat</th><th>Notionnel</th></tr>"+p.map(([a,b])=>`<tr><td>${esc(a)}</td><td class="${b>=0?"pos":"neg"}">${f(b)}</td></tr>`).join("");
+ document.getElementById("ev").innerHTML=v.map(x=>`<tr><td>${new Date(x[0]*1000).toISOString().slice(5,16)}</td><td>${esc(x[1])}</td></tr><tr><td colspan=2 class="sub">${esc(x[2])}</td></tr>`).join("");
+ const pts=e.map(x=>x[1]);if(pts.length>1){const lo=Math.min(...pts),hi=Math.max(...pts),n=pts.length;
+  const d=pts.map((y,i)=>`${i?"L":"M"}${(600*i/(n-1)).toFixed(1)},${(170-160*(y-lo)/((hi-lo)||1)).toFixed(1)}`).join("");
+  document.getElementById("eq").innerHTML=`<path d="${d}" fill="none" stroke="var(--acc)" stroke-width="2" vector-effect="non-scaling-stroke"/>`}
+}
+load();setInterval(load,30000);
+</script></body></html>

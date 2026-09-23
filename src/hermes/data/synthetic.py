@@ -32,7 +32,7 @@ def make_synthetic_panel(
     staggered_listings: bool = True,
 ) -> Panel:
     rng = np.random.default_rng(seed)
-    per_day = {"15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6}[bar]
+    per_day = {"1m": 1440, "5m": 288, "15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6}[bar]
     scale = np.sqrt(24.0 / per_day)  # keep daily volatility independent of bar size
     T, N = n_bars, n_assets
     index = pd.date_range(start, periods=T, freq=BAR_TO_OFFSET[bar], tz="UTC")

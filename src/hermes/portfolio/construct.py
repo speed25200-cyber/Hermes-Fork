@@ -8,7 +8,7 @@ import numpy as np
 
 from hermes.config import PortfolioConfig
 from hermes.portfolio.covariance import blended_covariance
-from hermes.portfolio.optimizer import risk_aversion, solve
+from hermes.portfolio.optimizer import project_exposure, risk_aversion, solve
 
 
 @dataclass
@@ -84,5 +84,12 @@ class PortfolioConstructor:
         small = np.abs(w - inp.w0) < c.min_trade_weight
         w = np.where(small & tradable, inp.w0, w)
         w = np.where(tradable, w, 0.0)
+        # Positions too small to be held at the exchange (lot sizes) are dropped, then the exposure bound is
+        # restored: silently losing them at order rounding would unbalance a beta-neutral book.
+        min_w = c.min_position_usdt / max(equity, 1e-9)
+        if min_w > 0 and np.any((np.abs(w) > 0) & (np.abs(w) < min_w)):
+            w = np.where(np.abs(w) < min_w, 0.0, w)
+            b = beta if c.beta_neutral else np.ones(n)
+            w = project_exposure(w, b, np.where(w != 0, cap, 0.0), net_max)
         vol_ann = float(np.sqrt(max(w @ cov_bar @ w, 0.0) * self.bars_per_year))
         return BookResult(w, alpha, cov_bar, vol_ann, n_tr, lam)

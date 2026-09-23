@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS equity (ts TEXT PRIMARY KEY, equity REAL, gross REAL,
                                    ic_est REAL, n_positions INTEGER);
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, level TEXT, message TEXT);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS series (name TEXT, ts TEXT, value REAL, PRIMARY KEY (name, ts));
 """
 
 
@@ -59,6 +60,28 @@ class StateStore:
             return pd.DataFrame()
         df["ts"] = pd.to_datetime(df["ts"], utc=True)
         return df.pivot(index="ts", columns="symbol", values="score")
+
+    def put_series(self, name: str, values: pd.Series) -> None:
+        """Upsert a named time series (e.g. realised IC once its horizon has elapsed)."""
+        rows = [(name, pd.Timestamp(t).isoformat(), float(v)) for t, v in values.items() if pd.notna(v)]
+        self.db.executemany("INSERT OR REPLACE INTO series VALUES (?, ?, ?)", rows)
+        self.db.commit()
+
+    def get_series(self, name: str, since: pd.Timestamp) -> pd.Series:
+        df = pd.read_sql_query(
+            "SELECT ts, value FROM series WHERE name = ? AND ts >= ? ORDER BY ts",
+            self.db,
+            params=(name, since.isoformat()),
+        )
+        if df.empty:
+            return pd.Series(dtype=float)
+        return pd.Series(df["value"].to_numpy(), index=pd.to_datetime(df["ts"], utc=True), name=name)
+
+    def prune(self, before: pd.Timestamp) -> None:
+        """Drop score and series rows older than ``before`` (the engine only reads the last months)."""
+        self.db.execute("DELETE FROM scores WHERE ts < ?", (before.isoformat(),))
+        self.db.execute("DELETE FROM series WHERE ts < ?", (before.isoformat(),))
+        self.db.commit()
 
     def add_decision(self, ts: pd.Timestamp, payload: dict[str, object]) -> None:
         self.db.execute(

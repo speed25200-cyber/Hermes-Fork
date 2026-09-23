@@ -67,6 +67,7 @@ jobs:
           K3: ${{ secrets.OKX_API_PASSPHRASE }}
           T1: ${{ secrets.HERMES_TELEGRAM_TOKEN }}
           T2: ${{ secrets.HERMES_TELEGRAM_CHAT }}
+          D1: ${{ secrets.HERMES_DASHBOARD_TOKEN }}
         run: |
           if [ "$MODE" != "paper" ] && { [ -z "$K1" ] || [ -z "$K2" ] || [ -z "$K3" ]; }; then
             echo "::error::mode $MODE : secrets OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSPHRASE requis"; exit 1
@@ -74,6 +75,7 @@ jobs:
           {
             [ -n "$K1" ] && printf 'OKX_API_KEY=%s\nOKX_API_SECRET=%s\nOKX_API_PASSPHRASE=%s\n' "$K1" "$K2" "$K3"
             [ -n "$T1" ] && printf 'HERMES_TELEGRAM_TOKEN=%s\nHERMES_TELEGRAM_CHAT=%s\n' "$T1" "$T2"
+            [ -n "$D1" ] && printf 'HERMES_DASHBOARD_TOKEN=%s\n' "$D1"
             true
           } | sshpass -e ssh $SSHOPTS "root@$VPS" "bash /opt/hermes/deploy/install.sh $MODE"
       - name: Entraînement initial (arrière-plan)

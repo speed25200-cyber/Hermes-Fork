@@ -30,24 +30,43 @@ def cross_sectional_ic(pred: pd.Series, target: pd.Series, method: str = "spearm
 
 
 def ic_summary(ic: pd.Series, horizon: int = 1) -> dict[str, float]:
-    """Mean IC, IC information ratio and a t-stat corrected for label overlap (Newey-West-like, lag=h)."""
-    x = ic.dropna().to_numpy()
+    """Mean IC, IC information ratio and a t-stat robust to label overlap and IC clustering.
+
+    With a time index the t-stat is computed on **daily mean ICs** with a Newey-West long-run variance
+    (Bartlett, automatic bandwidth, at least the horizon in days): overlapping ``h``-bar labels and
+    persistent scores make intraday ICs strongly dependent, and a short kernel on bar-level ICs overstates
+    significance. Without a time index, bar-level ICs are used with a kernel of ``2h`` lags.
+    """
+    s_ = ic.dropna()
+    x = s_.to_numpy()
     n = len(x)
     if n < 10:
         return {"ic_mean": float("nan"), "ic_ir": float("nan"), "ic_t": float("nan"), "n": n}
     m, s = x.mean(), x.std(ddof=1)
-    xc = x - m
-    lrv = xc @ xc / n
-    for k in range(1, min(horizon, n - 1) + 1):
-        lrv += 2 * (1 - k / (horizon + 1)) * (xc[k:] @ xc[:-k]) / n
-    se = np.sqrt(max(lrv, 1e-18) / n)
+    if isinstance(s_.index, pd.DatetimeIndex):
+        daily = s_.groupby(s_.index.floor("D")).mean().to_numpy()
+        per_day = n / max(len(daily), 1)
+        lag = max(int(np.ceil(horizon / max(per_day, 1.0))), int(np.floor(4 * (len(daily) / 100.0) ** (2.0 / 9.0))))
+        t = _nw_t(daily, lag) if len(daily) >= 10 else float("nan")
+    else:
+        t = _nw_t(x, 2 * horizon)
     return {
         "ic_mean": float(m),
         "ic_ir": float(m / s) if s > 0 else 0.0,
-        "ic_t": float(m / se),
+        "ic_t": float(t),
         "n": n,
         "ic_hit": float((x > 0).mean()),
     }
+
+
+def _nw_t(x: np.ndarray, lag: int) -> float:
+    """t-stat of the mean with a Newey-West (Bartlett) long-run variance."""
+    n = len(x)
+    xc = x - x.mean()
+    lrv = xc @ xc / n
+    for k in range(1, min(lag, n - 1) + 1):
+        lrv += 2 * (1 - k / (lag + 1)) * (xc[k:] @ xc[:-k]) / n
+    return float(x.mean() / np.sqrt(max(lrv, 1e-18) / n))
 
 
 def max_drawdown(equity: pd.Series) -> float:

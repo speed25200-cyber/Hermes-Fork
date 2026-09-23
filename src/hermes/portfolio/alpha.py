@@ -16,14 +16,25 @@ import pandas as pd
 
 
 def rowwise_corr(a: pd.DataFrame, b: pd.DataFrame, min_names: int = 5) -> pd.Series:
-    x = a.where(b.notna())
-    y = b.where(a.notna())
-    xm = x.sub(x.mean(axis=1), axis=0)
-    ym = y.sub(y.mean(axis=1), axis=0)
-    num = (xm * ym).sum(axis=1)
-    den = np.sqrt((xm**2).sum(axis=1) * (ym**2).sum(axis=1))
-    ic = num / den.replace(0, np.nan)
-    return ic.where(x.notna().sum(axis=1) >= min_names)
+    """Per-row Pearson correlation over the columns where both frames are finite (few temporaries)."""
+    b = b.reindex(index=a.index, columns=a.columns)
+    A = a.to_numpy(dtype=np.float64, copy=True)
+    B = b.to_numpy(dtype=np.float64, copy=True)
+    m = np.isfinite(A) & np.isfinite(B)
+    A[~m] = 0.0
+    B[~m] = 0.0
+    n = m.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ma = A.sum(axis=1) / n
+        mb = B.sum(axis=1) / n
+        A -= ma[:, None]
+        B -= mb[:, None]
+        A[~m] = 0.0
+        B[~m] = 0.0
+        num = (A * B).sum(axis=1)
+        den = np.sqrt((A * A).sum(axis=1) * (B * B).sum(axis=1))
+        ic = np.where((den > 0) & (n >= min_names), num / den, np.nan)
+    return pd.Series(ic, index=a.index)
 
 
 def cs_zscore(df: pd.DataFrame, mask: pd.DataFrame | None = None, clip: float = 3.0) -> pd.DataFrame:
@@ -66,3 +77,32 @@ def signal_persistence(score: pd.DataFrame, horizon: int, window_bars: int, floo
     rho = rowwise_corr(score, score.shift(horizon))
     rho_s = rho.rolling(window_bars, min_periods=max(10, window_bars // 10)).mean()
     return (1.0 - rho_s).clip(lower=floor, upper=1.0).fillna(1.0)
+
+
+def market_alpha_series(
+    market_score: pd.Series,
+    market_target: pd.Series,
+    mkt_return: pd.Series,
+    prior_ic: float | pd.Series,
+    horizon: int,
+    bars_per_day: int,
+    prior_weight_obs: float = 30.0,
+) -> pd.Series:
+    """Expected market return over the horizon from a market-timing score (Grinold, causal IC).
+
+    ``market_target[t]`` is the normalised market return over ``(t, t+h]``; it is only used once realised
+    (shifted by the horizon). The score is z-scored on a trailing 90-day window.
+    """
+    H = horizon
+    win = bars_per_day * 90
+    known_y = market_target.shift(H)
+    known_s = market_score.shift(H)
+    rc = known_s.rolling(win, min_periods=win // 3).corr(known_y)
+    n_eff = known_s.notna().astype(float).rolling(win, min_periods=1).sum() / H
+    prior = prior_ic if isinstance(prior_ic, pd.Series) else pd.Series(prior_ic, index=market_score.index)
+    ic = ((n_eff * rc.fillna(0) + prior_weight_obs * prior.fillna(0)) / (n_eff + prior_weight_obs)).clip(0, 0.2)
+    mu = market_score.rolling(win, min_periods=24).mean()
+    sd = market_score.rolling(win, min_periods=24).std()
+    z = ((market_score - mu) / sd).clip(-3, 3)
+    mvol = np.sqrt((mkt_return**2).ewm(halflife=max(2, bars_per_day), adjust=False).mean())
+    return (ic * z * mvol * np.sqrt(H)).fillna(0.0)

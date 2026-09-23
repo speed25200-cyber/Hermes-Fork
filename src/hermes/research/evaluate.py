@@ -19,7 +19,7 @@ import pandas as pd
 
 from hermes.backtest.engine import BacktestResult, SignalBundle, run_backtest
 from hermes.config import HermesConfig
-from hermes.portfolio.alpha import cs_zscore, estimate_ic, rowwise_corr, signal_persistence
+from hermes.portfolio.alpha import cs_zscore, estimate_ic, market_alpha_series, rowwise_corr, signal_persistence
 from hermes.research.dataset import Dataset
 from hermes.research.walkforward import WalkForwardResult
 from hermes.validation.metrics import cross_sectional_ic, ic_summary
@@ -62,26 +62,14 @@ def make_signal(
 
 
 def market_alpha(market_score: pd.Series, market_prior: pd.Series, ds: Dataset, cfg: HermesConfig) -> pd.Series:
-    """Expected market return over the horizon from the market-timing score (causal IC estimate)."""
     H, _ = holding_target(ds, cfg)
-    y = ds.targets.market[H]
-    known_y = y.shift(H)
-    known_s = market_score.shift(H)
-    win = cfg.bars_per_day * 90
-    rc = known_s.rolling(win, min_periods=win // 3).corr(known_y)
-    n_eff = known_s.notna().rolling(win, min_periods=1).sum() / H
-    k0 = 30.0
-    ic = ((n_eff * rc.fillna(0) + k0 * market_prior.fillna(0)) / (n_eff + k0)).clip(0, 0.2)
-    z = (market_score - market_score.rolling(win, min_periods=24).mean()) / market_score.rolling(
-        win, min_periods=24
-    ).std()
-    mkt = ds.feats.aux["mkt"]["mkt"]
-    mvol = np.sqrt((mkt**2).ewm(halflife=72, adjust=False).mean())
-    return (ic * z.clip(-3, 3) * mvol * np.sqrt(H)).fillna(0.0)
+    return market_alpha_series(
+        market_score, ds.targets.market[H], ds.feats.aux["mkt"]["mkt"], market_prior, H, cfg.bars_per_day
+    )
 
 
-def block_permute(score: pd.DataFrame, mask: pd.DataFrame, seed: int, block_bars: int = 168) -> pd.DataFrame:
-    """Null score: within each block, members' scores are reassigned by a random permutation of names.
+def block_permute(score: pd.DataFrame, mask: pd.DataFrame, seed: int, block_bars: int) -> pd.DataFrame:
+    """Null score: within each block (one week), members' scores are reassigned by a random permutation of names.
 
     Preserves each score path's time structure (hence realistic turnover) while destroying its alignment
     with the contract whose return it is supposed to predict.
@@ -113,27 +101,20 @@ def _bt_job(args: tuple[str, int | dict[str, object]]) -> tuple[str, pd.Series, 
     cfg: HermesConfig = _CTX["cfg"]  # type: ignore[assignment]
     start = _CTX["start"]
     if kind == "null":
-        score = block_permute(wf.score, ds.mask, seed=int(param))  # type: ignore[arg-type]
+        score = block_permute(wf.score, ds.mask, seed=int(param), block_bars=cfg.days(7))  # type: ignore[arg-type]
         sig = make_signal(score, ds, wf.prior_ic, cfg)
         c = cfg
     else:
         c = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update=param)})  # type: ignore[arg-type]
-        if kind == "costx2":
-            c = cfg.model_copy(
-                update={
-                    "costs": cfg.costs.model_copy(
-                        update={
-                            "maker_fee": cfg.costs.maker_fee * 2,
-                            "taker_fee": cfg.costs.taker_fee * 2,
-                            "min_half_spread_bps": cfg.costs.min_half_spread_bps * 2,
-                            "impact_coef": cfg.costs.impact_coef * 2,
-                        }
-                    )
-                }
-            )
         score = wf.score.shift(1) if kind == "lag1" else wf.score
-        sig = make_signal(score, ds, wf.prior_ic, c)
-    bt = run_backtest(ds.panel, ds.mask, ds.feats.aux, sig, c, start=start)  # type: ignore[arg-type]
+        if kind == "market":
+            sig = make_signal(score, ds, wf.prior_ic, c, wf.market_score, wf.market_prior_ic)
+        else:
+            sig = make_signal(score, ds, wf.prior_ic, c)
+    # Cost stress: the book is built on the usual cost estimates, but every trade pays twice as much
+    # (fees, spread and impact) -- an execution that turns out worse than modelled, not a re-optimised book.
+    mult = 2.0 if kind == "costx2" else 1.0
+    bt = run_backtest(ds.panel, ds.mask, ds.feats.aux, sig, c, start=start, cost_multiplier=mult)  # type: ignore[arg-type]
     daily = (1 + bt.returns).groupby(bt.returns.index.floor("D")).prod() - 1
     return f"{kind}:{param}", daily, bt.summary(c.bars_per_year)
 
@@ -144,9 +125,69 @@ def _run_parallel(
     if workers <= 1 or len(jobs) <= 1:
         return [_bt_job(j) for j in jobs]
     import multiprocessing as mp
+    from concurrent.futures.process import BrokenProcessPool
 
-    with ProcessPoolExecutor(workers, mp_context=mp.get_context("fork")) as ex:
-        return list(ex.map(_bt_job, jobs))
+    done: dict[int, tuple[str, pd.Series, dict[str, float]]] = {}
+    try:
+        with ProcessPoolExecutor(workers, mp_context=mp.get_context("fork")) as ex:
+            futures = {ex.submit(_bt_job, j): i for i, j in enumerate(jobs)}
+            for fut, i in futures.items():
+                try:
+                    done[i] = fut.result()
+                except BrokenProcessPool:
+                    break
+    except BrokenProcessPool:
+        pass
+    missing = [i for i in range(len(jobs)) if i not in done]
+    if missing:
+        # A worker died (typically out of memory): finish the remaining jobs one at a time in this process.
+        log.warning("process pool broken, running %d remaining backtests sequentially", len(missing))
+        for i in missing:
+            done[i] = _bt_job(jobs[i])
+    return [done[i] for i in range(len(jobs))]
+
+
+def _workers_for_memory(per_worker_gb: float = 2.5) -> int:
+    """Parallel backtests that fit in the available memory (Linux; falls back to 2)."""
+    try:
+        with open("/proc/meminfo") as fh:
+            info = {line.split(":")[0]: float(line.split()[1]) for line in fh}
+        avail_gb = info.get("MemAvailable", 0.0) / 1e6
+    except OSError:
+        return 2
+    return max(1, int(avail_gb // per_worker_gb))
+
+
+def trial_count_and_variance(ledger_trials: int, grid_daily: pd.DataFrame, n_days: int) -> tuple[int, float]:
+    """Trials and cross-trial Sharpe variance for the Deflated Sharpe Ratio.
+
+    * The robustness grid's variants are strongly correlated: they count as ``N_eff = rho + (1 - rho) N``
+      effective trials (``rho`` their mean pairwise correlation), times the configurations in the ledger.
+    * The Sharpe dispersion across trials is never taken below the sampling variance of one daily Sharpe
+      estimate under the null (``1 / (T - 1)``): near-identical grid variants would otherwise make the
+      expected best-of-N Sharpe, hence the deflation, vanish.
+    """
+    n_grid = grid_daily.shape[1]
+    null_var = 1.0 / max(n_days - 1, 1)
+    if n_grid < 2 or len(grid_daily) < 10:
+        return max(1, ledger_trials), null_var
+    corr = grid_daily.corr().to_numpy()
+    rho = float(np.clip(np.nanmean(corr[np.triu_indices(n_grid, 1)]), 0.0, 1.0))
+    n_eff = rho + (1.0 - rho) * n_grid
+    per_sr = grid_daily.mean() / grid_daily.std()
+    var = float(per_sr.var()) if np.isfinite(per_sr.var()) else 0.0
+    return max(1, round(ledger_trials * n_eff)), max(var, null_var)
+
+
+def positive_year_fraction(daily: pd.Series, min_days: int = 90) -> float:
+    """Share of calendar years with a positive return; stub years shorter than ``min_days`` do not vote."""
+    d = daily.dropna()
+    if d.empty:
+        return 0.0
+    by_year = (1 + d).groupby(d.index.year).agg(["prod", "size"])
+    full = by_year[by_year["size"] >= min_days]
+    use = full if len(full) else by_year
+    return float(((use["prod"] - 1) > 0).mean())
 
 
 @dataclass
@@ -184,7 +225,7 @@ def evaluate(
     v = cfg.validation
     bpy = cfg.bars_per_year
     start = wf.oof_start
-    workers = workers or max(1, (os.cpu_count() or 2) - 0)
+    workers = workers or max(1, min(os.cpu_count() or 2, _workers_for_memory()))
     n_null = n_null if n_null is not None else min(v.null_permutations, 40)
 
     # --- forecast quality -------------------------------------------------------------------------------
@@ -205,7 +246,19 @@ def evaluate(
         if ok.sum() > 100:
             c = float(np.corrcoef(ms[ok], my[ok])[0, 1])
             n_ind = ok.sum() / H
-            ic["market_timing"] = {"corr": round(c, 4), "t": round(c * np.sqrt(max(n_ind - 2, 1)), 2)}
+            t_stat = c * np.sqrt(max(n_ind - 2, 1))
+            yearly_c = (
+                pd.concat([ms[ok], my[ok]], axis=1)
+                .groupby(ms[ok].index.year)
+                .apply(lambda g: g.iloc[:, 0].corr(g.iloc[:, 1]))
+            )
+            pos_years = float((yearly_c > 0).mean()) if len(yearly_c) else 0.0
+            ic["market_timing"] = {
+                "corr": round(c, 4),
+                "t": round(float(t_stat), 2),
+                "by_year": {int(k): round(float(v_), 4) for k, v_ in yearly_c.items()},
+                "gate": bool(t_stat >= 2.5 and pos_years >= 0.6),
+            }
 
     # --- main backtest ------------------------------------------------------------------------------------
     sig = make_signal(wf.score, ds, wf.prior_ic, cfg)
@@ -216,10 +269,12 @@ def evaluate(
 
     # --- robustness & null backtests (parallel) ---------------------------------------------------------
     _CTX.update({"ds": ds, "wf": wf, "cfg": cfg, "start": start})
-    grid = grid or [{"holding_horizon": h, "cost_aversion": ca} for h in (4, 8, 24) for ca in (0.5, 1.0, 2.0)]
+    grid = grid or [{"holding_horizon": h, "cost_aversion": ca} for h in cfg.labels.horizons for ca in (0.5, 1.0, 2.0)]
     jobs: list[tuple[str, int | dict[str, object]]] = [("null", s) for s in range(n_null)]
     jobs += [("grid", g) for g in grid]
     jobs += [("costx2", {}), ("lag1", {})]
+    if wf.market_score is not None:
+        jobs.append(("market", {"beta_neutral": True}))
     results = _run_parallel(jobs, workers)
     null_sr = [sharpe(d.to_numpy(), 365.0) for k, d, _ in results if k.startswith("null")]
     grid_rows, grid_daily = [], {}
@@ -236,6 +291,8 @@ def evaluate(
                 }
             )
             grid_daily[k[5:]] = d
+        elif k.startswith("market"):
+            stress["sharpe_with_market"] = float(s.get("sharpe_daily", np.nan))
         elif k.startswith("costx2"):
             stress["sharpe_costx2"] = float(s.get("sharpe_daily", np.nan))
         elif k.startswith("lag1"):
@@ -245,12 +302,8 @@ def evaluate(
     # --- statistics -----------------------------------------------------------------------------------------
     d = daily.to_numpy()
     sr_d = sharpe(d, 365.0)
-    n_trials = v.n_trials * max(1, len(grid))
     grid_mat = pd.DataFrame(grid_daily).dropna()
-    trial_var = None
-    if grid_mat.shape[1] >= 2:
-        per_sr = grid_mat.mean() / grid_mat.std()
-        trial_var = float(per_sr.var())
+    n_trials, trial_var = trial_count_and_variance(v.n_trials, grid_mat, len(d))
     tests = {
         "sharpe_daily": sr_d,
         "psr": probabilistic_sharpe(d),
@@ -260,6 +313,8 @@ def evaluate(
         "spa_pvalue": spa_test(d, n_samples=v.bootstrap_samples, mean_block=5.0),
         "pbo": pbo(grid_mat.to_numpy(), n_splits=10) if grid_mat.shape[1] >= 2 else float("nan"),
         "null_percentile": float(np.mean(np.array(null_sr) < sr_d)) if null_sr else float("nan"),
+        # Exact permutation p-value (Phipson & Smyth 2010): its size is at most alpha for any null count.
+        "null_pvalue": float((1 + np.sum(np.array(null_sr) >= sr_d)) / (len(null_sr) + 1)) if null_sr else 1.0,
         "null_sharpe_p95": float(np.quantile(null_sr, 0.95)) if null_sr else float("nan"),
         "oos_months": float(len(d) / 30.4),
     }
@@ -269,15 +324,15 @@ def evaluate(
     tests["sharpe_ci_low"] = float(np.quantile(boot, 0.05))
     tests["sharpe_ci_high"] = float(np.quantile(boot, 0.95))
     tests.update(stress)
-    pos_years = float((yearly["return"] > 0).mean()) if len(yearly) else 0.0
+    pos_years = positive_year_fraction(daily)
     tests["positive_year_fraction"] = pos_years
 
     gate = {
         "dsr": {"value": tests["dsr"], "threshold": v.gate_min_dsr, "pass": tests["dsr"] >= v.gate_min_dsr},
-        "null_percentile": {
-            "value": tests["null_percentile"],
-            "threshold": v.gate_min_null_percentile,
-            "pass": tests["null_percentile"] >= v.gate_min_null_percentile,
+        "null_pvalue": {
+            "value": tests["null_pvalue"],
+            "threshold": 1.0 - v.gate_min_null_percentile,
+            "pass": tests["null_pvalue"] <= 1.0 - v.gate_min_null_percentile,
         },
         "pbo": {
             "value": tests["pbo"],
@@ -307,6 +362,12 @@ def evaluate(
         },
     }
     promoted = all(g["pass"] for g in gate.values())
+    mt = ic.get("market_timing")
+    # The market model may steer net exposure only if it passes its own out-of-sample test AND improves the
+    # promoted cross-sectional book once costs are paid.
+    tests["market_promoted"] = float(
+        bool(isinstance(mt, dict) and mt.get("gate") and stress.get("sharpe_with_market", -np.inf) > sr_d)
+    )
     ev = Evaluation(
         ic=ic,
         summary=summary,

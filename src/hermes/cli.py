@@ -39,15 +39,19 @@ def _setup_logging(verbose: bool = False) -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
-def _cfg(config: Path | None, overrides: list[str]) -> HermesConfig:
-    kv = {}
+def _overrides(overrides: list[str]) -> dict[str, object]:
+    kv: dict[str, object] = {}
     for o in overrides:
         k, _, v = o.partition("=")
         try:
             kv[k] = json.loads(v)
         except json.JSONDecodeError:
             kv[k] = v
-    return load_config(config, **kv)
+    return kv
+
+
+def _cfg(config: Path | None, overrides: list[str]) -> HermesConfig:
+    return load_config(config, **_overrides(overrides))
 
 
 ConfigOpt = typer.Option(None, "--config", "-c", help="Fichier YAML de configuration")
@@ -72,7 +76,7 @@ def research_run(
     out: Path = typer.Option(Path("reports/latest"), "--out", "-o"),
     n_null: int = typer.Option(40, help="Répliques du test nul"),
     workers: int = typer.Option(0, help="Processus parallèles (0 = tous les cœurs)"),
-    ledger: Path = typer.Option(Path("reports/trials.jsonl"), help="Registre des essais (DSR)"),
+    ledger: Path = typer.Option(Path("reports/trials"), help="Registre des essais (un fichier par essai, DSR)"),
     no_model: bool = typer.Option(False, help="Ne pas entraîner le modèle final"),
 ) -> None:
     """Walk-forward complet + évaluation hors échantillon + porte de promotion + rapport."""
@@ -123,20 +127,24 @@ def live_run(
     from hermes.data.live_feed import BinanceLiveFeed
     from hermes.execution.broker import PaperBroker
     from hermes.execution.okx_broker import OKXBroker
-    from hermes.live.engine import LiveEngine
+    from hermes.live.engine import LiveEngine, intrabar_history_minutes, live_config, live_history_bars
     from hermes.live.state import StateStore
     from hermes.models.bundle import ModelBundle
 
-    cfg = _cfg(config, overrides)
+    operator = _cfg(config, overrides)
     bundle = ModelBundle.load(model)
-    # The strategy is the bundle's: its features, labels and portfolio settings win over the local file,
-    # except for execution, live and risk settings which belong to the operator.
-    cfg = bundle.config.model_copy(update={"execution": cfg.execution, "live": cfg.live, "risk": cfg.risk})
+    # The strategy is the bundle's (features, labels, portfolio, costs); execution, live and risk settings
+    # belong to the operator; explicit --set overrides win over both.
+    kv = _overrides(overrides)
+    strategy_keys = sorted(k for k in kv if k.split(".")[0] not in ("execution", "live", "risk"))
+    if strategy_keys:
+        typer.echo(f"ATTENTION : surcharges de la stratégie validée : {', '.join(strategy_keys)}", err=True)
+    cfg = live_config(bundle.config, operator, kv)
     if mode == "live" and not bundle.promoted and not cfg.live.allow_unpromoted:
         typer.echo("REFUS : ce modèle n'a pas franchi la porte de promotion. Mode réel interdit.", err=True)
         raise typer.Exit(2)
     store = StateStore(cfg.live.state_dir / mode)
-    feed = BinanceLiveFeed(cfg.data.bar, cfg.live.history_bars)
+    feed = BinanceLiveFeed(cfg.data.bar, live_history_bars(cfg), intrabar_minutes=intrabar_history_minutes(cfg))
     if mode == "paper":
         broker = PaperBroker(
             cfg.live.state_dir / mode / "paper_account.json",
@@ -150,16 +158,20 @@ def live_run(
         if client.creds is None:
             typer.echo("OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSPHRASE manquants", err=True)
             raise typer.Exit(2)
-        syms = list(bundle.meta.get("symbols", []))  # type: ignore[arg-type]
+        # Every OKX USDT perpetual is mapped: contracts listed after training may enter the universe too.
         broker = OKXBroker(
-            client, cfg.execution, syms, cfg.risk.exchange_leverage, cfg.costs.maker_fee, cfg.costs.taker_fee
+            client, cfg.execution, None, cfg.risk.exchange_leverage, cfg.costs.maker_fee, cfg.costs.taker_fee
         )
-    engine = LiveEngine(cfg, bundle, feed, broker, store, mode, model_dir=model)
+    engine = LiveEngine(cfg, bundle, feed, broker, store, mode, model_dir=model, operator_cfg=operator, overrides=kv)
 
     async def _main() -> None:
         if once:
             await broker.start()
             d = await engine.step()
+            await broker.stop()
+            if d is None:
+                typer.echo("moteur à l'arrêt (interrupteur ou drawdown) : positions fermées")
+                return
             typer.echo(
                 json.dumps(
                     {
@@ -173,7 +185,6 @@ def live_run(
                     indent=1,
                 )
             )
-            await broker.stop()
         else:
             await engine.run_forever()
 
@@ -188,6 +199,19 @@ def live_status(state: Path = typer.Option(Path("state/paper"), help="Dossier d'
         typer.echo("aucun état publié")
         raise typer.Exit(1)
     typer.echo(p.read_text())
+
+
+@live_app.command("dashboard")
+def live_dashboard(
+    state: Path = typer.Option(Path("state/paper"), help="Dossier d'état du mode"),
+    host: str = typer.Option("127.0.0.1", help="Adresse d'écoute (hors localhost : HERMES_DASHBOARD_TOKEN requis)"),
+    port: int = typer.Option(8899),
+) -> None:
+    """Tableau de bord en lecture seule (équité, positions, risque, événements)."""
+    from hermes.live.dashboard import serve
+
+    typer.echo(f"tableau de bord sur http://{host}:{port}/")
+    serve(state, host, port)
 
 
 @live_app.command("kill")
@@ -207,9 +231,10 @@ def live_resume(state_root: Path = typer.Option(Path("state")), mode: str = type
     store = StateStore(state_root / mode)
     rs = store.get("risk_state") or {}
     if isinstance(rs, dict):
-        rs.update({"halted": False, "halt_reason": "", "peak_equity": 0.0})
+        rs.update({"halted": False, "halt_reason": "", "peak_equity": 0.0, "day": None, "last_equity": 0.0})
         store.put("risk_state", rs)
-    typer.echo("reprise autorisée ; le pic d'équité repart de l'équité actuelle")
+    store.put("nav_state", None)  # the strategy NAV restarts from the current allocation (e.g. after a transfer)
+    typer.echo("reprise autorisée ; le pic d'équité et la NAV de la stratégie repartent de l'équité actuelle")
 
 
 @live_app.command("check")

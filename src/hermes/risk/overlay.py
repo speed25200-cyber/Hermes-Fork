@@ -34,22 +34,28 @@ class RiskState:
     halted: bool = False
     halt_reason: str = ""
     events: list[tuple[str, str]] = field(default_factory=list)
+    last_equity: float = 0.0  # equity at the previous observation (the start of a new UTC day)
 
 
 class RiskOverlay:
-    def __init__(self, cfg: RiskConfig, state: RiskState | None = None):
+    def __init__(self, cfg: RiskConfig, state: RiskState | None = None, check_kill_file: bool = True):
+        """``check_kill_file`` is off in backtests: an operator's kill file must never alter research."""
         self.cfg = cfg
         self.state = state or RiskState()
+        self.check_kill_file = check_kill_file
 
     # -- state -----------------------------------------------------------------------------------------------
-    def observe(self, ts: pd.Timestamp, equity: float) -> None:
+    def observe(self, ts: pd.Timestamp, equity: float, day: object = None) -> None:
+        """``day`` may be passed pre-computed (any hashable UTC-day key) to avoid per-bar date arithmetic."""
         s = self.state
         if equity > s.peak_equity:
             s.peak_equity = equity
-        day = ts.floor("D")
+        day = ts.floor("D") if day is None else day
         if s.day != day:
+            # The day starts at the previous close: the first bar's own P&L counts toward the daily loss.
             s.day = day
-            s.day_start_equity = equity
+            s.day_start_equity = s.last_equity if s.last_equity > 0 else equity
+        s.last_equity = equity
         if not s.halted and self.drawdown(equity) >= self.cfg.drawdown_hard:
             self.halt(ts, f"drawdown {self.drawdown(equity):.1%} >= hard limit")
 
@@ -67,7 +73,7 @@ class RiskOverlay:
         return 0.0 if d <= 0 else max(0.0, 1.0 - equity / d)
 
     def kill_requested(self) -> bool:
-        return Path(self.cfg.kill_switch_file).exists()
+        return self.check_kill_file and Path(self.cfg.kill_switch_file).exists()
 
     # -- decisions -------------------------------------------------------------------------------------------
     def budget(self, equity: float) -> float:

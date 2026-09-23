@@ -66,7 +66,10 @@ class Instrument:
         if contracts == 0:
             return 0.0
         lot = Decimal(str(self.lot_sz))
-        q = (Decimal(str(abs(contracts))) / lot).to_integral_value(rounding=ROUND_FLOOR) * lot
+        # A tolerance of 1e-9 lot absorbs binary floating-point residue (0.3 - 0.1 = 0.19999999999999998
+        # must stay two lots of 0.1, not one).
+        n = Decimal(str(abs(contracts))) / lot + Decimal("1e-9")
+        q = n.to_integral_value(rounding=ROUND_FLOOR) * lot
         if q < Decimal(str(self.min_sz)):
             return 0.0
         return math.copysign(float(q), contracts)

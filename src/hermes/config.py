@@ -30,33 +30,57 @@ class UniverseConfig(_Strict):
     symbols: tuple[str, ...] = Field((), description="Explicit symbol list; empty = discover from archive")
 
 
+BAR_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240}
+Bar = Literal["1m", "5m", "15m", "30m", "1h", "2h", "4h"]
+
+
+def bars_for(minutes: float, bar: str) -> int:
+    """Number of bars spanning ``minutes`` (at least one)."""
+    return max(1, round(minutes / BAR_MINUTES[bar]))
+
+
 class DataConfig(_Strict):
     source: Literal["binance_archive", "synthetic"] = "binance_archive"
     cache_dir: Path = Path("data")
-    bar: Literal["15m", "30m", "1h", "2h", "4h"] = "1h"
-    start: str = "2021-01-01"
+    bar: Bar = "15m"
+    start: str = "2022-01-01"
     end: str | None = None
     include_metrics: bool = False
     include_premium: bool = True
+    intrabar: bool = Field(False, description="Add 1-minute microstructure aggregates to each base bar")
+    intrabar_start: str | None = Field(None, description="First date of 1-minute aggregates (default: start)")
+    source_bar: Bar | None = Field(None, description="Download this bar and aggregate it to `bar` (e.g. 15m -> 30m)")
     download_workers: int = Field(16, ge=1, le=64)
     universe: UniverseConfig = UniverseConfig()
 
 
 class FeatureConfig(_Strict):
-    return_windows: tuple[int, ...] = (1, 2, 4, 8, 12, 24, 48, 72, 168, 336)
-    vol_windows: tuple[int, ...] = (24, 72, 168)
-    flow_windows: tuple[int, ...] = (1, 4, 12, 24, 72)
-    funding_windows: tuple[int, ...] = (8, 24, 72, 168)
-    vol_halflife: int = Field(72, ge=2, description="EWMA half-life (bars) of the ex-ante volatility")
+    """Feature windows are expressed in **minutes** and converted to bars of the configured timeframe, so the
+    same definitions serve 1-minute, 15-minute and 30-minute models. Windows shorter than one bar collapse
+    to one bar (duplicates are dropped)."""
+
+    return_minutes: tuple[int, ...] = (15, 30, 60, 120, 240, 480, 1440, 4320, 10080)
+    vol_minutes: tuple[int, ...] = (240, 1440, 4320)
+    flow_minutes: tuple[int, ...] = (15, 60, 240, 1440)
+    funding_minutes: tuple[int, ...] = (480, 1440, 4320)
+    trend_pairs_minutes: tuple[tuple[int, int], ...] = ((60, 240), (240, 1440), (1440, 5760))
+    range_minutes: tuple[int, ...] = (240, 1440, 10080)
+    day_minutes: int = Field(1440, ge=1, description="'Daily' windows: trade size, spread proxy, close location")
+    long_minutes: int = Field(10080, ge=1, description="Long windows: skew, kurtosis, semi-variance, Amihud")
+    zscore_minutes: int = Field(20160, ge=1, description="History used to z-score funding and premium")
+    vol_halflife_minutes: int = Field(1440, ge=2, description="EWMA half-life of the ex-ante volatility")
+    max_lookback_minutes: int = Field(20160, ge=60, description="History needed to compute every feature")
     cross_sectional: bool = True
     market_features: bool = True
     time_features: bool = True
-    max_lookback: int = Field(720, ge=24, description="Bars of history needed to compute every feature")
+    intrabar: bool = Field(True, description="Use 1-minute aggregates when the panel carries them")
 
 
 class LabelConfig(_Strict):
-    horizons: tuple[int, ...] = (4, 8, 24)
-    primary_horizon: int = 8
+    """Horizons in bars of the configured timeframe (15m bars: 2, 4, 8 = 30 min, 1 h, 2 h)."""
+
+    horizons: tuple[int, ...] = (2, 4, 8)
+    primary_horizon: int = 4
     residualize: Literal["none", "mean", "beta"] = "beta"
     vol_normalize: bool = True
     clip_sigma: float = Field(5.0, gt=0)
@@ -114,15 +138,15 @@ class ModelConfig(_Strict):
 
 
 class ValidationConfig(_Strict):
-    train_bars: int = Field(24 * 365, ge=100, description="Rolling training window; 0 = expanding")
+    """Windows in days (converted to bars of the configured timeframe)."""
+
+    train_days: float = Field(365, gt=0, description="Rolling training window when not expanding")
     expanding: bool = True
-    test_bars: int = Field(24 * 30, ge=24)
-    embargo_bars: int = Field(24, ge=0)
-    min_train_bars: int = Field(24 * 180, ge=100)
-    val_bars: int = Field(
-        24 * 60, ge=24, description="Most recent part of each training window used for early stopping"
-    )
-    train_stride: int = Field(2, ge=1, description="Keep one training bar in N (labels overlap anyway)")
+    test_days: float = Field(90, gt=0, description="Refit period: each model predicts this many days")
+    embargo_minutes: float = Field(1440, ge=0)
+    min_train_days: float = Field(365, gt=0)
+    val_days: float = Field(60, gt=0, description="Most recent part of each training window used for early stopping")
+    train_sample_minutes: float = Field(60, gt=0, description="Keep one training bar per this many minutes")
     recency_halflife_days: float = Field(0.0, ge=0, description="Sample-weight half-life; 0 = equal weights")
     cpcv_groups: int = Field(8, ge=4)
     cpcv_test_groups: int = Field(2, ge=1)
@@ -156,11 +180,11 @@ class PortfolioConfig(_Strict):
     beta_neutral: bool = True
     rebalance_every: int = Field(1, ge=1)
     cost_aversion: float = Field(1.0, ge=0, description="Multiplier on expected trading costs in the optimiser")
-    holding_horizon: int = Field(8, ge=1, description="Bars over which a forecast is expected to be earned")
-    cov_halflife: int = Field(24 * 14, ge=24)
-    cov_min_periods: int = Field(24 * 7, ge=24)
+    holding_horizon: int = Field(4, ge=1, description="Bars over which a forecast is expected to be earned")
+    cov_halflife_days: float = Field(7, gt=0, description="EWMA half-life of the sample covariance")
     min_trade_weight: float = Field(0.002, ge=0)
     ic_ref: float = Field(0.03, gt=0, description="IC at which the book reaches its volatility target")
+    min_position_usdt: float = Field(5.0, ge=0, description="Positions smaller than this are not held")
 
 
 class RiskConfig(_Strict):
@@ -187,8 +211,8 @@ class ExecutionConfig(_Strict):
     okx_demo: bool = True
     td_mode: Literal["cross", "isolated"] = "cross"
     maker_first: bool = True
-    maker_timeout_s: float = Field(90.0, ge=1)
-    chase_interval_s: float = Field(10.0, ge=0.5)
+    maker_timeout_s: float = Field(60.0, ge=1)
+    chase_interval_s: float = Field(5.0, ge=0.5)
     max_chases: int = Field(8, ge=0)
     taker_slippage_cap_bps: float = Field(15.0, ge=0)
     child_max_book_fraction: float = Field(0.5, gt=0, le=1)
@@ -199,10 +223,12 @@ class ExecutionConfig(_Strict):
 class LiveConfig(_Strict):
     state_dir: Path = Path("state")
     model_dir: Path = Path("artifacts/models/champion")
-    bar_close_delay_s: float = Field(20.0, ge=0)
+    bar_close_delay_s: float = Field(3.0, ge=0, description="Wait after the bar close before deciding")
     capital_fraction: float = Field(1.0, gt=0, le=1, description="Share of account equity the engine may use")
     paper_initial_equity: float = 10_000.0
-    history_bars: int = Field(2400, ge=500, description="Bars of history kept by the live feed")
+    history_days: float | None = Field(
+        None, gt=0, description="Minimum base-bar history kept by the live feed (default: the feature warm-up)"
+    )
     candidates: int = Field(80, ge=5, description="Most traded contracts considered each day")
     allow_unpromoted: bool = Field(False, description="DANGER: trade real money with a model that failed the gate")
 
@@ -222,12 +248,40 @@ class HermesConfig(_Strict):
     live: LiveConfig = LiveConfig()
 
     @property
+    def bar_minutes(self) -> int:
+        return BAR_MINUTES[self.data.bar]
+
+    @property
     def bars_per_day(self) -> int:
-        return {"15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6}[self.data.bar]
+        return 1440 // self.bar_minutes
 
     @property
     def bars_per_year(self) -> float:
         return self.bars_per_day * 365.0
+
+    def bars(self, minutes: float) -> int:
+        """Bars of the configured timeframe spanning ``minutes`` (at least one)."""
+        return bars_for(minutes, self.data.bar)
+
+    def days(self, days: float) -> int:
+        return max(1, round(days * self.bars_per_day))
+
+
+def _set_dotted(raw: dict[str, object], overrides: dict[str, object]) -> dict[str, object]:
+    for dotted, value in overrides.items():
+        node: dict[str, object] = raw
+        *parents, leaf = dotted.split(".")
+        for key in parents:
+            node = node.setdefault(key, {})  # type: ignore[assignment]
+        node[leaf] = value
+    return raw
+
+
+def with_overrides(cfg: HermesConfig, overrides: dict[str, object]) -> HermesConfig:
+    """A copy of ``cfg`` with dotted overrides applied (validated like a config file)."""
+    if not overrides:
+        return cfg
+    return HermesConfig.model_validate(_set_dotted(cfg.model_dump(mode="json"), overrides))
 
 
 def load_config(path: str | Path | None = None, **overrides: object) -> HermesConfig:
@@ -236,10 +290,4 @@ def load_config(path: str | Path | None = None, **overrides: object) -> HermesCo
     if path is not None:
         with open(path, encoding="utf-8") as fh:
             raw = yaml.safe_load(fh) or {}
-    for dotted, value in overrides.items():
-        node: dict[str, object] = raw
-        *parents, leaf = dotted.split(".")
-        for key in parents:
-            node = node.setdefault(key, {})  # type: ignore[assignment]
-        node[leaf] = value
-    return HermesConfig.model_validate(raw)
+    return HermesConfig.model_validate(_set_dotted(raw, overrides))

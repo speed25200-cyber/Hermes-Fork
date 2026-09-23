@@ -38,6 +38,7 @@ class ModelBundle:
 
     # -- scoring -------------------------------------------------------------------------------------------
     def score(self, X: np.ndarray, groups: np.ndarray) -> np.ndarray:
+        X = np.asarray(X, dtype=np.float32)
         preds = {}
         if self.gbm is not None and self.weights.get("gbm", 0) > 0:
             preds["gbm"] = cs_standardize(self.gbm.predict(X), groups)

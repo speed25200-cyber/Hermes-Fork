@@ -37,6 +37,16 @@ from hermes.execution.okx.instruments import Instrument, binance_price_factor, o
 log = logging.getLogger(__name__)
 
 
+# Answers after which an order may or may not exist: HTTP 5xx, service unavailable, request timeout
+# ("does not indicate success or failure"), system busy, system error.
+AMBIGUOUS_CODES = {"50001", "50004", "50013", "50026"}
+
+
+def ambiguous(exc: OKXError) -> bool:
+    code = str(exc.code)
+    return code in AMBIGUOUS_CODES or (len(code) == 3 and code.startswith("5"))
+
+
 @dataclass
 class Child:
     symbol: str
@@ -51,31 +61,34 @@ class OKXBroker:
         self,
         client: OKXClient,
         cfg: ExecutionConfig,
-        symbols: list[str],
+        symbols: list[str] | None,
         leverage: int,
         maker_fee: float = 0.0002,
         taker_fee: float = 0.0005,
     ):
+        """``symbols=None`` maps contracts on demand (``register``): any OKX USDT perpetual can be traded."""
         self.c = client
         self.cfg = cfg
-        self.symbols = list(symbols)
+        self.symbols = list(symbols) if symbols is not None else None
         self.leverage = leverage
         self.maker_fee, self.taker_fee = maker_fee, taker_fee
+        self.catalog: dict[str, Instrument] = {}  # every live OKX USDT swap, by instId
         self.instruments: dict[str, Instrument] = {}  # model symbol -> instrument
         self.inst_to_symbol: dict[str, str] = {}
+        self._derived: set[str] = set()  # symbols inferred from an exchange position, not chosen by the model
+        self._leverage_set: set[str] = set()
         self._dms_task: asyncio.Task[None] | None = None
 
     # -- lifecycle ------------------------------------------------------------------------------------------
     async def start(self) -> None:
         await self.c.sync_clock()
-        insts = {d["instId"]: Instrument.from_okx(d) for d in await self.c.instruments()}
-        for s in self.symbols:
-            iid = okx_inst_id(s)
-            inst = insts.get(iid)
-            if inst is None or inst.state != "live" or inst.ct_val <= 0:
-                continue
-            self.instruments[s] = inst
-            self.inst_to_symbol[iid] = s
+        self.catalog = {}
+        for d in await self.c.instruments():
+            inst = Instrument.from_okx(d)
+            if inst.inst_id.endswith("-USDT-SWAP") and inst.state == "live" and inst.ct_val > 0:
+                self.catalog[inst.inst_id] = inst
+        if self.symbols is not None:
+            self.register(self.symbols)
         conf = await self.c.account_config()
         if str(conf.get("acctLv")) == "1":
             raise RuntimeError("OKX account is in Spot mode (acctLv=1): switch it to Futures or Multi-currency")
@@ -86,13 +99,37 @@ class OKXBroker:
                 raise RuntimeError(f"cannot switch to net_mode (close positions/orders first): {exc}") from exc
         # Resting orders from a previous (crashed) run are stale by definition.
         await self.cancel_own_orders()
-        for s, inst in self.instruments.items():
-            try:
-                await self.c.set_leverage(inst.inst_id, self.leverage, self.cfg.td_mode)
-            except OKXError as exc:
-                log.warning("set_leverage %s: %s", s, exc)
+        await self.positions()  # maps every instrument that already carries a position
         self._dms_task = asyncio.create_task(self._dead_man_loop())
-        log.info("OKX broker ready: %d instruments mapped, leverage %dx", len(self.instruments), self.leverage)
+        log.info("OKX broker ready: %d USDT perpetuals, leverage %dx", len(self.catalog), self.leverage)
+
+    def register(self, symbols: list[str]) -> list[str]:
+        """Map model (Binance) symbols to OKX instruments; returns those that exist on OKX."""
+        out = []
+        for s in symbols:
+            iid = okx_inst_id(s)
+            inst = self.catalog.get(iid)
+            if inst is None:
+                continue
+            owner = self.inst_to_symbol.get(iid)
+            if owner is not None and owner != s:
+                if owner not in self._derived:
+                    continue  # two model symbols for one OKX contract: the first registered keeps it
+                del self.instruments[owner]
+                self._derived.discard(owner)
+            self.instruments[s] = inst
+            self.inst_to_symbol[iid] = s
+            out.append(s)
+        return out
+
+    async def _ensure_leverage(self, inst: Instrument) -> None:
+        if inst.inst_id in self._leverage_set:
+            return
+        try:
+            await self.c.set_leverage(inst.inst_id, self.leverage, self.cfg.td_mode)
+        except OKXError as exc:
+            log.warning("set_leverage %s: %s", inst.inst_id, exc)
+        self._leverage_set.add(inst.inst_id)
 
     async def stop(self) -> None:
         if self._dms_task:
@@ -129,11 +166,22 @@ class OKXBroker:
         return float(bal.get("totalEq") or 0.0)
 
     async def positions(self) -> dict[str, Position]:
+        """Every open USDT-swap position. One on a contract the model never mapped (a previous run, a manual
+        trade) is mapped under its plain symbol, so it can still be protected and closed."""
         out = {}
         for p in await self.c.positions():
-            s = self.inst_to_symbol.get(p.get("instId", ""))
+            iid = p.get("instId", "")
             pos = float(p.get("pos") or 0.0)
-            if s is None or pos == 0:
+            if pos == 0:
+                continue
+            s = self.inst_to_symbol.get(iid)
+            if s is None and iid in self.catalog:
+                s = iid.split("-")[0] + "USDT"
+                self.instruments[s] = self.catalog[iid]
+                self.inst_to_symbol[iid] = s
+                self._derived.add(s)
+            if s is None:
+                log.warning("position on unknown instrument %s left alone", iid)
                 continue
             inst = self.instruments[s]
             mark = float(p.get("markPx") or p.get("last") or 0.0)
@@ -181,6 +229,7 @@ class OKXBroker:
 
     async def rebalance(self, targets: dict[str, float], urgent: bool = False) -> ExecutionReport:
         rep = ExecutionReport()
+        await self.cancel_own_orders()  # an order left resting by an earlier cycle must not fill twice
         positions = await self.positions()
         tick = {t["instId"]: t for t in await self.c.tickers()}
         prices = {}
@@ -218,6 +267,54 @@ class OKXBroker:
         fee = -float(o.get("fee") or 0.0)  # OKX reports fees as negative numbers
         return filled, avg, str(o.get("state")), fee
 
+    async def _place(self, ch: Child, clid: str, **order: str) -> bool:
+        """Send one order; True when it exists on the exchange.
+
+        A clean rejection (``sCode`` error) means no order. Anything ambiguous -- transport failure, HTTP 5xx,
+        timeout -- may still have created it: the exchange is asked by client id, and a resting order is
+        tracked like any other instead of being forgotten on the book.
+        """
+        if not ch.reduce_only:
+            await self._ensure_leverage(ch.inst)
+        try:
+            await self.c.place_order(
+                instId=ch.inst.inst_id,
+                tdMode=self.cfg.td_mode,
+                side=ch.side,
+                clOrdId=clid,
+                tag=self.cfg.order_tag,
+                reduceOnly=ch.reduce_only,
+                **order,
+            )
+            return True
+        except OKXError as exc:
+            if not ambiguous(exc):
+                log.warning("%s %s rejected: %s", order.get("ordType"), ch.inst.inst_id, exc)
+                return False
+            log.warning("%s %s ambiguous (%s): checking the exchange", order.get("ordType"), ch.inst.inst_id, exc)
+        except Exception as exc:
+            log.warning(
+                "%s %s transport failure (%r): checking the exchange", order.get("ordType"), ch.inst.inst_id, exc
+            )
+        for _ in range(3):
+            await asyncio.sleep(1.0)
+            try:
+                _, _, state, _ = await self._order_state(ch.inst, clid)
+            except Exception:
+                continue
+            return state != "missing"
+        raise RuntimeError(f"{ch.inst.inst_id} order {clid}: state unknown after an ambiguous send")
+
+    async def _final_state(self, inst: Instrument, clid: str) -> tuple[float, float, str, float]:
+        """Order state once terminal (filled / canceled / missing), polling briefly after a cancel or IOC."""
+        filled, avg, state, fee = await self._order_state(inst, clid)
+        for _ in range(10):
+            if state in ("filled", "canceled", "mmp_canceled", "missing"):
+                break
+            await asyncio.sleep(0.3)
+            filled, avg, state, fee = await self._order_state(inst, clid)
+        return filled, avg, state, fee
+
     async def _execute_child(self, ch: Child, urgent: bool) -> tuple[list[Fill], float]:
         inst = ch.inst
         remaining = ch.contracts
@@ -229,20 +326,14 @@ class OKXBroker:
                 clid = new_client_id()
                 bid, ask, _, _ = await self._touch(inst)
                 px = bid if ch.side == "buy" else ask
-                try:
-                    await self.c.place_order(
-                        instId=inst.inst_id,
-                        tdMode=self.cfg.td_mode,
-                        side=ch.side,
-                        ordType="post_only",
-                        sz=inst.fmt_size(remaining),
-                        px=inst.fmt_price(px),
-                        clOrdId=clid,
-                        tag=self.cfg.order_tag,
-                        reduceOnly=ch.reduce_only,
-                    )
-                except OKXError as exc:
-                    log.warning("post_only %s rejected: %s", inst.inst_id, exc)
+                placed = await self._place(
+                    ch,
+                    clid,
+                    ordType="post_only",
+                    sz=inst.fmt_size(remaining),
+                    px=inst.fmt_price(px),
+                )
+                if not placed:
                     break
                 live_px = px
                 state = "live"
@@ -262,7 +353,10 @@ class OKXBroker:
                 if state not in ("filled", "canceled", "mmp_canceled", "missing"):
                     with contextlib.suppress(OKXError):
                         await self.c.cancel_order(inst.inst_id, clid)
-                filled, avg, state, fee = await self._order_state(inst, clid)
+                filled, avg, state, fee = await self._final_state(inst, clid)
+                if state == "live":
+                    # Cancel not confirmed: the order may still fill; never size the next leg on a guess.
+                    raise RuntimeError(f"{inst.inst_id} order {clid} still live after cancel")
                 if filled > 0:
                     fills.append(Fill(ch.symbol, ch.side, filled if ch.side == "buy" else -filled, avg, fee, True))
                     remaining = round(remaining - filled, 12)
@@ -280,31 +374,9 @@ class OKXBroker:
         px = ask * (1 + cap) if ch.side == "buy" else bid * (1 - cap)
         px = inst.round_price(px, ch.side, passive=False)
         clid = new_client_id()
-        try:
-            await self.c.place_order(
-                instId=inst.inst_id,
-                tdMode=self.cfg.td_mode,
-                side=ch.side,
-                ordType="ioc",
-                sz=inst.fmt_size(size),
-                px=inst.fmt_price(px),
-                clOrdId=clid,
-                tag=self.cfg.order_tag,
-                reduceOnly=ch.reduce_only,
-            )
-        except OKXError as exc:
-            log.error("ioc %s rejected: %s", inst.inst_id, exc)
+        if not await self._place(ch, clid, ordType="ioc", sz=inst.fmt_size(size), px=inst.fmt_price(px)):
             return [], size
-        except Exception:
-            # Transport failure: the order may or may not exist -- ask the exchange, never resend blindly.
-            await asyncio.sleep(1.0)
-        filled, avg, _, fee = await self._order_state(inst, clid)
-        for _ in range(5):
-            _, _, state, _ = await self._order_state(inst, clid)
-            if state in ("filled", "canceled", "missing"):
-                break
-            await asyncio.sleep(0.5)
-        filled, avg, _, fee = await self._order_state(inst, clid)
+        filled, avg, _, fee = await self._final_state(inst, clid)
         fills = [Fill(ch.symbol, ch.side, filled if ch.side == "buy" else -filled, avg, fee, False)] if filled else []
         return fills, round(size - filled, 12)
 
@@ -319,7 +391,9 @@ class OKXBroker:
         to_cancel: list[dict[str, str]] = []
         for iid, algos in by_inst.items():
             s = self.inst_to_symbol.get(iid)
-            pos = positions.get(s) if s else None
+            if s is None:
+                continue  # not ours to judge: never remove a stop we cannot relate to a position
+            pos = positions.get(s)
             for a in algos:
                 side_ok = pos is not None and ((pos.contracts > 0) == (a.get("side") == "sell"))
                 if not side_ok:

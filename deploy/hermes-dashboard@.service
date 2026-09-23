@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes read-only dashboard (%i)
+After=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/opt/hermes
+EnvironmentFile=/etc/hermes/hermes.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+# Écoute publique seulement si HERMES_DASHBOARD_TOKEN est défini (sinon le service refuse de démarrer).
+ExecStart=/opt/hermes/.venv/bin/hermes live dashboard --state state/%i --host 0.0.0.0 --port 8899
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

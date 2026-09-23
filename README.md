@@ -31,8 +31,8 @@ python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"            # ".[dev,deep]" pour le réseau profond
 python -m pytest -q                 # tests hermétiques (marché synthétique, faux serveur OKX)
 
-hermes data download -c configs/research.yaml          # archives Binance (≈ 450 contrats, 2020 → aujourd'hui)
-hermes research run  -c configs/research.yaml --out reports/essai
+hermes data download -c configs/research_15m.yaml      # archives Binance 15 min (contrats délistés compris)
+hermes research run  -c configs/research_15m.yaml --out reports/essai   # ou research_30m / research_1m
 hermes model install reports/essai/model                # devient le champion
 hermes live run -c configs/paper.yaml --mode paper      # papier sur flux live
 ```

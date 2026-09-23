@@ -6,9 +6,9 @@ from hermes.research.dataset import build_dataset
 
 
 def test_chunked_dataset_matches_direct(cfg_small):
-    panel = make_synthetic_panel(n_assets=10, n_bars=24 * 200, seed=31)
+    panel = make_synthetic_panel(n_assets=10, n_bars=96 * 80, bar="15m", seed=31)
     direct = build_dataset(panel, cfg_small, chunk_bars=10**9)
-    chunked = build_dataset(panel, cfg_small, chunk_bars=24 * 30)
+    chunked = build_dataset(panel, cfg_small, chunk_bars=96 * 10)
     assert direct.feature_names == chunked.feature_names
     key = lambda ds: pd.MultiIndex.from_arrays([ds.t_pos, ds.s_pos])  # noqa: E731
     kd, kc = key(direct), key(chunked)

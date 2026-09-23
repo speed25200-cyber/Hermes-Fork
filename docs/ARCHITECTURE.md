@@ -1,14 +1,31 @@
 # Architecture d'Hermes
 
-Hermes est un système de trading **long/short sur contrats perpétuels crypto** (USDT-margined). Il prédit
-le rendement *relatif* de chaque contrat sur les prochaines heures, construit un portefeuille bêta-neutre
-qui achète ce qui devrait monter et vend à découvert ce qui devrait baisser, et l'exécute sur OKX.
+Hermes est un système de trading **long/short sur contrats perpétuels crypto** (USDT-margined). Il décide
+sur des bougies de **1 minute, 15 minutes ou 30 minutes** (15 min par défaut), prédit le rendement *relatif*
+de chaque contrat sur les prochaines minutes/heures, construit un portefeuille bêta-neutre qui achète ce
+qui devrait monter et vend à découvert ce qui devrait baisser, et l'exécute sur OKX.
+
+## Unités de temps
+
+Toutes les fenêtres sont définies en **minutes** (variables) ou en **jours** (validation, covariance) et
+converties en barres de l'unité choisie : la même bibliothèque sert le 1 min, le 15 min et le 30 min, et un
+nom de variable (`ret_60m`) désigne la même chose quelle que soit la bougie.
+
+| Unité | Horizons de prédiction | Particularités |
+|---|---|---|
+| 15 min (défaut) | 30 min, 1 h, 2 h | agrégats 1 min optionnels dans chaque bougie (variance réalisée, sauts, asymétrie, flux de fin de barre, VWAP) |
+| 30 min | 1 h, 2 h, 4 h | agrégé exactement depuis le 15 min |
+| 1 min | 5, 15, 30 min | top 15 contrats seulement, fenêtres ≤ 3 jours, exécution en quelques secondes |
+
+L'univers point-in-time est calculé à résolution **journalière** avec des dates de resélection
+calendaires : la recherche et le moteur live sélectionnent les mêmes contrats aux mêmes dates, même si le
+moteur ne garde que quelques semaines de bougies de base.
 
 Le même code sert à la recherche, au backtest, au papier et au réel : ce qui a été validé est ce qui trade.
 
 ```
   archives Binance ──► panel point-in-time ──► features causales ──► cibles résiduelles nettes du funding
-  (délistés inclus)     (univers top-N)          (130 variables)        (vol-normalisées, 4/8/24 h)
+  (délistés inclus)     (univers top-N)          (~130 variables)       (vol-normalisées, 2-8 barres)
                                                         │
                                                         ▼
                         walk-forward purgé : LightGBM + Ridge (+ Transformer transversal)
@@ -32,7 +49,8 @@ Le même code sert à la recherche, au backtest, au papier et au réel : ce qui 
 |---|---|
 | `hermes.data.binance_archive` | Téléchargement des archives Binance USDT-M (klines avec volume agresseur, funding, prime, métriques), cache disque, liste des contrats **y compris délistés**. |
 | `hermes.data.universe` | Univers point-in-time : top-N par volume moyen des 30 jours *précédents*, ancienneté minimale, exclusion des stablecoins et des perpétuels sur actions/matières premières. |
-| `hermes.data.live_feed` | Flux live Binance aux mêmes conventions que la recherche (barres clôturées uniquement). |
+| `hermes.data.live_feed` | Flux live Binance aux mêmes conventions que la recherche (barres clôturées uniquement), bougies journalières pour l'univers, bougies 1 min pour les agrégats intra-barre. |
+| `hermes.data.intrabar` | Agrégats 1 min par bougie de base, strictement causaux. |
 | `hermes.data.synthetic` | Marché synthétique à signal planté connu (tests : le pipeline doit le retrouver, et ne rien trouver dans le bruit). |
 | `hermes.features.library` | ~130 variables causales, sans échelle (retours / volatilité ex ante, z-scores, rangs). |
 | `hermes.labels` | Cibles résiduelles (bêta) nettes du funding, normalisées ; triple barrière et poids d'unicité. |
@@ -43,7 +61,7 @@ Le même code sert à la recherche, au backtest, au papier et au réel : ce qui 
 | `hermes.risk.overlay` | Couche de risque commune au backtest et au réel. |
 | `hermes.backtest.engine` | Simulateur barre par barre : frais, spread, impact, funding, sorties d'univers. |
 | `hermes.execution` | Client REST OKX signé, instruments et arrondis, broker OKX, broker papier. |
-| `hermes.live` | Boucle de décision horaire, état SQLite, alertes, rechargement à chaud du modèle. |
+| `hermes.live` | Boucle de décision à chaque clôture de bougie, état SQLite, alertes, tableau de bord, rechargement à chaud du modèle. |
 
 ## Conventions qui empêchent de se mentir
 
@@ -57,8 +75,15 @@ Le même code sert à la recherche, au backtest, au papier et au réel : ce qui 
 4. **Coûts partout.** Le backtest paie frais maker/taker, demi-spread (estimateur d'Abdi-Ranaldo), impact
    en racine carrée et funding ; l'optimiseur les anticipe.
 5. **Hors échantillon uniquement.** Toute mesure de performance utilise les prédictions walk-forward.
-6. **Nombre d'essais compté.** Chaque configuration testée est inscrite dans `reports/trials.jsonl` et
+6. **Nombre d'essais compté.** Chaque configuration testée est inscrite dans `reports/trials/` et
    dégonfle le Sharpe (DSR).
+7. **Trous de données comblés causalement.** Une bougie manquante est remplacée par une bougie plate (au
+   plus 45 min) selon une règle qui ignore si la série reprend ensuite : identique en recherche et en live.
+8. **Pas de mois sans funding.** Les archives de funding sont mensuelles : les semaines du mois en cours
+   (bougies sans funding connu) sont retirées de la recherche plutôt que traitées comme un funding nul.
+9. **Découpage mémoire sans fuite.** Le jeu de données par tranches calcule chaque tranche sur tous les
+   contrats membres pendant la tranche *et* son préchauffage : le marché et les bêtas ne dépendent jamais
+   de l'appartenance future à l'univers.
 
 ## Pourquoi ces choix (résumé ; détails et références dans `RESEARCH.md`)
 

@@ -1,28 +1,47 @@
-# Recherche sur données réelles, sur un runner GitHub (réseau ouvert vers les archives Binance).
-# Télécharge l'historique, entraîne en walk-forward, évalue hors échantillon, puis publie le rapport
-# (reports/<date>/) sur la branche. Le modèle entraîné est publié comme artefact du workflow.
+# Recherche sur données réelles, sur runners GitHub (réseau ouvert vers les archives Binance).
+# Une tâche par configuration (matrice) : téléchargement, walk-forward, évaluation hors échantillon,
+# porte de promotion. Le rapport est publié sur la branche (reports/<date>-<config>-<run>/) et le modèle
+# comme artefact du workflow. Les tâches parallèles n'entrent pas en conflit : un fichier par essai.
 name: Research
 
 on:
   workflow_dispatch:
     inputs:
-      config:
-        description: "Fichier de configuration"
-        default: "configs/research.yaml"
+      configs:
+        description: "Configurations, séparées par des virgules"
+        default: "configs/research_15m.yaml,configs/research_30m.yaml,configs/research_1m.yaml"
       overrides:
-        description: "Surcharges (-s clé=valeur ...), ex. -s data.start=2022-01-01"
+        description: "Surcharges (-s clé=valeur ...), appliquées à toutes"
         default: ""
       n_null:
         description: "Répliques du test nul"
-        default: "40"
+        default: "24"
 
 permissions:
   contents: write
 
+env:
+  HERMES_ARCHIVE_MIRROR: cdn
+
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        env:
+          CONFIGS: ${{ inputs.configs }}
+        run: |
+          python3 -c "import json,os; c=[x.strip() for x in os.environ['CONFIGS'].split(',') if x.strip()]; print('matrix='+json.dumps({'config': c}))" >> "$GITHUB_OUTPUT"
+
   research:
+    needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,34 +49,45 @@ jobs:
           python-version: "3.12"
       - name: Installer
         run: pip install -e .
+      - name: Nom de la tâche
+        env:
+          CONFIG: ${{ matrix.config }}
+        run: |
+          NAME="$(basename "$CONFIG" .yaml)"
+          echo "NAME=$NAME" >> "$GITHUB_ENV"
+          echo "OUT=reports/$(date -u +%Y-%m-%d)-${NAME}-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
       - name: Cache des archives
         uses: actions/cache@v4
         with:
-          path: data/raw
-          key: binance-raw-${{ github.run_id }}
-          restore-keys: binance-raw-
+          path: data/parsed
+          key: binance-parsed-${{ env.NAME }}-${{ github.run_id }}
+          restore-keys: binance-parsed-${{ env.NAME }}-
       - name: Recherche
         env:
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ matrix.config }}
           OVERRIDES: ${{ inputs.overrides }}
           N_NULL: ${{ inputs.n_null }}
         run: |
-          OUT="reports/$(date -u +%Y-%m-%d)-${GITHUB_RUN_ID}"
-          echo "OUT=$OUT" >> "$GITHUB_ENV"
           # shellcheck disable=SC2086
-          hermes research run -c "$CONFIG" $OVERRIDES --out "$OUT" --n-null "$N_NULL"
-      - name: Publier le modèle
+          hermes research run -c "$CONFIG" $OVERRIDES --out "$OUT" --n-null "$N_NULL" 2>&1 | tee research.log
+      - name: Publier le modèle et le journal
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: model-${{ github.run_id }}
-          path: ${{ env.OUT }}/model
+          name: research-${{ env.NAME }}-${{ github.run_id }}
+          path: |
+            ${{ env.OUT }}
+            research.log
           retention-days: 90
       - name: Publier le rapport sur la branche
         run: |
-          rm -rf "$OUT/model"
+          rm -rf "$OUT/model" "$OUT/walkforward"
           git config user.name "hermes-research"
           git config user.email "hermes-research@users.noreply.github.com"
-          git add "$OUT" reports/trials.jsonl
-          git commit -m "Rapport de recherche $OUT"
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "HEAD:$GITHUB_REF_NAME"
+          git add "$OUT" reports/trials
+          git commit -m "Rapport de recherche $NAME ($GITHUB_RUN_ID)"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep $((i * 7))
+          done
+          exit 1

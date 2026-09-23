@@ -13,62 +13,120 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 
 import httpx
 import numpy as np
 import pandas as pd
 
+from hermes.config import BAR_MINUTES
+from hermes.data.intrabar import intrabar_aggregates
 from hermes.data.panel import BAR_TO_OFFSET, Panel, clean_panel
 
 log = logging.getLogger(__name__)
 
 FAPI = "https://fapi.binance.com"
-MS = {"15m": 900_000, "30m": 1_800_000, "1h": 3_600_000, "2h": 7_200_000, "4h": 14_400_000}
+WEIGHT_BUDGET = 1800  # of Binance's 2400 per minute and IP: headroom for the other processes on the host
+
+
+def kline_weight(limit: int) -> int:
+    """Binance USD-M weight of a klines request."""
+    return 1 if limit < 100 else 2 if limit < 500 else 5 if limit <= 1000 else 10
+
+
+@dataclass
+class DailyHistory:
+    """Closed daily bars from the live feed (today's unfinished bar is never included)."""
+
+    quote_volume: pd.DataFrame
+    alive: pd.DataFrame
+    close: pd.DataFrame
+
+
+def bar_ms(bar: str) -> int:
+    return BAR_MINUTES[bar] * 60_000
 
 
 class BinanceLiveFeed:
     def __init__(
-        self, bar: str = "1h", history_bars: int = 2400, client: httpx.AsyncClient | None = None, concurrency: int = 6
+        self,
+        bar: str = "15m",
+        history_bars: int = 2880,
+        client: httpx.AsyncClient | None = None,
+        concurrency: int = 6,
+        intrabar_minutes: int = 0,
     ):
+        """``intrabar_minutes`` > 0 also keeps that much 1-minute history to compute the intrabar fields."""
         self.bar = bar
         self.history_bars = history_bars
+        self.intrabar_minutes = intrabar_minutes if BAR_MINUTES[bar] > 1 else 0
         self.http = client or httpx.AsyncClient(base_url=FAPI, timeout=15.0)
         self.sem = asyncio.Semaphore(concurrency)
         self.frames: dict[str, pd.DataFrame] = {}
+        self.m1: dict[str, pd.DataFrame] = {}
+        self._daily: dict[str, pd.DataFrame] = {}
+        self._daily_day = ""
+        self._weight_minute = 0
+        self._weight_used = 0
         self.last_update = 0.0
 
     async def close(self) -> None:
         await self.http.aclose()
 
-    async def _get(self, path: str, params: dict[str, object]) -> list:  # type: ignore[type-arg]
+    async def _get(self, path: str, params: dict[str, object], weight: int = 1) -> list:  # type: ignore[type-arg]
+        """GET with Binance's IP weight budget respected: throttled answers are waited out, never mistaken
+        for an empty result (which would silently truncate a history)."""
         async with self.sem:
-            for attempt in range(4):
+            for attempt in range(6):
+                await self._spend(weight)
                 try:
                     r = await self.http.get(path, params=params)
-                    if r.status_code == 429 or r.status_code == 418:
-                        await asyncio.sleep(5 * (attempt + 1))
-                        continue
-                    r.raise_for_status()
-                    return r.json()  # type: ignore[no-any-return]
                 except httpx.HTTPError:
-                    if attempt == 3:
+                    if attempt == 5:
                         raise
                     await asyncio.sleep(1 + attempt)
-        return []
+                    continue
+                used = r.headers.get("x-mbx-used-weight-1m")
+                if used is not None and used.isdigit():
+                    self._weight_used = max(self._weight_used, int(used))
+                if r.status_code in (418, 429):
+                    retry = r.headers.get("retry-after")
+                    wait = float(retry) if retry and retry.replace(".", "", 1).isdigit() else 5.0 * (attempt + 1)
+                    log.warning("Binance throttled %s (%s): waiting %.0fs", path, r.status_code, wait)
+                    await asyncio.sleep(min(wait, 120.0))
+                    continue
+                if r.status_code >= 500 and attempt < 5:
+                    await asyncio.sleep(1 + attempt)
+                    continue
+                r.raise_for_status()
+                return r.json()  # type: ignore[no-any-return]
+        raise RuntimeError(f"Binance request {path} still throttled after retries")
+
+    async def _spend(self, weight: int) -> None:
+        """Client-side view of the 1-minute weight window; waits for the next window near the limit."""
+        minute = int(time.time() // 60)
+        if minute != self._weight_minute:
+            self._weight_minute, self._weight_used = minute, 0
+        if self._weight_used + weight > WEIGHT_BUDGET:
+            await asyncio.sleep(60.5 - time.time() % 60)
+            self._weight_minute, self._weight_used = int(time.time() // 60), 0
+        self._weight_used += weight
 
     async def top_symbols(self, n: int) -> list[str]:
         """Current most traded USDT perpetuals (24h quote volume)."""
-        data = await self._get("/fapi/v1/ticker/24hr", {})
+        data = await self._get("/fapi/v1/ticker/24hr", {}, weight=40)
         rows = [(d["symbol"], float(d.get("quoteVolume") or 0)) for d in data if d["symbol"].endswith("USDT")]
         rows.sort(key=lambda x: -x[1])
         return [s for s, _ in rows[:n]]
 
-    async def _klines(self, kind: str, symbol: str, start_ms: int | None, limit: int) -> pd.DataFrame:
+    async def _klines(
+        self, kind: str, symbol: str, start_ms: int | None, limit: int, interval: str | None = None
+    ) -> pd.DataFrame:
         path = "/fapi/v1/klines" if kind == "klines" else "/fapi/v1/premiumIndexKlines"
-        params: dict[str, object] = {"symbol": symbol, "interval": self.bar, "limit": limit}
+        params: dict[str, object] = {"symbol": symbol, "interval": interval or self.bar, "limit": limit}
         if start_ms is not None:
             params["startTime"] = start_ms
-        rows = await self._get(path, params)
+        rows = await self._get(path, params, weight=kline_weight(limit))
         if not rows:
             return pd.DataFrame()
         a = np.array([[float(x) for x in r[:11]] for r in rows])
@@ -100,8 +158,67 @@ class BinanceLiveFeed:
         idx = ts.ceil(off) - off
         return pd.Series([float(r["fundingRate"]) for r in rows], index=idx).groupby(level=0).sum()
 
+    async def _history(self, kind: str, symbol: str, start: int, interval: str) -> pd.DataFrame:
+        step = bar_ms(interval) if interval != "1d" else 86_400_000
+        now_ms = int(time.time() * 1000)
+        parts, s = [], start
+        while s < now_ms - step:
+            k = await self._klines(kind, symbol, s, 1500, interval)
+            if k.empty:
+                break
+            parts.append(k)
+            s = int(k.index[-1].value // 1_000_000) + step
+            if len(k) < 1500:
+                break
+        return pd.concat(parts) if parts else pd.DataFrame()
+
+    async def _refresh_m1(self, symbol: str) -> None:
+        have = self.m1.get(symbol)
+        now_ms = int(time.time() * 1000)
+        if have is None or have.empty:
+            k = await self._history("klines", symbol, now_ms - self.intrabar_minutes * 60_000, "1m")
+        else:
+            last = int(have.index[-1].value // 1_000_000)
+            k = await self._history("klines", symbol, last - 120_000, "1m")
+        if k.empty:
+            return
+        merged = k if have is None else pd.concat([have, k])
+        merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+        self.m1[symbol] = merged.iloc[-self.intrabar_minutes :]
+
+    async def daily(self, symbols: list[str], days: int = 200) -> DailyHistory:
+        """Months of closed daily bars (quote volume, traded flag, close) for the universe and the ES check.
+
+        Fetched once per UTC day and symbol; a symbol whose fetch failed is retried on the next call instead
+        of being cached as 'no history' (which would exclude it for the whole day).
+        """
+        today = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
+        if self._daily_day != today:
+            self._daily, self._daily_day = {}, today
+        missing = [s for s in symbols if s not in self._daily]
+        if missing:
+            start = int(time.time() * 1000) - days * 86_400_000
+            res = await asyncio.gather(
+                *(self._history("klines", s, start, "1d") for s in missing), return_exceptions=True
+            )
+            for s, k in zip(missing, res):
+                if isinstance(k, BaseException):
+                    log.warning("daily history %s failed: %s", s, k)
+                    continue
+                self._daily[s] = k
+        qv, alive, close = {}, {}, {}
+        for s in symbols:
+            k = self._daily.get(s)
+            if k is None or k.empty:
+                continue
+            qv[s], alive[s], close[s] = k["quote_volume"], k["close"].notna(), k["close"]
+        qdf = pd.DataFrame(qv).sort_index().reindex(columns=symbols)
+        adf = pd.DataFrame(alive).sort_index().reindex(columns=symbols).fillna(False).astype(bool)
+        cdf = pd.DataFrame(close).sort_index().reindex(columns=symbols)
+        return DailyHistory(qdf, adf, cdf)
+
     async def _refresh_symbol(self, symbol: str) -> None:
-        step = MS[self.bar]
+        step = bar_ms(self.bar)
         have = self.frames.get(symbol)
         now_ms = int(time.time() * 1000)
         if have is None or have.empty:
@@ -155,6 +272,16 @@ class BinanceLiveFeed:
         frames = {s: self.frames[s] for s in symbols if s in self.frames and len(self.frames[s])}
         if not frames:
             raise RuntimeError("live feed returned no data")
+        if self.intrabar_minutes:
+            res = await asyncio.gather(*(self._refresh_m1(s) for s in frames), return_exceptions=True)
+            for s, r in zip(list(frames), res):
+                if isinstance(r, BaseException):
+                    log.warning("1m feed %s failed: %s", s, r)
+                    continue
+                m1 = self.m1.get(s)
+                if m1 is not None and len(m1):
+                    agg = intrabar_aggregates(m1, self.bar)
+                    frames[s] = frames[s].join(agg, how="left")
         self.last_update = time.time()
         panel = clean_panel(Panel.from_long(frames, self.bar))
         panel.meta["source"] = "binance_live"

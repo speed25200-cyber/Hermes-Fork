@@ -51,7 +51,11 @@ def build_targets(panel: Panel, feats: FeatureSet, mask: pd.DataFrame, cfg: Labe
     mkt = feats.aux["mkt"]["mkt"]
     funding = panel["funding_rate"].fillna(0.0) if "funding_rate" in panel else r1 * 0.0
     net_r1 = r1 - funding.where(r1.notna())
-    mkt_vol = np.sqrt((mkt**2).ewm(halflife=72, min_periods=24, adjust=False).mean())
+    mkt_vol = (
+        feats.aux["mkt_vol"]["mkt_vol"]
+        if "mkt_vol" in feats.aux
+        else np.sqrt((mkt**2).ewm(halflife=72, min_periods=24, adjust=False).mean())
+    )
 
     residual, total, market = {}, {}, {}
     for h in cfg.horizons:

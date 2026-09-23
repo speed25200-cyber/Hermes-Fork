@@ -70,7 +70,75 @@ class BacktestResult:
         return yearly_breakdown(self.returns, periods_per_year)
 
 
-def run_backtest(
+@dataclass
+class _Context:
+    columns: pd.Index
+    r: np.ndarray
+    fund: np.ndarray
+    member: np.ndarray
+    ivol: np.ndarray
+    beta: np.ndarray
+    mkt_var: np.ndarray
+    costs: CostModel
+    day_pos: np.ndarray
+    daily_np: np.ndarray
+    refs: tuple[object, ...] = ()  # keeps the keyed objects alive so their ids cannot be reused
+
+
+# Heavy per-panel preparation, memoised: the evaluation runs dozens of backtests (null, grid, stress) on the
+# same panel, and forked workers inherit the parent's cache instead of recomputing it.
+_CONTEXTS: dict[tuple[object, ...], _Context] = {}
+
+
+def _context(
+    panel: Panel, mask: pd.DataFrame, aux: dict[str, pd.DataFrame], cfg: HermesConfig, t0: int, t1: int
+) -> _Context:
+    cov_hl = cfg.days(cfg.portfolio.cov_halflife_days)
+    key = (id(panel), id(mask), id(aux), t0, t1, cfg.costs, cov_hl, cfg.bars_per_day)
+    if key in _CONTEXTS:
+        return _CONTEXTS[key]
+    bpd = cfg.bars_per_day
+    lo = max(0, t0 - cov_hl * 2)
+    # Only contracts that are universe members at some point of the simulated window can ever be held.
+    cols = mask.columns[mask.iloc[lo:t1].to_numpy().any(axis=0)]
+    close = panel["close"][cols]
+    r = (close / close.shift(1) - 1.0).to_numpy()
+    fund = panel["funding_rate"][cols].fillna(0.0).to_numpy() if "funding_rate" in panel else np.zeros_like(r)
+    member = mask[cols].to_numpy() & close.notna().to_numpy()
+    costs = CostModel.from_panel(
+        cfg.costs, panel["high"][cols], panel["low"][cols], close, panel["quote_volume"][cols], aux["vol"][cols], bpd
+    )
+    daily_close = close.resample("1D").last()
+    daily_ret = daily_close / daily_close.shift(1) - 1.0
+    ctx = _Context(
+        columns=cols,
+        r=r,
+        fund=fund,
+        member=member,
+        ivol=aux["ivol"][cols].to_numpy(),
+        beta=aux["beta"][cols].to_numpy(),
+        mkt_var=market_variance(aux["mkt"]["mkt"], max(2, cov_hl // 4)).to_numpy(),
+        costs=costs,
+        day_pos=daily_ret.index.searchsorted(panel.index.floor("D")),
+        daily_np=daily_ret.to_numpy(),
+        refs=(panel, mask, aux),
+    )
+    if len(_CONTEXTS) > 4:
+        _CONTEXTS.clear()
+    _CONTEXTS[key] = ctx
+    return ctx
+
+
+def run_backtest(*args: object, **kwargs: object) -> BacktestResult:
+    """Simulate (see ``_run_backtest``) with single-threaded BLAS: the matrices are tiny and parallelism
+    comes from running several backtests in separate processes; threaded BLAS only adds contention."""
+    from threadpoolctl import threadpool_limits
+
+    with threadpool_limits(limits=1):
+        return _run_backtest(*args, **kwargs)  # type: ignore[arg-type]
+
+
+def _run_backtest(
     panel: Panel,
     mask: pd.DataFrame,
     aux: dict[str, pd.DataFrame],
@@ -81,7 +149,9 @@ def run_backtest(
     end: pd.Timestamp | None = None,
     ic_ref: float | None = None,
     record_weights: bool = False,
+    cost_multiplier: float = 1.0,
 ) -> BacktestResult:
+    """``cost_multiplier`` scales what trades actually pay, not what the optimiser expects (cost stress)."""
     bpd = cfg.bars_per_day
     bpy = cfg.bars_per_year
     pc = cfg.portfolio
@@ -89,28 +159,23 @@ def run_backtest(
     t0 = 0 if start is None else int(index.searchsorted(start))
     t1 = len(index) if end is None else int(index.searchsorted(end, side="right"))
 
-    close = panel["close"]
-    r = (close / close.shift(1) - 1.0).to_numpy()
-    fund = panel["funding_rate"].fillna(0.0).to_numpy() if "funding_rate" in panel else np.zeros_like(r)
-    member = mask.to_numpy() & close.notna().to_numpy()
-    z = cs_zscore(signal.score, mask).to_numpy()
-    ivol = aux["ivol"].to_numpy()
-    beta = aux["beta"].to_numpy()
-    mkt_var = market_variance(aux["mkt"]["mkt"], pc.cov_halflife // 4).to_numpy()
+    ctx = _context(panel, mask, aux, cfg, t0, t1)
+    cols = ctx.columns
+    close = panel["close"][cols]
+    r, fund, member, ivol, beta = ctx.r, ctx.fund, ctx.member, ctx.ivol, ctx.beta
+    mkt_var, costs, day_pos, daily_np = ctx.mkt_var, ctx.costs, ctx.day_pos, ctx.daily_np
+    z = cs_zscore(signal.score[cols], mask[cols]).to_numpy()
     ic = signal.ic_est.reindex(index).fillna(0.0).to_numpy()
     malpha = signal.market_alpha.reindex(index).fillna(0.0).to_numpy() if signal.market_alpha is not None else None
     cscale = signal.cost_scale.reindex(index).fillna(1.0).to_numpy() if signal.cost_scale is not None else None
-    costs = CostModel.from_panel(cfg.costs, panel["high"], panel["low"], close, panel["quote_volume"], aux["vol"], bpd)
-    daily_close = close.resample("1D").last()
-    daily_ret = daily_close / daily_close.shift(1) - 1.0
-    day_pos = daily_ret.index.searchsorted(index.floor("D"))  # index of the current day in daily_ret
-    daily_np = daily_ret.to_numpy()
 
     constructor = PortfolioConstructor(pc, bpy, ic_ref if ic_ref is not None else pc.ic_ref)
-    overlay = RiskOverlay(cfg.risk)
+    overlay = RiskOverlay(cfg.risk, check_kill_file=False)
+    day_keys = index.floor("D").asi8
     N = close.shape[1]
-    ewma = EwmaCovariance(N, pc.cov_halflife)
-    for t in range(max(0, t0 - pc.cov_halflife * 2), t0):
+    cov_hl = cfg.days(pc.cov_halflife_days)
+    ewma = EwmaCovariance(N, cov_hl)
+    for t in range(max(0, t0 - cov_hl * 2), t0):
         ewma.update(np.where(member[t], r[t], np.nan))
 
     w = np.zeros(N)
@@ -159,7 +224,7 @@ def run_backtest(
         w = w * grow / (1.0 + pnl)
         w[held & ~valid] = 0.0  # contract stopped trading: exited at the last price
         ewma.update(np.where(member[t], rt, np.nan))
-        overlay.observe(ts, equity)
+        overlay.observe(ts, equity, day=int(day_keys[t]))
         out["gross_pnl"][k] = gross_pnl
         out["funding"][k] = -fpay
 
@@ -177,7 +242,7 @@ def run_backtest(
                     beta=beta[t, idx],
                     mkt_var=float(mkt_var[t]) if np.isfinite(mkt_var[t]) else 1e-4,
                     cost_rate=costs.linear_rate(t, dollars_typ)[idx] * (cscale[t] if cscale is not None else 1.0),
-                    adv=costs.adv.iloc[t].to_numpy()[idx],
+                    adv=costs.adv_at(t)[idx],
                     w0=w[idx],
                     ic=float(ic[t]),
                     market_alpha=float(malpha[t]) if malpha is not None else 0.0,
@@ -194,7 +259,7 @@ def run_backtest(
                 if np.any(trade):
                     dollars = np.zeros(N)
                     dollars[idx] = trade * equity
-                    fees, spread, impact = costs.trade_cost(t, dollars)
+                    fees, spread, impact = (cost_multiplier * x for x in costs.trade_cost(t, dollars))
                     turnover = float(np.abs(trade).sum())
                     w[idx] = target
                     equity -= fees + spread + impact

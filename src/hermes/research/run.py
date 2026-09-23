@@ -1,6 +1,6 @@
 """End-to-end research run: data -> dataset -> walk-forward -> evaluation -> final model -> report.
 
-Every run is appended to a trial ledger (``reports/trials.jsonl``). The number of distinct configurations
+Every run is recorded in a trial ledger (``reports/trials/``, one file per run). The number of distinct configurations
 ever evaluated feeds the Deflated Sharpe Ratio: trying many ideas on the same history is not free, and the
 ledger makes that cost explicit instead of forgotten.
 """
@@ -47,14 +47,48 @@ def config_hash(cfg: HermesConfig) -> str:
     return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]
 
 
+TRAINING_VALIDATION_KEYS = (
+    "train_days",
+    "expanding",
+    "test_days",
+    "embargo_minutes",
+    "min_train_days",
+    "val_days",
+    "train_sample_minutes",
+    "recency_halflife_days",
+)
+
+
+def training_hash(cfg: HermesConfig) -> str:
+    """Hash of what the walk-forward *training* depends on (data, features, labels, models, splits).
+
+    A saved walk-forward is reused when only evaluation settings changed (costs, portfolio, risk, gate
+    thresholds): the out-of-sample predictions are the same, only their evaluation differs.
+    """
+    d = json.loads(cfg.model_dump_json())
+    keep = {k: d[k] for k in ("data", "features", "labels", "model", "seed")}
+    keep["data"] = {k: v for k, v in keep["data"].items() if k not in ("cache_dir", "download_workers", "end")}
+    keep["validation"] = {k: d["validation"][k] for k in TRAINING_VALIDATION_KEYS}
+    return hashlib.sha256(json.dumps(keep, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def _ledger_records(ledger: Path) -> list[dict[str, object]]:
+    """Trial records: one JSON file per run in the ledger directory (parallel jobs never conflict), plus the
+    legacy ``trials.jsonl`` next to it if present."""
+    recs: list[dict[str, object]] = []
+    files = sorted(ledger.glob("*.json")) if ledger.is_dir() else []
+    legacy = ledger.with_suffix(".jsonl") if ledger.suffix != ".jsonl" else ledger
+    lines = legacy.read_text().splitlines() if legacy.exists() else []
+    for text in [f.read_text() for f in files] + lines:
+        try:
+            recs.append(json.loads(text))
+        except ValueError:
+            continue
+    return recs
+
+
 def ledger_trials(ledger: Path, current: str) -> int:
-    seen = {current}
-    if ledger.exists():
-        for line in ledger.read_text().splitlines():
-            try:
-                seen.add(json.loads(line)["config_hash"])
-            except (ValueError, KeyError):
-                continue
+    seen = {current} | {str(r.get("config_hash")) for r in _ledger_records(ledger) if r.get("config_hash")}
     return len(seen)
 
 
@@ -114,8 +148,9 @@ def run_research(
     panel: Panel | None = None,
     n_null: int | None = None,
     workers: int | None = None,
-    ledger: str | Path | None = "reports/trials.jsonl",
+    ledger: str | Path | None = "reports/trials",
     save_model: bool = True,
+    resume: bool = True,
 ) -> tuple[Evaluation, WalkForwardResult, Dataset]:
     t0 = time.time()
     out = Path(out_dir)
@@ -127,20 +162,38 @@ def run_research(
     panel = panel if panel is not None else load_panel(cfg.data, cfg.seed)
     log.info("panel %s from %s to %s", panel.shape, panel.index[0], panel.index[-1])
     ds = build_dataset(panel, cfg)
-    wf = walk_forward_train(ds, cfg)
+    wf_dir = out / "walkforward"
+    marker = wf_dir / "training_hash"
+    thash = f"{training_hash(cfg)}:{panel.index[0]}:{panel.index[-1]}:{len(panel.symbols)}"
+    if resume and marker.exists() and marker.read_text() == thash:
+        log.info("resuming from the saved walk-forward in %s", wf_dir)
+        wf = WalkForwardResult.load(wf_dir)
+    else:
+        wf = walk_forward_train(ds, cfg)
+        wf.save(wf_dir)
+        marker.write_text(thash)
+    bundle = train_final(ds, cfg, False, {}) if save_model else None
+    # Training arrays are no longer needed: free them before the forking evaluation.
+    ds.release_training_arrays()
     ev, bt = evaluate(ds, wf, cfg, n_null=n_null, workers=workers)
     elapsed = time.time() - t0
     write_report(out, cfg, ds, wf, ev, bt, chash, elapsed)
-    if save_model:
+    if bundle is not None:
         from hermes.portfolio.alpha import signal_persistence
 
         H = cfg.portfolio.holding_horizon
         persist = signal_persistence(wf.score, H, cfg.bars_per_day * 30).dropna()
-        extra = {"cost_scale": float(persist.iloc[-1]) if len(persist) else 1.0}
-        bundle = train_final(ds, cfg, ev.promoted, {k: v for k, v in ev.tests.items()}, extra)
+        bundle.meta.update(
+            {
+                "promoted": ev.promoted,
+                "evaluation": dict(ev.tests.items()),
+                "cost_scale": float(persist.iloc[-1]) if len(persist) else 1.0,
+                "market_promoted": bool(ev.tests.get("market_promoted", 0.0)),
+            }
+        )
         bundle.save(out / "model")
     if ledger is not None:
-        Path(ledger).parent.mkdir(parents=True, exist_ok=True)
+        Path(ledger).mkdir(parents=True, exist_ok=True)
         rec = {
             "date": datetime.now(UTC).isoformat(timespec="seconds"),
             "config_hash": chash,
@@ -150,10 +203,10 @@ def run_research(
             "ic_h": {k: round(float(v["ic_mean"]), 4) for k, v in ev.ic.items() if k.startswith("h")},  # type: ignore[index]
             "promoted": ev.promoted,
         }
-        with open(ledger, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(rec) + "\n")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+        (Path(ledger) / f"{stamp}-{chash}.json").write_text(json.dumps(rec) + "\n")
     log.info("research done in %.0fs, promoted=%s", time.time() - t0, ev.promoted)
     return ev, wf, ds
 
 
-__all__ = ["config_hash", "pd", "run_research", "train_final"]
+__all__ = ["config_hash", "pd", "run_research", "train_final", "training_hash"]

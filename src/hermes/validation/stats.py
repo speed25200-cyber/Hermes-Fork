@@ -21,7 +21,13 @@ from scipy import stats
 EULER = 0.5772156649015329
 
 
-def sharpe(returns: np.ndarray, periods_per_year: float, lo_adjust: bool = True, max_lag: int = 24) -> float:
+def sharpe(returns: np.ndarray, periods_per_year: float, lo_adjust: bool = True) -> float:
+    """Annualised Sharpe ratio; with ``lo_adjust`` the annualisation uses the long-run variance (Lo 2002).
+
+    The long-run variance is a Newey-West estimate (Bartlett weights, automatic bandwidth
+    ``4 (n/100)^(2/9)``). Positive autocorrelation lowers the annualised Sharpe; negative autocorrelation is
+    **not** allowed to raise it: estimated mean reversion in daily P&L is too noisy to be paid for.
+    """
     r = np.asarray(returns, float)
     r = r[np.isfinite(r)]
     if len(r) < 3 or r.std(ddof=1) == 0:
@@ -30,16 +36,14 @@ def sharpe(returns: np.ndarray, periods_per_year: float, lo_adjust: bool = True,
     q = periods_per_year
     if not lo_adjust:
         return float(sr * np.sqrt(q))
-    # Lo (2002): Var(sum of q returns) = q * var * (1 + 2 sum_k (1 - k/q) rho_k)
     n = len(r)
-    L = int(min(max_lag, n // 4))
+    L = int(min(np.floor(4 * (n / 100.0) ** (2.0 / 9.0)), n // 4, q - 1))
     rc = r - r.mean()
     denom = float(rc @ rc)
-    rho = np.array([float(rc[k:] @ rc[:-k]) / denom for k in range(1, L + 1)]) if L > 0 else np.array([])
-    k = np.arange(1, L + 1)
-    factor = 1 + 2 * np.sum((1 - k / q) * rho) if L > 0 else 1.0
-    factor = max(factor, 0.1)
-    return float(sr * q / np.sqrt(q * factor))
+    factor = 1.0
+    for k in range(1, L + 1):
+        factor += 2 * (1 - k / (L + 1)) * float(rc[k:] @ rc[:-k]) / denom
+    return float(sr * np.sqrt(q) / np.sqrt(max(factor, 1.0)))
 
 
 def _sr_std(sr: float, n: int, skew: float, kurt: float) -> float:

@@ -7,9 +7,11 @@ during that fold's test period.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -37,6 +39,37 @@ class WalkForwardResult:
     @property
     def oof_start(self) -> pd.Timestamp:
         return self.score.dropna(how="all").index[0]
+
+    def save(self, directory: str | Path) -> None:
+        d = Path(directory)
+        d.mkdir(parents=True, exist_ok=True)
+        self.score.astype("float32").to_parquet(d / "score.parquet")
+        for k, v in self.model_scores.items():
+            v.astype("float32").to_parquet(d / f"model_{k}.parquet")
+        series = {"prior_ic": self.prior_ic}
+        if self.market_score is not None and self.market_prior_ic is not None:
+            series.update({"market_score": self.market_score, "market_prior_ic": self.market_prior_ic})
+        pd.DataFrame(series).to_parquet(d / "series.parquet")
+        if self.feature_importance is not None:
+            self.feature_importance.to_frame("gain").to_parquet(d / "importance.parquet")
+        (d / "folds.json").write_text(json.dumps(self.folds, indent=1))
+
+    @classmethod
+    def load(cls, directory: str | Path) -> WalkForwardResult:
+        d = Path(directory)
+        score = pd.read_parquet(d / "score.parquet").astype("float64")
+        models = {p.stem[6:]: pd.read_parquet(p).astype("float64") for p in sorted(d.glob("model_*.parquet"))}
+        ser = pd.read_parquet(d / "series.parquet")
+        imp = pd.read_parquet(d / "importance.parquet")["gain"] if (d / "importance.parquet").exists() else None
+        return cls(
+            score=score,
+            model_scores=models,
+            prior_ic=ser["prior_ic"],
+            folds=json.loads((d / "folds.json").read_text()),
+            feature_importance=imp,
+            market_score=ser.get("market_score"),
+            market_prior_ic=ser.get("market_prior_ic"),
+        )
 
 
 def first_valid_bar(ds: Dataset, min_members: int = 8) -> int:
@@ -72,19 +105,23 @@ def train_fold_models(
     v = cfg.validation
     H = max(cfg.labels.horizons)
     t_end = int(train_bars.max()) + 1
-    val_lo = t_end - v.val_bars
+    val_lo = t_end - cfg.days(v.val_days)
     core = train_bars[train_bars < val_lo - H]
     val = train_bars[train_bars >= val_lo]
-    rows_core = ds.rows_for(core, v.train_stride)
-    rows_val = ds.rows_for(val, v.train_stride)
+    rows_core = ds.rows_for(core, cfg.bars(v.train_sample_minutes))
+    rows_val = ds.rows_for(val, cfg.bars(v.train_sample_minutes))
     rows_core = rows_core[np.isfinite(ds.y[rows_core])]
     rows_val = rows_val[np.isfinite(ds.y[rows_val])]
-    tr = TrainData(ds.X[rows_core], ds.y[rows_core], ds.t_pos[rows_core], _weights(ds, rows_core, t_end, cfg))
-    va = TrainData(ds.X[rows_val], ds.y[rows_val], ds.t_pos[rows_val], _weights(ds, rows_val, t_end, cfg))
+    tr = TrainData(
+        ds.X[rows_core].astype(np.float32), ds.y[rows_core], ds.t_pos[rows_core], _weights(ds, rows_core, t_end, cfg)
+    )
+    va = TrainData(
+        ds.X[rows_val].astype(np.float32), ds.y[rows_val], ds.t_pos[rows_val], _weights(ds, rows_val, t_end, cfg)
+    )
     models: dict[str, object] = {}
     ics: dict[str, float] = {}
     lcb: dict[str, float] = {}
-    overlap = max(1, H // v.train_stride)
+    overlap = max(1, H // cfg.bars(v.train_sample_minutes))
     if cfg.model.gbm.enabled:
         # Early stopping on one seed decides the number of trees; every seed is then fit on core + val.
         es_cfg = cfg.model.gbm.model_copy(update={"seeds": cfg.model.gbm.seeds[:1]})
@@ -118,7 +155,7 @@ def train_fold_models(
 def predict_rows(models: dict[str, object], ds: Dataset, rows: np.ndarray) -> dict[str, np.ndarray]:
     out = {}
     for name, m in models.items():
-        p = m.predict(ds.X[rows])  # type: ignore[attr-defined]
+        p = m.predict(ds.X[rows].astype(np.float32))  # type: ignore[attr-defined]
         out[name] = cs_standardize(p, ds.t_pos[rows])
     return out
 
@@ -130,8 +167,8 @@ def _market_fold(
     H = max(cfg.labels.horizons)
     v = cfg.validation
     t_end = int(train_bars.max()) + 1
-    core = train_bars[train_bars < t_end - v.val_bars - H]
-    val = train_bars[train_bars >= t_end - v.val_bars]
+    core = train_bars[train_bars < t_end - cfg.days(v.val_days) - H]
+    val = train_bars[train_bars >= t_end - cfg.days(v.val_days)]
     X, y = ds.market_X, ds.market_y
     ok_core = core[np.isfinite(y[core]) & np.all(np.isfinite(X[core]), axis=1)]
     ok_val = val[np.isfinite(y[val]) & np.all(np.isfinite(X[val]), axis=1)]
@@ -158,14 +195,18 @@ def _deep_fold(
     v = cfg.validation
     H = max(cfg.labels.horizons)
     t_end = int(train_bars.max()) + 1
-    val_lo = t_end - v.val_bars
-    core = train_bars[(train_bars < val_lo - H) & (train_bars % v.train_stride == 0)]
-    val = train_bars[(train_bars >= val_lo) & (train_bars % v.train_stride == 0)]
+    val_lo = t_end - cfg.days(v.val_days)
+    core = train_bars[(train_bars < val_lo - H) & (train_bars % cfg.bars(v.train_sample_minutes) == 0)]
+    val = train_bars[(train_bars >= val_lo) & (train_bars % cfg.bars(v.train_sample_minutes) == 0)]
     m = DeepModel(cfg.model.deep, max_members=cfg.data.universe.top_n)
     m.fit(ds.X, pos, ds.y, core, val, warm_start=warm)  # type: ignore[arg-type]
     vrows, vsc, vbars = m.predict(ds.X, pos, val)
     ok = np.isfinite(ds.y[vrows]) if len(vrows) else np.zeros(0, bool)
-    lcb = ic_lower_bound(vsc[ok], ds.y[vrows][ok], vbars[ok], max(1, H // v.train_stride)) if ok.any() else 0.0
+    lcb = (
+        ic_lower_bound(vsc[ok], ds.y[vrows][ok], vbars[ok], max(1, H // cfg.bars(v.train_sample_minutes)))
+        if ok.any()
+        else 0.0
+    )
     rows, sc, _ = m.predict(ds.X, pos, test_bars)
     return m, float(m.val_ic), lcb, rows, sc
 
@@ -176,11 +217,11 @@ def walk_forward_train(ds: Dataset, cfg: HermesConfig) -> WalkForwardResult:
     start = first_valid_bar(ds)
     folds = walk_forward(
         n_bars=ds.n_bars,
-        test_bars=v.test_bars,
-        min_train_bars=v.min_train_bars,
+        test_bars=cfg.days(v.test_days),
+        min_train_bars=cfg.days(v.min_train_days),
         horizon=H,
-        embargo=v.embargo_bars,
-        train_bars=None if v.expanding else v.train_bars,
+        embargo=cfg.bars(v.embargo_minutes) if v.embargo_minutes > 0 else 0,
+        train_bars=None if v.expanding else cfg.days(v.train_days),
         start=start,
     )
     index = ds.mask.index

@@ -1,0 +1,63 @@
+# Bougies 30 min (agrégées depuis le 15 min), horizons 1 h / 2 h / 4 h.
+# Archives Binance USDT-M depuis juin 2022, univers point-in-time top 30 (les plus liquides : coûts bas).
+name: hermes-30m
+seed: 42
+data:
+  source: binance_archive
+  cache_dir: data
+  bar: 30m
+  source_bar: 15m
+  start: "2022-06-01"
+  include_premium: true
+  intrabar: false
+  universe:
+    top_n: 30
+    liquidity_lookback_days: 30
+    min_history_days: 60
+    reselect_every_days: 7
+labels:
+  horizons: [2, 4, 8]
+  primary_horizon: 4
+  residualize: beta
+model:
+  gbm:
+    learning_rate: 0.05
+    n_estimators: 1000
+    early_stopping_rounds: 100
+    num_leaves: 31
+    min_data_in_leaf: 3000
+    feature_fraction: 0.6
+    lambda_l2: 10.0
+    seeds: [1, 2]
+  linear:
+    alpha: 300.0
+  ensemble: ic_weighted
+  market_model: true
+validation:
+  expanding: true
+  min_train_days: 365
+  test_days: 60
+  val_days: 45
+  embargo_minutes: 480
+  train_sample_minutes: 60
+portfolio:
+  vol_target_annual: 0.20
+  gross_max: 2.5
+  net_max: 0.25
+  weight_max: 0.15
+  beta_neutral: true
+  holding_horizon: 4
+  cost_aversion: 1.0
+  ic_ref: 0.03
+  cov_halflife_days: 7
+costs:
+  maker_fee: 0.0002
+  taker_fee: 0.0005
+  maker_fill_ratio: 0.6
+  min_half_spread_bps: 1.0
+  impact_coef: 0.7
+risk:
+  daily_loss_limit: 0.03
+  drawdown_soft: 0.10
+  drawdown_hard: 0.25
+  es_limit_daily: 0.04

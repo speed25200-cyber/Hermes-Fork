@@ -1,0 +1,72 @@
+# RÉFÉRENCE HISTORIQUE (22 sept. 2026) : premier passage en barres 1h, avant le passage aux unités
+# 1 min / 15 min / 30 min demandé par le propriétaire. Conservé pour la traçabilité des essais.
+name: hermes-research
+seed: 42
+data:
+  source: binance_archive
+  cache_dir: data
+  bar: 1h
+  start: "2020-01-01"
+  include_premium: true
+  include_metrics: false
+  universe:
+    top_n: 50
+    liquidity_lookback_days: 30
+    min_history_days: 60
+    reselect_every_days: 7
+features:
+  return_minutes: [60, 120, 240, 480, 720, 1440, 2880, 4320, 10080, 20160]
+  vol_minutes: [1440, 4320, 10080]
+  flow_minutes: [60, 240, 720, 1440, 4320]
+  funding_minutes: [480, 1440, 4320, 10080]
+  trend_pairs_minutes: [[360, 1440], [1440, 5760], [4320, 17280]]
+  range_minutes: [1440, 10080]
+  vol_halflife_minutes: 4320
+  zscore_minutes: 43200
+  max_lookback_minutes: 43200
+labels:
+  horizons: [4, 8, 24]
+  primary_horizon: 8
+  residualize: beta
+model:
+  gbm:
+    learning_rate: 0.05
+    n_estimators: 1000
+    early_stopping_rounds: 100
+    num_leaves: 31
+    min_data_in_leaf: 3000
+    feature_fraction: 0.6
+    lambda_l2: 10.0
+    seeds: [1, 2]
+  linear:
+    alpha: 300.0
+  ensemble: ic_weighted
+  market_model: true
+validation:
+  expanding: true
+  min_train_days: 365
+  test_days: 90
+  val_days: 60
+  embargo_minutes: 1440
+  train_sample_minutes: 240
+portfolio:
+  vol_target_annual: 0.20
+  gross_max: 2.5
+  net_max: 0.25
+  weight_max: 0.15
+  beta_neutral: true
+  holding_horizon: 8
+  cov_halflife_days: 14
+  cost_aversion: 1.0
+  ic_ref: 0.03
+costs:
+  maker_fee: 0.0002
+  taker_fee: 0.0005
+  maker_fill_ratio: 0.6
+  min_half_spread_bps: 1.0
+  impact_coef: 0.7
+risk:
+  daily_loss_limit: 0.03
+  drawdown_soft: 0.10
+  drawdown_hard: 0.25
+  es_limit_daily: 0.04

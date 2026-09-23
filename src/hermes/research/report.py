@@ -26,10 +26,10 @@ def _num(x: float, nd: int = 2) -> str:
 
 GATE_LABELS = {
     "dsr": "Sharpe dégonflé (DSR) — probabilité que le vrai Sharpe > le meilleur hasard parmi les essais",
-    "null_percentile": "Percentile face au nul (mêmes scores permutés entre contrats par blocs)",
+    "null_pvalue": "p-valeur exacte face au nul (mêmes scores permutés entre contrats par blocs d'une semaine)",
     "pbo": "Probabilité de sur-ajustement du backtest (PBO, CSCV sur la grille)",
     "sharpe": "Sharpe annualisé net de coûts (quotidien)",
-    "positive_years": "Part des années civiles positives",
+    "positive_years": "Part des années civiles positives (années de moins de 90 jours exclues)",
     "oos_months": "Mois hors échantillon",
     "cost_stress": "Sharpe avec coûts doublés",
     "latency_stress": "Sharpe avec une barre de latence en plus",
@@ -110,7 +110,7 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         "|---|---:|---:|:-:|",
     ]
     for k, g in ev.gate.items():
-        op = "≤" if k == "pbo" else "≥"
+        op = "≤" if k in ("pbo", "null_pvalue") else "≥"
         L.append(
             f"| {GATE_LABELS.get(k, k)} | {_num(g['value'], 3)} | {op} {_num(g['threshold'], 2)} | "
             f"{'✅' if g['pass'] else '❌'} |"
@@ -121,7 +121,7 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         "",
         f"- Source : `{d['source']}`, barres `{d['bar']}`, du {d['start'][:10]} au {d['end'][:10]}.",
         f"- {d['symbols']} contrats ayant figuré dans l'univers point-in-time (≈ {d['avg_universe']:.0f} "
-        f"membres en moyenne), {d['rows']:,} échantillons × {d['features']} variables.".replace(",", " "),
+        f"membres en moyenne), {d['rows']:_} échantillons × {d['features']} variables.".replace("_", " "),
         f"- Hors échantillon à partir du {d['oos_start'][:10]}.",
         "",
         "## Qualité de prédiction (IC transversal de Spearman, cible résiduelle nette du funding)",
@@ -150,10 +150,13 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         ]
     if "market_timing" in ev.ic:
         mt = ev.ic["market_timing"]
+        verdict_mt = "franchie" if mt.get("gate") else "non franchie"
         L += [
             "",
-            f"Modèle de direction du marché : corrélation {_num(mt['corr'], 4)} (t ≈ {_num(mt['t'], 1)}). "
-            "Il ne pilote l'exposition nette que s'il franchit sa propre validation.",
+            f"Modèle de direction du marché : corrélation {_num(mt['corr'], 4)} (t ≈ {_num(mt['t'], 1)}), "
+            f"par année {mt.get('by_year', {})} ; porte propre {verdict_mt}. Sharpe du livre avec exposition "
+            f"nette pilotée : {_num(t.get('sharpe_with_market'))} (utilisé en production : "
+            f"{'oui' if t.get('market_promoted') else 'non'}).",
         ]
     L += [
         "",
@@ -192,8 +195,10 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         "## Tests statistiques",
         "",
         f"- **Probabilistic Sharpe Ratio** (vrai Sharpe > 0) : {_num(t.get('psr'), 3)}.",
-        f"- **Deflated Sharpe Ratio** ({int(t.get('n_trials', 1))} configurations comptées) : {_num(t.get('dsr'), 3)}.",
-        f"- **Nul par permutation** : Sharpe réel au percentile {_pct(t.get('null_percentile'), 0)} ; "
+        f"- **Deflated Sharpe Ratio** ({int(t.get('n_trials', 1))} essais effectifs comptés) : "
+        f"{_num(t.get('dsr'), 3)}.",
+        f"- **Nul par permutation** : Sharpe réel au percentile {_pct(t.get('null_percentile'), 0)}, "
+        f"p-valeur exacte {_num(t.get('null_pvalue'), 3)} ; "
         f"95ᵉ percentile du nul {_num(t.get('null_sharpe_p95'))} ({len(ev.null_sharpes)} répliques).",
         f"- **Test SPA de Hansen** (p-valeur, H0 : aucun avantage) : {_num(t.get('spa_pvalue'), 3)}.",
         f"- **PBO** sur la grille : {_num(t.get('pbo'), 3)}.",

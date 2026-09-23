@@ -72,3 +72,46 @@ def test_constructor_scales_with_ic(rng):
     assert np.abs(lo.weights).sum() < np.abs(hi.weights).sum()
     assert hi.ex_ante_vol_annual <= cfg.vol_target_annual * 1.05
     assert abs(hi.weights.sum()) <= 0.05 + 1e-9  # beta-neutral by default (betas all 1)
+
+
+def test_small_account_drops_untradable_positions(rng):
+    n = 30
+    cfg = PortfolioConfig(min_position_usdt=20.0)
+    pc = PortfolioConstructor(cfg, bars_per_year=8760, ic_ref=0.03)
+    inp = BookInputs(
+        score=rng.normal(size=n),
+        ivol=np.full(n, 0.01),
+        beta=np.ones(n),
+        mkt_var=1e-4,
+        cost_rate=np.full(n, 1e-4),
+        adv=np.full(n, 1e9),
+        w0=np.zeros(n),
+        ic=0.03,
+    )
+    res = pc.target(inp, equity=500.0)
+    held = res.weights[res.weights != 0]
+    assert len(held) < n
+    assert np.all(np.abs(held) * 500.0 >= 20.0 - 1e-9)
+    assert abs(res.weights.sum()) <= 0.05 + 1e-9
+
+
+def test_market_alpha_is_causal_and_follows_realised_skill():
+    import pandas as pd
+
+    from hermes.portfolio.alpha import market_alpha_series
+
+    rng = np.random.default_rng(3)
+    n = 24 * 400
+    idx = pd.date_range("2023-01-01", periods=n, freq="1h", tz="UTC")
+    y = pd.Series(rng.normal(size=n), index=idx)
+    mkt = pd.Series(rng.normal(0, 0.005, n), index=idx)
+    skilled = y * 0.3 + pd.Series(rng.normal(size=n), index=idx)
+    noise = pd.Series(rng.normal(size=n), index=idx)
+    a_sk = market_alpha_series(skilled, y, mkt, 0.0, 8, 24)
+    a_no = market_alpha_series(noise, y, mkt, 0.0, 8, 24)
+    assert a_sk.abs().iloc[-2000:].mean() > 3 * a_no.abs().iloc[-2000:].mean()
+    # Causality: changing the future target leaves past alphas unchanged.
+    y2 = y.copy()
+    y2.iloc[-100:] = 0.0
+    a2 = market_alpha_series(skilled, y2, mkt, 0.0, 8, 24)
+    pd.testing.assert_series_equal(a_sk.iloc[: -100 - 8], a2.iloc[: -100 - 8])

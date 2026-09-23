@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import time
 import zipfile
 from collections.abc import Iterable
@@ -31,8 +32,10 @@ from hermes.data.panel import BAR_TO_OFFSET, Panel
 log = logging.getLogger(__name__)
 
 LIST_URL = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
-# The S3 origin first (reachable from more networks), the CDN as fallback.
-MIRRORS = (LIST_URL, "https://data.binance.vision")
+CDN_URL = "https://data.binance.vision"
+# The S3 origin first (reachable from more networks), the CDN as fallback; HERMES_ARCHIVE_MIRROR=cdn reverses
+# the order (faster from North America, e.g. GitHub runners).
+MIRRORS = (CDN_URL, LIST_URL) if os.environ.get("HERMES_ARCHIVE_MIRROR") == "cdn" else (LIST_URL, CDN_URL)
 KLINE_COLUMNS = [
     "open_time",
     "open",
@@ -120,7 +123,7 @@ class BinanceArchive:
         self._listing_cache: dict[str, set[str] | None] = {}
 
     # -- low level -----------------------------------------------------------------------------------------
-    def _fetch(self, path: str, immutable: bool) -> bytes | None:
+    def _fetch(self, path: str, immutable: bool, persist: bool = True) -> bytes | None:
         """Fetch ``<mirror>/path`` with on-disk caching. Returns ``None`` if the archive does not exist."""
         local = self.raw / path
         missing = local.with_suffix(local.suffix + ".missing")
@@ -141,10 +144,11 @@ class BinanceArchive:
                         missing.touch()
                     return None
                 r.raise_for_status()
-                local.parent.mkdir(parents=True, exist_ok=True)
-                tmp = local.with_suffix(".part")
-                tmp.write_bytes(r.content)
-                tmp.replace(local)
+                if persist:
+                    local.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = local.with_suffix(".part")
+                    tmp.write_bytes(r.content)
+                    tmp.replace(local)
                 return r.content
             except (httpx.HTTPError, OSError) as exc:  # pragma: no cover - network dependent
                 wait = min(2.0**attempt, 20.0)
@@ -286,6 +290,59 @@ class BinanceArchive:
         out.index = _bar_floor_after(pd.DatetimeIndex(ts), bar)
         return out.groupby(level=0).last()
 
+    def intrabar(self, symbol: str, bar: str, start: date, end: date) -> pd.DataFrame:
+        """1-minute microstructure aggregates per base bar (see ``hermes.data.intrabar``).
+
+        The raw 1-minute archives are large (~1.5 MB per contract-month); they are streamed, aggregated and
+        discarded, and only the small per-month aggregate is cached.
+        """
+        from hermes.data.intrabar import intrabar_aggregates
+
+        out_dir = self.parsed / "intrabar" / bar / symbol
+        out_dir.mkdir(parents=True, exist_ok=True)
+        periods = split_periods(start, end)
+        prefix = f"data/futures/um/monthly/klines/{symbol}/1m/"
+        have = self.monthly_available(prefix)
+        jobs: list[tuple[str, str, bool]] = [
+            (f"{m:%Y-%m}", f"{prefix}{symbol}-1m-{m:%Y-%m}.zip", True)
+            for m in periods.months
+            if have is None or f"{m:%Y-%m}" in have
+        ]
+        jobs += [
+            (f"{d:%Y-%m-%d}", f"data/futures/um/daily/klines/{symbol}/1m/{symbol}-1m-{d:%Y-%m-%d}.zip", True)
+            for d in periods.days
+        ]
+
+        def one(job: tuple[str, str, bool]) -> pd.DataFrame | None:
+            stamp, path, immutable = job
+            cached = out_dir / f"{stamp}.parquet"
+            if cached.exists():
+                return pd.read_parquet(cached)
+            blob = self._fetch(path, immutable, persist=False)
+            if blob is None:
+                return None
+            raw = _read_csv_from_zip(blob, KLINE_COLUMNS)
+            raw.index = _to_utc_ms(raw["open_time"])
+            m1 = pd.DataFrame(
+                {
+                    "close": pd.to_numeric(raw["close"], errors="coerce"),
+                    "volume": pd.to_numeric(raw["volume"], errors="coerce"),
+                    "quote_volume": pd.to_numeric(raw["quote_volume"], errors="coerce"),
+                    "taker_buy_quote": pd.to_numeric(raw["taker_buy_quote_volume"], errors="coerce"),
+                },
+                index=raw.index,
+            )
+            agg = intrabar_aggregates(m1, bar)
+            agg.to_parquet(cached)
+            return agg
+
+        with ThreadPoolExecutor(max(2, self.workers // 4)) as ex:
+            parts = [p for p in ex.map(one, jobs) if p is not None and len(p)]
+        if not parts:
+            return pd.DataFrame()
+        out = pd.concat(parts).sort_index()
+        return out[~out.index.duplicated(keep="last")]
+
     # -- panel -----------------------------------------------------------------------------------------------
     def symbol_frame(
         self, symbol: str, bar: str, start: date, end: date, include_premium: bool, include_metrics: bool
@@ -315,11 +372,14 @@ class BinanceArchive:
         include_metrics: bool = False,
     ) -> Panel:
         frames = {}
+        lo = pd.Timestamp(start, tz="UTC")
         for i, sym in enumerate(symbols):
             f = self.symbol_frame(sym, bar, start, end, include_premium, include_metrics)
             if len(f):
-                frames[sym] = f
-            log.info("archive %s (%d) rows=%d", sym, i, len(f))
+                # float32 per contract right away: a 15-minute panel of hundreds of contracts must fit in RAM.
+                frames[sym] = f.loc[lo:].astype("float32")
+            if i % 25 == 0:
+                log.info("archive %s (%d) rows=%d", sym, i, len(f))
         panel = Panel.from_long(frames, bar)
         panel.meta["source"] = "binance_archive"
         return panel

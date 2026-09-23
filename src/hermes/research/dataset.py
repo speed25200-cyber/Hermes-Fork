@@ -24,7 +24,7 @@ class Dataset:
     mask: pd.DataFrame
     feats: FeatureSet
     targets: Targets
-    X: np.ndarray  # (rows x features) float32, rows sorted by time then symbol
+    X: np.ndarray  # (rows x features) float16 storage, rows sorted by time then symbol
     t_pos: np.ndarray  # bar position of each row
     s_pos: np.ndarray  # symbol position of each row
     y: np.ndarray  # training target (Gauss-ranked blended residual return)
@@ -44,6 +44,18 @@ class Dataset:
             sel &= self.t_pos % stride == 0
         return np.nonzero(sel)[0]
 
+    def release_training_arrays(self) -> None:
+        """Free what only training needs before the (forking, memory-hungry) evaluation phase."""
+        self.X = np.empty((0, self.X.shape[1]), dtype=np.float16)
+        self.targets.total.clear()
+        self.feats.aux.pop("r1", None)
+        keep = ("open", "high", "low", "close", "quote_volume", "funding_rate")
+        fields = {k: v for k, v in self.panel.fields.items() if k in keep}
+        # Fields the backtest never reads are aliased (no copy) to satisfy the panel's core-field contract.
+        for k in ("volume", "trades", "taker_buy_quote"):
+            fields[k] = fields["quote_volume"]
+        self.panel = Panel(fields, bar=self.panel.bar, meta=dict(self.panel.meta))
+
     def to_frame(self, values: np.ndarray, rows: np.ndarray | None = None) -> pd.DataFrame:
         """Scatter long-format values back into a (time x symbol) frame."""
         out = np.full(self.mask.shape, np.nan, dtype=np.float64)
@@ -62,17 +74,20 @@ def blended_target(targets: Targets, horizons: tuple[int, ...]) -> pd.DataFrame:
 
 
 def build_dataset(panel: Panel, cfg: HermesConfig, chunk_bars: int | None = None) -> Dataset:
-    bpd = cfg.bars_per_day
-    mask = universe_mask(panel, cfg.data.universe, bpd)
+    mask = universe_mask(panel, cfg.data.universe)
     log.info("universe: %d bars, avg %.1f members", len(mask), mask.sum(axis=1).mean())
-    chunk_bars = chunk_bars if chunk_bars is not None else 365 * bpd
+    if chunk_bars is None:
+        # Keep one chunk's features around ~1.5 GB (float32): bars x contracts x ~150 features x 4 bytes.
+        n_cols = max(1, int(mask.any(axis=0).sum()))
+        chunk_bars = int(np.clip(1.5e9 / (n_cols * 150 * 4), cfg.days(20), cfg.days(365)))
     if len(panel.index) > int(chunk_bars * 1.5):
         return _build_dataset_chunked(panel, mask, cfg, chunk_bars)
-    feats = build_features(panel, mask, cfg.features, bpd)
+    feats = build_features(panel, mask, cfg.features)
     targets = build_targets(panel, feats, mask, cfg.labels)
     y_frame = blended_target(targets, cfg.labels.horizons)
 
-    X, mi = feats.stack(mask)
+    # float16 storage halves the largest array; every consumer casts its slice back to float32.
+    X, mi = feats.stack(mask, dtype=np.float16)
     t_pos = mask.index.get_indexer(mi.get_level_values(0)).astype(np.int32)
     s_pos = mask.columns.get_indexer(mi.get_level_values(1)).astype(np.int32)
     y_blend = y_frame.to_numpy()[t_pos, s_pos]
@@ -108,14 +123,14 @@ def _build_dataset_chunked(panel: Panel, mask: pd.DataFrame, cfg: HermesConfig, 
     """Memory-bounded dataset: features are computed per time chunk (with a warm-up prefix and a forward
     suffix for the labels) on the contracts that are members during the chunk, and only member rows are
     kept. Numerically equivalent to the one-shot path up to EWMA warm-up effects (see the parity test)."""
-    bpd = cfg.bars_per_day
     T, N = mask.shape
-    warm = 2 * cfg.features.max_lookback + 4 * 2 * cfg.features.vol_halflife
+    warm = 2 * cfg.bars(cfg.features.max_lookback_minutes) + 8 * cfg.bars(cfg.features.vol_halflife_minutes)
     Hmax = max(cfg.labels.horizons)
     cols = mask.columns
     aux_names = ("vol", "ivol", "beta", "r1")
     aux = {k: np.full((T, N), np.nan, dtype=np.float32) for k in aux_names}
     mkt = np.full(T, np.nan)
+    mkt_vol_arr = np.full(T, np.nan)
     res = {h: np.full((T, N), np.nan, dtype=np.float32) for h in cfg.labels.horizons}
     tot = {h: np.full((T, N), np.nan, dtype=np.float32) for h in cfg.labels.horizons}
     mres = {h: np.full(T, np.nan) for h in cfg.labels.horizons}
@@ -125,20 +140,22 @@ def _build_dataset_chunked(panel: Panel, mask: pd.DataFrame, cfg: HermesConfig, 
     for c0 in range(0, T, chunk_bars):
         c1 = min(T, c0 + chunk_bars)
         a0, a1 = max(0, c0 - warm), min(T, c1 + Hmax + 1)
-        active = mask.iloc[c0:c1].any(axis=0)
-        # Keep the chunk's members plus BTC (market-state features reference it).
+        # Every contract that is a member anywhere in the computed window (warm-up included), plus BTC for the
+        # market-state features: market returns and betas in the warm-up must see the same member set as the
+        # one-shot computation, not only the contracts that will be members later (a survivorship leak).
+        active = mask.iloc[a0:c1].any(axis=0)
         keep = [c for c in cols if active[c] or c == "BTCUSDT"]
-        if not active.any():
+        if not mask.iloc[c0:c1].to_numpy().any():
             continue
         sub = panel.iloc(slice(a0, a1)).subset(keep)
         m_sub = mask.iloc[a0:a1][keep]
-        f = build_features(sub, m_sub, cfg.features, bpd)
+        f = build_features(sub, m_sub, cfg.features)
         tg = build_targets(sub, f, m_sub, cfg.labels)
         names = names or f.names
         if f.names != names:
             raise RuntimeError("feature set changed between chunks")
         rows = np.arange(c0 - a0, c1 - a0)
-        X, mi = f.stack(m_sub, rows=rows)
+        X, mi = f.stack(m_sub, rows=rows, dtype=np.float16)
         X_parts.append(X)
         t_parts.append(mask.index.get_indexer(mi.get_level_values(0)).astype(np.int32))
         s_parts.append(cols.get_indexer(mi.get_level_values(1)).astype(np.int32))
@@ -147,6 +164,7 @@ def _build_dataset_chunked(panel: Panel, mask: pd.DataFrame, cfg: HermesConfig, 
         for k in aux_names:
             aux[k][c0:c1][:, col_idx] = f.aux[k].to_numpy()[sl]
         mkt[c0:c1] = f.aux["mkt"]["mkt"].to_numpy()[sl]
+        mkt_vol_arr[c0:c1] = f.aux["mkt_vol"]["mkt_vol"].to_numpy()[sl]
         for h in cfg.labels.horizons:
             res[h][c0:c1][:, col_idx] = tg.residual[h].to_numpy()[sl]
             tot[h][c0:c1][:, col_idx] = tg.total[h].to_numpy()[sl]
@@ -167,14 +185,15 @@ def _build_dataset_chunked(panel: Panel, mask: pd.DataFrame, cfg: HermesConfig, 
         frames={},
         market={k: pd.Series(v, index=idx) for k, v in market.items()},
         aux={
-            **{k: frame(aux[k]).astype("float64") for k in aux_names},
+            **{k: frame(aux[k]) for k in aux_names},
             "mkt": pd.Series(mkt, index=idx).to_frame("mkt"),
+            "mkt_vol": pd.Series(mkt_vol_arr, index=idx).to_frame("mkt_vol"),
         },
     )
     feats_names = names
     targets = Targets(
-        residual={h: frame(res[h]).astype("float64") for h in cfg.labels.horizons},
-        total={h: frame(tot[h]).astype("float64") for h in cfg.labels.horizons},
+        residual={h: frame(res[h]) for h in cfg.labels.horizons},
+        total={h: frame(tot[h]) for h in cfg.labels.horizons},
         market={h: pd.Series(mres[h], index=idx) for h in cfg.labels.horizons},
         horizon=cfg.labels.primary_horizon,
     )
