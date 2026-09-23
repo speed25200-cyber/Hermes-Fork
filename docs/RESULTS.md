@@ -9,11 +9,12 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 (DSR). Tableau régénérable par `hermes research compare reports/<dossiers>`.
 
 > **Aucune configuration n'a franchi la porte de promotion à ce jour ; le système refuse donc de trader de
-> l'argent réel.** Les meilleures (horizons 4-48 h) sont rentables sur l'ensemble de la période (+11 à
-> +15 %/an nets, Sharpe jusqu'à 0,91 avec stops simulés) et, à détention 24 h, résistent à des coûts
-> doublés ; mais le gain dépend du régime (2024) et vient pour plus de la moitié de paris de style
-> (petites capitalisations, faible volatilité) : neutralisés, il ne reste que +3 %/an. La significativité
-> après correction des essais multiples n'est pas atteinte : la porte les rejette, à juste titre.
+> l'argent réel.** Les premières versions rentables (horizons 4-48 h, +11 à +15 %/an) dépendaient d'un
+> régime (2024) et, pour plus de la moitié, de paris de style (petites capitalisations peu volatiles).
+> Entraîné sur une **cible nette des styles** avec un livre neutre (`research_30m_xl_lb_sres`), le modèle
+> gagne +10 %/an avec un drawdown de −13 %, **3 années sur 4 positives**, du funding encaissé, et reste
+> positif à coûts doublés ; 6 des 8 critères de la porte sont franchis. Restent refusés : le Sharpe dégonflé
+> (0,34 : avec ~30 essais effectifs, 3 ans d'historique ne suffisent pas à exclure la chance) et la PBO.
 
 ## Tous les essais
 
@@ -32,9 +33,12 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 | `research_30m_xl_lb` (fenêtres 14-30 j), avant stops simulés | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 24,8 % | 7,8 % | **+15,1 %** | **0,93** | −18 % | 0,55 | **0,04** | 0,86 | **0,62** | **0,89** | ❌ |
 | `research_30m_xl_lb`, stops catastrophe simulés | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 24,8 % | 8,4 % | **+14,6 %** | **0,91** | −18 % | 0,49 | **0,04** | 0,65 | **0,59** | **0,88** | ❌ |
 | `research_30m_xl_lb_style` (livre neutre aux styles) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 10,7 % | 8,2 % | +3,2 % | 0,34 | −21 % | 0,11 | 0,08 | **0,11** | −0,35 | **0,31** | ❌ |
+| `research_30m_xl_lb_sres` (cible nette des styles, livre neutre) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,045* (8,7) | 10,6 % | 5,0 % | **+10,4 %** | **0,84** | **−13 %** | 0,34 | **0,04** | 0,45 | **0,20** | **0,56** | ❌ |
+| `research_30m_xl_lb_sres_u50` (idem, 50 contrats) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,052* (11,3) | 17,2 % | 9,5 % | **+11,2 %** | **0,83** | **−14 %** | 0,22 | **0,04** | **0,05** | −0,08 | **0,82** | ❌ |
 
 IC : Spearman transversal à l'horizon de détention, t de Newey-West sur les IC journaliers. En gras : ce
-qui franchit son seuil.
+qui franchit son seuil (drawdown en gras : meilleur que −15 %). * IC mesuré contre la cible nette des
+styles : plus difficile à prédire, il ne se compare pas aux IC contre la cible bêta-résiduelle.
 
 ## 1. Ce qui marche : la prédiction
 
@@ -116,12 +120,43 @@ Point notable : en 2025, l'IC est au plus haut (0,073) alors que le livre neutre
 coûts 14 %). L'IC mesure surtout un classement lent, dominé par les caractéristiques de style ; une fois
 celles-ci retirées du livre, ce qui reste à trader est faible et coûteux.
 
-## 5. En cours
+## 5. Cible nette des styles : le P&L devient régulier
 
-- `research_30m_xl_lb_sres` : la **cible** elle-même est nette des styles (résidu projeté à chaque barre hors
-  de la taille/liquidité et de la volatilité), avec le livre neutre : le modèle ne consacre plus sa capacité
-  à des primes qu'il n'a pas le droit de jouer ;
-- `research_30m_xl_lb_sres_u50` : la même chose sur 50 contrats (loi fondamentale : ratio d'information ∝
-  IC × √largeur).
+`research_30m_xl_lb_sres` entraîne le modèle sur le rendement résiduel **projeté hors de la taille/liquidité
+et de la volatilité** à chaque barre (après écrêtage des sauts : voir la revue ci-dessous), et le livre est
+neutre aux mêmes styles. Le modèle apprend donc exactement ce que le livre a le droit de détenir.
+
+| Année | `xl_lb` (paris de style) | `xl_lb_style` (livre neutre) | `xl_lb_sres` (cible et livre neutres) | `xl_lb_sres_u50` (50 contrats) |
+|---|---:|---:|---:|---:|
+| 2023 (5 mois) | −4,5 % | +1,5 % | +4,1 % | +2,0 % |
+| 2024 | +65,3 % | +24,8 % | +14,1 % | +15,7 % |
+| 2025 | +9,5 % | −13,7 % | +16,9 % | +20,9 % |
+| 2026 (8 mois) | −11,9 % | +0,7 % | −2,2 % | −2,7 % |
+| Sharpe / drawdown | 0,91 / −18 % | 0,34 / −21 % | 0,84 / −13 % | 0,83 / −14 % |
+
+Lecture :
+- à P&L brut égal (10,6 %/an contre 10,7 %), la cible nette des styles **divise la rotation par 1,7** (96
+  contre 160) : le modèle ne perd plus de transactions à suivre des primes que le livre neutralise, et les
+  coûts tombent à 5 %/an ; le livre encaisse davantage de funding (+4,9 %/an contre +1,1 %) ;
+- le gain est réparti (3 années positives, 2026 à peine négatif) et le livre reste positif à coûts doublés
+  (Sharpe 0,20) et avec une barre de latence (0,56) ; sans les contrôles de drawdown, Sharpe 1,03 et
+  +14 %/an (2025 : +28 %) ;
+- sur 50 contrats, l'IC et son t montent (0,052, t 11,3 : loi fondamentale), le P&L brut aussi (17 %/an),
+  mais la rotation et les coûts (9,5 %/an) montent davantage : coûts doublés négatifs. En revanche la grille
+  de construction y est très stable (PBO 0,05) et désigne une détention de 8 h (Sharpe 1,50 à aversion 2) ;
+- 2026 reste le point faible : IC réalisé nul (−0,005 sur 30 contrats, +0,005 sur 50) ;
+- refus : DSR 0,34 et 0,22 (29 et 32 essais effectifs, intervalle bootstrap du Sharpe [−0,04 ; 1,80]) ; PBO
+  0,45 sur 30 contrats.
+
+Revue adversariale de cette cible (avant les runs retenus ici) : la projection était d'abord ajustée sur des
+résidus non écrêtés — un seul saut (XRP le jour du jugement SEC, +45 σ) faisait des cibles de tous les autres
+un pari de volatilité. Corrigé (écrêtage avant projection, test), et les runs lancés avec l'erreur ont été
+annulés avant d'entrer au registre.
+
+## 6. En cours
+
+- `research_30m_xl_lb_sres_u50_h16` : 50 contrats, détention 8 h, choisie **a posteriori** dans la grille
+  de `sres_u50` (PBO 0,05 : sur cette grille, retenir la meilleure case ne s'est pas révélé du
+  sur-ajustement) ; compté au registre comme un essai de plus.
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.
