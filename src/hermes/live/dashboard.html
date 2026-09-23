@@ -2,44 +2,196 @@
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Hermes</title>
 <style>
-:root{--bg:#0f1115;--card:#171a21;--ink:#e7e9ee;--mute:#8b93a3;--pos:#3fb68b;--neg:#e5616b;--line:#2a2f3a;--acc:#6aa6ff}
-@media (prefers-color-scheme: light){:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#5d6573;--line:#e3e6eb;--acc:#2d6be4}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:16px}h1{font-size:18px;margin:4px 0 12px}h2{font-size:13px;color:var(--mute);font-weight:600;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
-.kpi{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}.sub{color:var(--mute);font-size:12px}
-.pos{color:var(--pos)}.neg{color:var(--neg)}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-td,th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left}
-svg{width:100%;height:180px}.row{display:grid;grid-template-columns:2fr 1fr;gap:10px}@media(max-width:800px){.row{grid-template-columns:1fr}}
-.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
+:root{color-scheme:light;
+ --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--mute:#898781;--grid:#e1e0d9;--axis:#c3c2b7;
+ --ring:rgba(11,11,11,.10);--s1:#2a78d6;--s2:#eb6834;--band1:#b7d3f6;--band2:#cde2fb;--up:#006300;
+ --good:#0ca30c;--warn:#fab219;--crit:#d03b3b}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;
+ --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--mute:#898781;--grid:#2c2c2a;--axis:#383835;
+ --ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--band1:#184f95;--band2:#104281;--up:#0ca30c}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--mute:#898781;
+ --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--band1:#184f95;--band2:#104281;--up:#0ca30c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1180px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:14px}
+h1{font-size:19px;margin:0}
+h2{font-size:13px;font-weight:600;color:var(--ink2);margin:0 0 2px}
+.cap{font-size:12px;color:var(--mute);margin:0 0 8px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:99px;border:1px solid var(--ring);font-size:12px;background:var(--surface)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.meta{color:var(--ink2);font-size:12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:12px 14px;min-width:0}
+.tile .lab{font-size:12px;color:var(--ink2)}.tile .val{font-size:22px;font-weight:600;margin-top:2px}
+.tile .sub{font-size:12px;color:var(--mute);margin-top:2px}
+.up{color:var(--up)}.down{color:var(--crit)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.charts .wide{grid-column:1/-1}
+@media(max-width:820px){.charts{grid-template-columns:1fr}}
+.chart{position:relative}.chart svg{display:block;width:100%;height:220px;overflow:visible}
+.chart.short svg{height:170px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink2);margin:0 0 6px}
+.legend i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+.legend i.band{height:10px;border:0;border-radius:2px}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--ring);border-radius:8px;
+ padding:6px 9px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.12);white-space:nowrap;display:none;z-index:2}
+.tip b{font-weight:600}
+.tables{display:grid;grid-template-columns:1.2fr 1fr;gap:10px}
+@media(max-width:820px){.tables{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-weight:600;color:var(--ink2);text-align:right;padding:4px 6px;border-bottom:1px solid var(--axis)}
+td{text-align:right;padding:4px 6px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+.scroll{max-height:340px;overflow:auto}
+.empty{color:var(--mute);font-size:13px;padding:18px 0;text-align:center}
+details{margin-top:6px;font-size:12px;color:var(--ink2)}
+.foot{color:var(--mute);font-size:12px;margin-top:12px}
 </style></head><body><main>
-<h1>Hermes <span id="mode" class="badge"></span> <span id="upd" class="sub"></span></h1>
-<div class="grid" id="kpis"></div>
-<div class="row"><div class="card"><h2>Équité</h2><svg id="eq" viewBox="0 0 600 180" preserveAspectRatio="none"></svg></div>
-<div class="card"><h2>Risque</h2><table id="risk"></table></div></div>
-<div class="row" style="margin-top:10px"><div class="card"><h2>Positions</h2><table id="pos"></table></div>
-<div class="card"><h2>Événements</h2><table id="ev"></table></div></div>
-</main><script>
-const f=(x,d=2)=>x==null||isNaN(x)?"—":Number(x).toLocaleString("fr-FR",{maximumFractionDigits:d,minimumFractionDigits:d});
-const esc=x=>String(x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
-const pct=x=>x==null?"—":f(100*x,2)+" %";
-async function j(u){const r=await fetch(u,{credentials:"same-origin"});return r.json()}
-async function load(){
- const s=await j("api/status"),e=await j("api/equity"),v=await j("api/events");
- document.getElementById("mode").textContent=s.mode||"?";document.getElementById("upd").textContent="barre "+(s.bar||"—");
- const k=[["Équité (USDT)",f(s.equity)],["Exposition brute",f(s.gross)+"×"],["Exposition nette",f(s.net)+"×"],
-  ["IC estimé",f(s.ic_est,4)],["Drawdown",pct((s.risk||{}).drawdown)],["Part maker",pct((s.execution||{}).maker_share)],
-  ["Écart d'exécution",f((s.execution||{}).shortfall_bps,1)+" pb"],["Dérive max (PSI)",f((s.risk||{}).psi_max,2)]];
- document.getElementById("kpis").innerHTML=k.map(([a,b])=>`<div class="card"><div class="sub">${a}</div><div class="kpi">${b}</div></div>`).join("");
- const r=s.risk||{};document.getElementById("risk").innerHTML=Object.entries(r).map(([a,b])=>`<tr><td>${esc(a)}</td><td>${f(b,4)}</td></tr>`).join("")+
-  (s.notes||[]).map(n=>`<tr><td colspan=2>${esc(n)}</td></tr>`).join("");
- const p=Object.entries(s.positions||{}).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
- document.getElementById("pos").innerHTML="<tr><th>Contrat</th><th>Notionnel</th></tr>"+p.map(([a,b])=>`<tr><td>${esc(a)}</td><td class="${b>=0?"pos":"neg"}">${f(b)}</td></tr>`).join("");
- document.getElementById("ev").innerHTML=v.map(x=>`<tr><td>${new Date(x[0]*1000).toISOString().slice(5,16)}</td><td>${esc(x[1])}</td></tr><tr><td colspan=2 class="sub">${esc(x[2])}</td></tr>`).join("");
- const pts=e.map(x=>x[1]);if(pts.length>1){const lo=Math.min(...pts),hi=Math.max(...pts),n=pts.length;
-  const d=pts.map((y,i)=>`${i?"L":"M"}${(600*i/(n-1)).toFixed(1)},${(170-160*(y-lo)/((hi-lo)||1)).toFixed(1)}`).join("");
-  document.getElementById("eq").innerHTML=`<path d="${d}" fill="none" stroke="var(--acc)" stroke-width="2" vector-effect="non-scaling-stroke"/>`}
+<header>
+ <h1>Hermes</h1><span class="pill" id="mode">—</span><span class="pill" id="state">—</span>
+ <span class="meta" id="model"></span><span class="meta" id="upd"></span>
+</header>
+<section class="tiles" id="tiles"></section>
+<section class="charts">
+ <div class="card wide"><h2>Équité face à ce que la recherche attend</h2>
+  <p class="cap">Si le modèle se comporte comme hors échantillon, la courbe reste le plus souvent dans la bande foncée (±1σ) et presque toujours dans la claire (±2σ).</p>
+  <div class="legend" id="leg-eq"></div><div class="chart" id="c-eq"></div>
+  <details><summary>Valeurs quotidiennes</summary><div class="scroll"><table id="t-eq"></table></div></details></div>
+ <div class="card"><h2>Drawdown</h2><p class="cap">Depuis le plus haut, avec les seuils de réduction et d'arrêt du risque.</p>
+  <div class="chart short" id="c-dd"></div></div>
+ <div class="card"><h2>IC réalisé (moyenne 7 jours)</h2><p class="cap">Qualité du classement une fois l'horizon écoulé, face à l'IC hors échantillon de la recherche.</p>
+  <div class="legend" id="leg-ic"></div><div class="chart short" id="c-ic"></div></div>
+ <div class="card wide"><h2>Exposition</h2><p class="cap">Brute (longs + shorts) et nette (longs − shorts), en multiple du capital.</p>
+  <div class="legend" id="leg-ex"></div><div class="chart short" id="c-ex"></div></div>
+</section>
+<section class="tables">
+ <div class="card"><h2>Positions</h2><p class="cap" id="pos-cap"></p><div class="scroll"><table id="pos"></table></div></div>
+ <div class="card"><h2>Événements</h2><p class="cap">Les 40 derniers.</p><div class="scroll"><table id="ev"></table></div></div>
+ <div class="card" style="grid-column:1/-1"><h2>Dernières exécutions</h2><p class="cap" id="fills-cap"></p><div class="scroll"><table id="fills"></table></div></div>
+</section>
+<p class="foot">Lecture seule : cette page ne peut passer ni annuler aucun ordre. Mise à jour toutes les 30 s.</p>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const nf=(d)=>new Intl.NumberFormat("fr-FR",{maximumFractionDigits:d,minimumFractionDigits:d});
+const f=(x,d=2)=>x==null||!isFinite(x)?"—":nf(d).format(x);
+const pct=(x,d=1)=>x==null||!isFinite(x)?"—":nf(d).format(100*x)+" %";
+const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const day=t=>new Date(t).toLocaleDateString("fr-FR",{day:"2-digit",month:"short"});
+const stamp=t=>new Date(t).toLocaleString("fr-FR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+async function j(u){try{const r=await fetch(u,{credentials:"same-origin"});return r.ok?await r.json():null}catch(e){return null}}
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);parent&&parent.appendChild(e);return e}
+
+/* A line chart with bands, reference lines, recessive axes and a crosshair tooltip. */
+function chart(host,{series=[],bands=[],refs=[],fmt=v=>f(v),zero=false}){
+ host.innerHTML="";const pts=series.flatMap(s=>s.pts);
+ if(pts.length<2){host.innerHTML='<div class="empty">Pas encore assez de données.</div>';return}
+ const W=Math.max(280,host.clientWidth),H=host.classList.contains("short")||host.parentElement.querySelector(".short")===host?170:220;
+ const m={l:52,r:14,t:10,b:24},iw=W-m.l-m.r,ih=H-m.t-m.b;
+ let t0=Infinity,t1=-Infinity,lo=Infinity,hi=-Infinity;
+ const eat=(t,v)=>{if(!isFinite(v))return;t0=Math.min(t0,t);t1=Math.max(t1,t);lo=Math.min(lo,v);hi=Math.max(hi,v)};
+ series.forEach(s=>s.pts.forEach(([t,v])=>eat(t,v)));bands.forEach(b=>{b.lo.forEach(([t,v])=>eat(t,v));b.hi.forEach(([t,v])=>eat(t,v))});
+ refs.forEach(r=>{lo=Math.min(lo,r.y);hi=Math.max(hi,r.y)});if(zero){lo=Math.min(lo,0);hi=Math.max(hi,0)}
+ if(hi-lo<1e-12){hi+=1e-6;lo-=1e-6}const pad=(hi-lo)*.08;lo-=pad;hi+=pad;if(t1===t0)t1=t0+1;
+ const X=t=>m.l+iw*(t-t0)/(t1-t0),Y=v=>m.t+ih*(1-(v-lo)/(hi-lo));
+ const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img"},host);
+ for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4,y=Y(v);
+  el("line",{x1:m.l,x2:W-m.r,y1:y,y2:y,stroke:css("--grid"),"stroke-width":1},svg);
+  const tx=el("text",{x:m.l-6,y:y+4,"text-anchor":"end","font-size":11,fill:css("--mute")},svg);tx.textContent=fmt(v)}
+ for(let i=0;i<=3;i++){const t=t0+(t1-t0)*i/3,tx=el("text",{x:X(t),y:H-6,"text-anchor":i===0?"start":i===3?"end":"middle","font-size":11,fill:css("--mute")},svg);tx.textContent=day(t)}
+ el("line",{x1:m.l,x2:W-m.r,y1:m.t+ih,y2:m.t+ih,stroke:css("--axis"),"stroke-width":1},svg);
+ bands.forEach(b=>{const up=b.hi.map(([t,v])=>`${X(t)},${Y(v)}`),dn=b.lo.slice().reverse().map(([t,v])=>`${X(t)},${Y(v)}`);
+  el("polygon",{points:up.concat(dn).join(" "),fill:b.fill,opacity:b.opacity||1},svg)});
+ refs.forEach(r=>{const y=Y(r.y);el("line",{x1:m.l,x2:W-m.r,y1:y,y2:y,stroke:r.color||css("--ink2"),"stroke-width":1,"stroke-dasharray":"4 4"},svg);
+  if(r.label){const tx=el("text",{x:W-m.r,y:y-4,"text-anchor":"end","font-size":11,fill:css("--ink2")},svg);tx.textContent=r.label}});
+ series.forEach(s=>{const d=s.pts.filter(p=>isFinite(p[1])).map(([t,v],i)=>`${i?"L":"M"}${X(t).toFixed(1)},${Y(v).toFixed(1)}`).join("");
+  el("path",{d,fill:"none",stroke:s.color,"stroke-width":s.width||2,"stroke-dasharray":s.dash||"","stroke-linejoin":"round","stroke-linecap":"round"},svg)});
+ /* hover layer */
+ const tip=document.createElement("div");tip.className="tip";host.appendChild(tip);
+ const cross=el("line",{y1:m.t,y2:m.t+ih,stroke:css("--axis"),"stroke-width":1,visibility:"hidden"},svg);
+ const dots=series.map(s=>el("circle",{r:4,fill:s.color,stroke:css("--surface"),"stroke-width":2,visibility:"hidden"},svg));
+ const near=(arr,t)=>{let a=0,b=arr.length-1;while(b-a>1){const c=(a+b)>>1;if(arr[c][0]<t)a=c;else b=c}return Math.abs(arr[a][0]-t)<Math.abs(arr[b][0]-t)?arr[a]:arr[b]};
+ const hit=el("rect",{x:m.l,y:m.t,width:iw,height:ih,fill:"transparent"},svg);
+ const move=ev=>{const r=svg.getBoundingClientRect(),x=(ev.clientX-r.left)*W/r.width,t=t0+(t1-t0)*(x-m.l)/iw;
+  let rows=[],tt=null;series.forEach((s,i)=>{if(!s.pts.length)return;const p=near(s.pts,t);tt=tt??p[0];
+   dots[i].setAttribute("cx",X(p[0]));dots[i].setAttribute("cy",Y(p[1]));dots[i].setAttribute("visibility","visible");
+   rows.push(`<div><span class="dot" style="background:${s.color}"></span> ${esc(s.name)} <b>${fmt(p[1])}</b></div>`)});
+  bands.forEach(b=>{if(b.label&&b.hi.length){const p=near(b.hi,t),q=near(b.lo,t);rows.push(`<div class="meta">${esc(b.label)} ${fmt(q[1])} – ${fmt(p[1])}</div>`)}});
+  cross.setAttribute("x1",X(tt));cross.setAttribute("x2",X(tt));cross.setAttribute("visibility","visible");
+  tip.innerHTML=`<div class="meta">${stamp(tt)}</div>`+rows.join("");tip.style.display="block";
+  const px=(X(tt)/W)*r.width;tip.style.left=Math.min(px+12,r.width-tip.offsetWidth-4)+"px";tip.style.top="8px"};
+ hit.addEventListener("mousemove",move);hit.addEventListener("touchmove",e=>{move(e.touches[0])},{passive:true});
+ hit.addEventListener("mouseleave",()=>{tip.style.display="none";cross.setAttribute("visibility","hidden");dots.forEach(d=>d.setAttribute("visibility","hidden"))});
 }
-load();setInterval(load,30000);
+function legend(host,items){host.innerHTML=items.map(it=>it.band?`<span><i class="band" style="background:${it.color}"></i>${esc(it.name)}</span>`:
+ `<span><i style="border-top-color:${it.color};border-top-style:${it.dash?"dashed":"solid"}"></i>${esc(it.name)}</span>`).join("")}
+
+let DATA=null;
+function render(){
+ if(!DATA)return;const {s,eq,ic,ev,fills}=DATA;const risk=s.risk||{},ex=s.execution||{},lim=s.risk_limits||{},b=s.bundle||{},rs=b.research||{};
+ const mode={paper:"Papier (argent fictif)",demo:"Démo OKX",live:"Réel"}[s.mode]||s.mode||"—";$("mode").textContent=mode;
+ const age=s.updated?(Date.now()-new Date(s.updated).getTime())/60000:Infinity;const barMin={"1m":1,"15m":15,"30m":30}[rs.bar]||30;
+ let st;if(s.halted)st=["--crit","Arrêté : "+(s.halt_reason||"")];else if(age>3*barMin+5)st=["--warn",`Pas de décision depuis ${f(age,0)} min`];else st=["--good","Actif"];
+ $("state").innerHTML=`<span class="dot" style="background:${css(st[0])}"></span>${s.halted?"⛔":age>3*barMin+5?"⚠":"✓"} ${esc(st[1])}`;
+ $("model").textContent=`Modèle ${rs.name||b.config_hash||"—"} · ${b.promoted?"promu":"non promu (incubation)"} · entraîné jusqu'au ${String(b.train_end||"—").slice(0,10)}`;
+ $("upd").textContent=s.bar?`dernière bougie ${stamp(s.bar)}`:"";
+ const E=(eq||[]).map(r=>({t:new Date(r[0]).getTime(),eq:r[1],g:r[2],n:r[3],dd:r[4],ic:r[5],np:r[6]})).filter(r=>isFinite(r.t));
+ const e0=E.length?E[0].eq:null,ret=e0?s.equity/e0-1:null;
+ const pos=Object.entries(s.positions||{}),cap=(s.equity||0)*(s.capital_fraction||1);
+ const nl=pos.filter(p=>p[1]>0).length,ns=pos.filter(p=>p[1]<0).length;
+ /* realised IC: daily means, then 7-day and 30-day averages */
+ const byDay={};(ic||[]).forEach(([t,v])=>{const d=String(t).slice(0,10);(byDay[d]=byDay[d]||[]).push(v)});
+ const days=Object.keys(byDay).sort(),dm=days.map(d=>[new Date(d+"T12:00:00Z").getTime(),byDay[d].reduce((a,x)=>a+x,0)/byDay[d].length]);
+ const roll=(k)=>dm.map((p,i)=>{const w=dm.slice(Math.max(0,i-k+1),i+1);return [p[0],w.reduce((a,x)=>a+x[1],0)/w.length]});
+ const ic7=roll(7),ic30=dm.length?roll(30).at(-1)[1]:null;
+ const tiles=[
+  ["Équité",f(s.equity,0)+" USDT",e0?`départ ${f(e0,0)}`:""],
+  ["Rendement depuis le début",`<span class="${ret>=0?"up":"down"}">${ret==null?"—":(ret>=0?"▲ ":"▼ ")+pct(Math.abs(ret),2)}</span>`,E.length?`depuis le ${day(E[0].t)}`:""],
+  ["Drawdown",pct(risk.drawdown,2),`réduction à ${pct(lim.drawdown_soft,0)}, arrêt à ${pct(lim.drawdown_hard,0)}`],
+  ["Exposition brute / nette",`${f(s.gross)}× / ${f(s.net)}×`,`plafond brut ${f(lim.gross_max,1)}×`],
+  ["Positions",`${pos.length}`,`${nl} longues · ${ns} courtes`],
+  ["IC réalisé (30 j)",f(ic30,3),isFinite(rs.ic)?`recherche : ${f(rs.ic,3)}`:"IC estimé "+f(s.ic_est,3)],
+  ["Exécution",`${pct(ex.maker_share,0)} maker`,`écart ${f(ex.shortfall_bps,1)} pb`],
+  ["Dérive des variables (PSI)",f(risk.psi_max,2),"au-delà de 0,25 : alerte"],
+ ];
+ $("tiles").innerHTML=tiles.map(([a,v,c])=>`<div class="card tile"><div class="lab">${a}</div><div class="val">${v}</div><div class="sub">${esc(c)}</div></div>`).join("");
+ /* equity vs research cone: median (1+CAGR)^t, bands exp(±k σ √t) */
+ const s1=css("--s1"),s2=css("--s2"),ink2=css("--ink2"),bands=[],eqS=[{name:"Équité papier",color:s1,pts:E.map(r=>[r.t,r.eq])}];
+ const legEq=[{name:"Équité papier",color:s1}];
+ if(E.length>1&&isFinite(rs.cagr)&&isFinite(rs.vol)&&rs.vol>0){
+  const grid=E.map(r=>r.t),yr=t=>(t-E[0].t)/(365.25*864e5),med=t=>e0*Math.pow(1+rs.cagr,yr(t)),bd=k=>t=>med(t)*Math.exp(k*rs.vol*Math.sqrt(yr(t)));
+  bands.push({lo:grid.map(t=>[t,bd(-2)(t)]),hi:grid.map(t=>[t,bd(2)(t)]),fill:css("--band2"),label:"±2σ"});
+  bands.push({lo:grid.map(t=>[t,bd(-1)(t)]),hi:grid.map(t=>[t,bd(1)(t)]),fill:css("--band1"),label:"±1σ"});
+  eqS.push({name:"Attendu (médiane)",color:ink2,dash:"4 4",width:1.5,pts:grid.map(t=>[t,med(t)])});
+  legEq.push({name:`Attendu : ${pct(rs.cagr,1)}/an, vol ${pct(rs.vol,0)}`,color:ink2,dash:true},{name:"±1σ",color:css("--band1"),band:true},{name:"±2σ",color:css("--band2"),band:true});
+ }
+ legend($("leg-eq"),legEq);chart($("c-eq"),{series:eqS,bands,fmt:v=>f(v,0)});
+ const dd=E.map(r=>[r.t,-(r.dd||0)]);
+ chart($("c-dd"),{series:[{name:"Drawdown",color:s2,pts:dd}],refs:[{y:-(lim.drawdown_soft||0.1),label:"réduction du risque"},{y:-(lim.drawdown_hard||0.25),label:"arrêt"}],fmt:v=>pct(v,0),zero:true});
+ legend($("leg-ic"),[{name:"IC réalisé, 7 j",color:s1}].concat(isFinite(rs.ic)?[{name:"IC de la recherche",color:ink2,dash:true}]:[]));
+ chart($("c-ic"),{series:[{name:"IC 7 j",color:s1,pts:ic7}],refs:isFinite(rs.ic)?[{y:rs.ic,label:"recherche"}]:[],fmt:v=>f(v,3),zero:true});
+ legend($("leg-ex"),[{name:"Brute",color:s1},{name:"Nette",color:s2}]);
+ chart($("c-ex"),{series:[{name:"Brute",color:s1,pts:E.map(r=>[r.t,r.g])},{name:"Nette",color:s2,pts:E.map(r=>[r.t,r.n])}],fmt:v=>f(v,2)+"×",zero:true});
+ /* daily equity table (table view of the main chart) */
+ const last={};E.forEach(r=>{last[new Date(r.t).toISOString().slice(0,10)]=r});const dk=Object.keys(last).sort().reverse().slice(0,60);
+ $("t-eq").innerHTML="<tr><th>Jour</th><th>Équité</th><th>Drawdown</th><th>Brute</th><th>Positions</th></tr>"+dk.map(d=>{const r=last[d];return `<tr><td>${d}</td><td>${f(r.eq,0)}</td><td>${pct(r.dd,2)}</td><td>${f(r.g)}×</td><td>${r.np??"—"}</td></tr>`}).join("");
+ /* positions */
+ pos.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+ $("pos-cap").textContent=pos.length?`${nl} longues pour ${f(pos.filter(p=>p[1]>0).reduce((a,p)=>a+p[1],0),0)} USDT, ${ns} courtes pour ${f(-pos.filter(p=>p[1]<0).reduce((a,p)=>a+p[1],0),0)} USDT.`:"";
+ $("pos").innerHTML=pos.length?"<tr><th>Contrat</th><th>Sens</th><th>Notionnel</th><th>% du capital</th></tr>"+pos.map(([k,v])=>
+  `<tr><td>${esc(k)}</td><td>${v>0?"▲ long":"▼ court"}</td><td>${f(Math.abs(v),0)}</td><td>${pct(cap?Math.abs(v)/cap:null,1)}</td></tr>`).join(""):'<tr><td class="empty">Aucune position.</td></tr>';
+ $("ev").innerHTML=(ev||[]).length?(ev||[]).map(x=>`<tr><td>${stamp(x[0]*1000)}<div class="meta">${esc(x[1])}</div></td><td style="text-align:left">${esc(x[2])}</td></tr>`).join(""):'<tr><td class="empty">Aucun événement.</td></tr>';
+ const F=fills||[];const fees=F.reduce((a,x)=>a+(x[5]||0),0),mk=F.filter(x=>x[6]).length;
+ $("fills-cap").textContent=F.length?`${F.length} dernières : ${mk} en maker, ${f(fees,2)} USDT de frais.`:"";
+ $("fills").innerHTML=F.length?"<tr><th>Heure</th><th>Contrat</th><th>Sens</th><th>Quantité</th><th>Prix</th><th>Frais</th><th>Type</th></tr>"+F.map(x=>
+  `<tr><td>${stamp(x[0]*1000)}</td><td>${esc(x[1])}</td><td>${x[2]==="buy"?"achat":"vente"}</td><td>${f(x[3],4)}</td><td>${f(x[4],4)}</td><td>${f(x[5],3)}</td><td>${x[6]?"maker":"taker"}</td></tr>`).join(""):'<tr><td class="empty">Aucune exécution.</td></tr>';
+}
+async function load(){const [s,eq,ic,ev,fills]=await Promise.all([j("api/status"),j("api/equity"),j("api/ic"),j("api/events"),j("api/fills")]);
+ DATA={s:s||{},eq:eq||[],ic:ic||[],ev:ev||[],fills:fills||[]};render()}
+load();setInterval(load,30000);let rt;addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(render,150)});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",render);
 </script></body></html>

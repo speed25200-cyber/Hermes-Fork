@@ -12,15 +12,16 @@ on:
         default: "paper"
         type: choice
         options: [paper, demo, live]
-      model_run:
-        description: "ID d'un run « Research » (dépôt model_repo) : son modèle, entraîné sur un runner GitHub, est installé comme champion. Recommandé : l'entraînement demande bien plus de mémoire qu'un petit VPS."
-        default: ""
+      train_on_runner:
+        description: "Entraîner le modèle sur ce runner GitHub (≈ 1 h 30) puis l'installer comme champion : un petit VPS n'a pas la mémoire pour entraîner"
+        type: boolean
+        default: true
       model_config:
-        description: "Configuration dont prendre le modèle dans ce run"
+        description: "Configuration à entraîner (configs/<nom>.yaml)"
         default: "research_30m_xl_lb_sres"
-      model_repo:
-        description: "Dépôt (public) du run Research"
-        default: "speed25200-cyber/Hermes"
+      model_run:
+        description: "À la place : ID d'un run « Research » de CE dépôt dont installer le modèle"
+        default: ""
       train:
         description: "Entraîner sur le VPS après l'installation (ignoré sous 12 Go de mémoire)"
         type: boolean
@@ -40,7 +41,10 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 200
+    permissions:
+      contents: read
+      actions: read
     env:
       VPS: ${{ vars.VPS_HOST || '178.104.191.79' }}
       SSHOPTS: -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=30
@@ -87,27 +91,55 @@ jobs:
             [ -n "$D1" ] && printf 'HERMES_DASHBOARD_TOKEN=%s\n' "$D1"
             true
           } | sshpass -e ssh $SSHOPTS "root@$VPS" "bash /opt/hermes/deploy/install.sh $MODE"
-      - name: Modèle entraîné sur runner
+      - uses: actions/setup-python@v5
+        if: ${{ inputs.train_on_runner && inputs.model_run == '' }}
+        with:
+          python-version: "3.12"
+      - name: Cache des archives
+        if: ${{ inputs.train_on_runner && inputs.model_run == '' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/parsed
+            data/venue
+          key: binance-parsed-${{ inputs.model_config }}-${{ github.run_id }}
+          restore-keys: binance-parsed-${{ inputs.model_config }}-
+      - name: Entraînement sur runner
+        if: ${{ inputs.train_on_runner && inputs.model_run == '' }}
+        env:
+          CONF: ${{ inputs.model_config }}
+        run: |
+          [[ "$CONF" =~ ^[a-z0-9_]+$ && -f "configs/$CONF.yaml" ]] || { echo "::error::configuration inconnue : $CONF"; exit 1; }
+          pip install -q -e .
+          hermes research run -c "configs/$CONF.yaml" --out "out/$CONF" --n-null 8 2>&1 | tail -60
+          [ -f "out/$CONF/model/bundle.json" ] || { echo "::error::pas de modèle produit"; exit 1; }
+          echo "MODEL_DIR=out/$CONF/model" >> "$GITHUB_ENV"
+      - name: Modèle d'un run Research
         if: ${{ inputs.model_run != '' }}
         env:
-          MODE: ${{ inputs.mode }}
           RUN: ${{ inputs.model_run }}
           CONF: ${{ inputs.model_config }}
-          REPO: ${{ inputs.model_repo }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          [[ "$RUN" =~ ^[0-9]+$ && "$CONF" =~ ^[a-z0-9_]+$ && "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
-            || { echo "::error::entrées model_run / model_config / model_repo invalides"; exit 1; }
+          [[ "$RUN" =~ ^[0-9]+$ && "$CONF" =~ ^[a-z0-9_]+$ ]] || { echo "::error::entrées model_run / model_config invalides"; exit 1; }
           NAME="research-$CONF-$RUN"
-          ID=$(curl -fsSL "https://api.github.com/repos/$REPO/actions/runs/$RUN/artifacts?per_page=100" \
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY/actions"
+          ID=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$API/runs/$RUN/artifacts?per_page=100" \
             | jq -r --arg n "$NAME" '.artifacts[] | select(.name == $n and (.expired | not)) | .id' | head -1)
-          [ -n "$ID" ] || { echo "::error::artefact $NAME introuvable (ou expiré) dans $REPO"; exit 1; }
-          curl -fsSL "https://api.github.com/repos/$REPO/actions/artifacts/$ID/zip" -o model.zip
+          [ -n "$ID" ] || { echo "::error::artefact $NAME introuvable (ou expiré)"; exit 1; }
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$API/artifacts/$ID/zip" -o model.zip
           unzip -q model.zip -d art
           B=$(find art -name bundle.json -path '*/model/*' | head -1)
           [ -n "$B" ] || { echo "::error::pas de modèle (model/bundle.json) dans $NAME"; exit 1; }
-          M=$(dirname "$B")
+          echo "MODEL_DIR=$(dirname "$B")" >> "$GITHUB_ENV"
+      - name: Installer le modèle et démarrer le moteur
+        if: ${{ env.MODEL_DIR != '' }}
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+          MODE: ${{ inputs.mode }}
+        run: |
           sshpass -e ssh $SSHOPTS "root@$VPS" 'rm -rf /opt/hermes/artifacts/incoming && mkdir -p /opt/hermes/artifacts/incoming'
-          sshpass -e rsync -az -e "ssh $SSHOPTS" "$M/" "root@$VPS:/opt/hermes/artifacts/incoming/"
+          sshpass -e rsync -az -e "ssh $SSHOPTS" "$MODEL_DIR/" "root@$VPS:/opt/hermes/artifacts/incoming/"
           sshpass -e ssh $SSHOPTS "root@$VPS" "cd /opt/hermes && chown -R hermes:hermes artifacts \
             && runuser -u hermes -- .venv/bin/hermes model install artifacts/incoming --to artifacts/models/champion \
             && systemctl enable hermes@$MODE >/dev/null && systemctl restart hermes@$MODE && echo hermes@$MODE démarré"
