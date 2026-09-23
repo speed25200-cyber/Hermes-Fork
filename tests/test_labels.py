@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from hermes.config import FeatureConfig, LabelConfig, UniverseConfig
+from hermes.data.synthetic import make_synthetic_panel
 from hermes.data.universe import universe_mask
 from hermes.features.library import build_features
 from hermes.labels.targets import build_targets, forward_sum, project_out, style_frames
@@ -88,3 +89,31 @@ def test_style_residual_targets_have_no_style_loading(small_panel):
         assert abs(r[ok].mean()) < 1e-8
         assert abs(np.corrcoef(r[ok], size.loc[t][ok])[0, 1]) < 1e-6
         assert abs(np.corrcoef(r[ok], vol.loc[t][ok])[0, 1]) < 1e-6
+
+
+def test_style_projection_is_not_driven_by_one_jump():
+    # One member jumps +30 % (tens of its own sigmas): its target is clipped, and the projection must be fitted
+    # on that winsorised value, so the jump barely moves the other members' style-free targets.
+    panel0 = make_synthetic_panel(n_assets=30, n_bars=96 * 60, bar="15m", seed=5)
+    mask = universe_mask(panel0, UniverseConfig(top_n=24, min_history_days=3))
+    k = len(panel0.index) - 400
+    sym = mask.columns[mask.iloc[k].to_numpy()][-1]
+    close = panel0["close"].copy()
+    close.loc[close.index[k] :, sym] *= 1.3
+    panel = panel0.with_fields({"close": close})
+    feats = build_features(panel, mask, FeatureConfig())
+    styles = [x.where(mask) for x in style_frames(panel, feats.aux["ivol"])]
+    style_t = build_targets(panel, feats, mask, LabelConfig(residualize="style")).residual[8]
+    beta_t = build_targets(panel, feats, mask, LabelConfig(residualize="beta")).residual[8].where(mask)
+    without = beta_t.copy()
+    without[sym] = np.nan
+    reference = project_out(without, [x.where(without.notna()) for x in styles])  # jump left out of the fit
+    rows = style_t.index[k - 8 : k]  # every forward window that contains the jump
+    assert (beta_t.loc[rows, sym] == 5.0).all()
+    moved = (style_t.loc[rows].drop(columns=sym) - reference.loc[rows].drop(columns=sym)).abs().max().max()
+    assert moved < 1.0  # fitting on the raw jump moves them by more than 2 sigma
+    for t in rows:
+        r = style_t.loc[t]
+        ok = r.notna()
+        for x in styles:
+            assert abs(np.corrcoef(r[ok], x.loc[t][ok])[0, 1]) < 1e-6

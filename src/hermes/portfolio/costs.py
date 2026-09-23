@@ -30,6 +30,9 @@ def abdi_ranaldo_half_spread(high: pd.DataFrame, low: pd.DataFrame, close: pd.Da
     return np.sqrt(s2.clip(lower=0.0)) / 2.0
 
 
+ADV_DAYS = 14  # average daily volume window: impact model and the style-neutral book's size exposure
+
+
 @dataclass
 class CostModel:
     cfg: CostConfig
@@ -51,7 +54,7 @@ class CostModel:
         hs = abdi_ranaldo_half_spread(high, low, close, bars_per_day * 7)
         floor = cfg.min_half_spread_bps * 1e-4
         hs = hs.clip(lower=floor, upper=50e-4).fillna(10e-4)
-        adv = quote_volume.rolling(bars_per_day * 14, min_periods=bars_per_day).mean() * bars_per_day
+        adv = quote_volume.rolling(bars_per_day * ADV_DAYS, min_periods=bars_per_day).mean() * bars_per_day
         return cls(cfg=cfg, half_spread=hs, sigma_daily=vol_per_bar * np.sqrt(bars_per_day), adv=adv)
 
     @property

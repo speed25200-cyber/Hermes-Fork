@@ -29,6 +29,7 @@ import pandas as pd
 from hermes.config import LabelConfig
 from hermes.data.panel import Panel
 from hermes.features.library import FeatureSet
+from hermes.portfolio.costs import ADV_DAYS
 
 
 def project_out(y: pd.DataFrame, exposures: list[pd.DataFrame], min_members: int = 8) -> pd.DataFrame:
@@ -62,9 +63,9 @@ def project_out(y: pd.DataFrame, exposures: list[pd.DataFrame], min_members: int
 
 
 def style_frames(panel: Panel, ivol: pd.DataFrame) -> list[pd.DataFrame]:
-    """Log 14-day average dollar volume and log residual volatility, as the style-neutral book sees them."""
+    """Log average dollar volume (``ADV_DAYS``) and log residual volatility, as the style-neutral book sees them."""
     bpd = max(1, round(pd.Timedelta("1D") / panel.bar_delta))
-    adv = panel["quote_volume"].astype("float64").rolling(bpd * 14, min_periods=bpd).mean()
+    adv = panel["quote_volume"].astype("float64").rolling(bpd * ADV_DAYS, min_periods=bpd).mean()
     return [np.log(adv.where(adv > 0)), np.log(ivol.where(ivol > 0))]
 
 
@@ -116,7 +117,9 @@ def build_targets(panel: Panel, feats: FeatureSet, mask: pd.DataFrame, cfg: Labe
         if cfg.vol_normalize:
             res = res / (scale * np.sqrt(h))
         if styles:
-            res = project_out(res.where(mask), styles)
+            # Winsorise first: an unclipped jump (one contract at +40 sigma) would otherwise set the intercept and
+            # style slopes for the whole cross-section. Clipped again below.
+            res = project_out(res.clip(-cfg.clip_sigma, cfg.clip_sigma).where(mask), styles)
         residual[h] = res.clip(-cfg.clip_sigma, cfg.clip_sigma).where(mask)
         total[h] = fwd.where(mask)
         market[h] = (fwd_m / (mkt_vol * np.sqrt(h))).clip(-cfg.clip_sigma, cfg.clip_sigma)

@@ -47,7 +47,7 @@ from hermes.portfolio.alpha import (
     smooth_scores,
 )
 from hermes.portfolio.construct import BookInputs, PortfolioConstructor
-from hermes.portfolio.costs import CostModel
+from hermes.portfolio.costs import ADV_DAYS, CostModel
 from hermes.portfolio.covariance import EwmaCovariance, market_variance
 from hermes.risk.overlay import RiskOverlay, RiskState
 
@@ -81,12 +81,16 @@ def live_config(
 
 def live_history_bars(cfg: HermesConfig) -> int:
     """Base bars the live feed keeps: the research warm-up (so features equal the research values) plus a
-    day, the covariance window, and never less than ``live.history_days`` when set."""
+    day, the covariance and volume windows, and never less than ``live.history_days`` when set."""
     f = cfg.features
     warm = 2 * cfg.bars(f.max_lookback_minutes) + 8 * cfg.bars(f.vol_halflife_minutes)
     cov = 2 * cfg.days(cfg.portfolio.cov_halflife_days) + 1
+    # Style exposures (book and target) use the full ADV window; without them the cost model's ADV is a mean
+    # over whatever history is held, which keeps the 1-minute live window small.
+    styles = cfg.portfolio.style_neutral or cfg.labels.residualize == "style"
+    adv = cfg.days(ADV_DAYS) + cfg.bars_per_day if styles else 0
     floor = cfg.days(cfg.live.history_days) if cfg.live.history_days else 0
-    return int(max(warm + cfg.bars_per_day, cov, floor))
+    return int(max(warm + cfg.bars_per_day, cov, adv, floor))
 
 
 def intrabar_history_minutes(cfg: HermesConfig) -> int:

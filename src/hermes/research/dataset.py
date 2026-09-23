@@ -14,6 +14,7 @@ from hermes.data.universe import universe_mask
 from hermes.features.library import FeatureSet, build_features
 from hermes.labels.targets import Targets, build_targets
 from hermes.models.base import cs_gauss_rank
+from hermes.portfolio.costs import ADV_DAYS
 
 log = logging.getLogger(__name__)
 
@@ -125,6 +126,8 @@ def _build_dataset_chunked(panel: Panel, mask: pd.DataFrame, cfg: HermesConfig, 
     kept. Numerically equivalent to the one-shot path up to EWMA warm-up effects (see the parity test)."""
     T, N = mask.shape
     warm = 2 * cfg.bars(cfg.features.max_lookback_minutes) + 8 * cfg.bars(cfg.features.vol_halflife_minutes)
+    if cfg.labels.residualize == "style":  # the target's size exposure needs a full ADV window
+        warm = max(warm, cfg.days(ADV_DAYS) + cfg.bars_per_day)
     Hmax = max(cfg.labels.horizons)
     cols = mask.columns
     aux_names = ("vol", "ivol", "beta", "r1")
