@@ -193,6 +193,12 @@ class PortfolioConfig(_Strict):
     cost_scale_floor: float = Field(
         0.2, gt=0, le=1, description="Lowest cost amortisation factor 1 - rho_H (1 = no amortisation)"
     )
+    style_neutral: bool = Field(
+        False, description="Price size/liquidity and volatility exposures as risk (neutralises style bets)"
+    )
+    style_risk: float = Field(
+        1.0, gt=0, description="Variance of one unit of style exposure, in units of the market variance"
+    )
 
 
 class RiskConfig(_Strict):

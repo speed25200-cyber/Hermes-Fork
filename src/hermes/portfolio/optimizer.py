@@ -158,7 +158,10 @@ def solve(
     gross_max: float = np.inf,
     max_iter: int = 200,
     tol: float = 1e-6,
+    penalty_q: np.ndarray | None = None,
 ) -> OptimizerResult:
+    """``penalty_q`` is added to the quadratic term only (e.g. style-factor risk priced for neutrality); the
+    volatility cap and reported ex-ante volatility use ``cov`` alone."""
     n = len(alpha)
     if n == 0:
         return OptimizerResult(np.zeros(0), 0, 0.0, 1.0)
@@ -166,6 +169,8 @@ def solve(
     Q = lam * cov
     if kappa > 0:
         Q = Q + kappa * np.outer(b, b)
+    if penalty_q is not None:
+        Q = Q + lam * penalty_q
     L = _largest_eigenvalue(Q) * 1.05 + 1e-12
     step = 1.0 / L
     thresh = cost * step

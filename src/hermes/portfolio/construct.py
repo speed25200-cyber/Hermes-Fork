@@ -25,6 +25,17 @@ class BookInputs:
     sample_cov: np.ndarray | None = None  # per-bar EWMA covariance (optional)
 
 
+def style_exposures(adv: np.ndarray, ivol: np.ndarray, tradable: np.ndarray) -> np.ndarray:
+    """(n x 2) cross-sectional z-scores of log dollar volume (size/liquidity) and log residual volatility
+    over the tradable contracts; zero elsewhere. Same inputs in the backtest and the live engine."""
+    out = np.zeros((len(adv), 2))
+    for j, x in enumerate((np.log(np.where(adv > 0, adv, np.nan)), np.log(np.where(ivol > 0, ivol, np.nan)))):
+        ok = tradable & np.isfinite(x)
+        if ok.sum() >= 3 and np.nanstd(x[ok]) > 0:
+            out[ok, j] = (x[ok] - x[ok].mean()) / x[ok].std()
+    return out
+
+
 @dataclass
 class BookResult:
     weights: np.ndarray
@@ -67,7 +78,14 @@ class PortfolioConstructor:
         vol_target_h = c.vol_target_annual * np.sqrt(H / self.bars_per_year)
         lam = risk_aversion(self.ic_ref, n_tr, vol_target_h)
         net_max = c.net_max if inp.market_alpha != 0.0 or not c.beta_neutral else min(c.net_max, 0.05)
+        penalty_q = None
+        if c.style_neutral:
+            # Style factors priced like the market: a unit of size or volatility exposure costs as much risk as
+            # a unit of market beta, so the optimiser keeps the book's P&L idiosyncratic.
+            S = style_exposures(inp.adv, ivol, tradable)
+            penalty_q = c.style_risk * inp.mkt_var * H * (S @ S.T)
         res = solve(
+            penalty_q=penalty_q,
             alpha=alpha,
             cov=cov_h,
             w0=np.nan_to_num(inp.w0),

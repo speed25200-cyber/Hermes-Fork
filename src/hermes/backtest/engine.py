@@ -80,6 +80,9 @@ class _Context:
     beta: np.ndarray
     mkt_var: np.ndarray
     costs: CostModel
+    open_: np.ndarray  # bar open / high / low: exchange-side stops trigger inside the bar
+    high: np.ndarray
+    low: np.ndarray
     day_pos: np.ndarray
     daily_np: np.ndarray
     refs: tuple[object, ...] = ()  # keeps the keyed objects alive so their ids cannot be reused
@@ -119,6 +122,9 @@ def _context(
         beta=aux["beta"][cols].to_numpy(),
         mkt_var=market_variance(aux["mkt"]["mkt"], max(2, cov_hl // 4)).to_numpy(),
         costs=costs,
+        open_=panel["open"][cols].to_numpy(),
+        high=panel["high"][cols].to_numpy(),
+        low=panel["low"][cols].to_numpy(),
         day_pos=daily_ret.index.searchsorted(panel.index.floor("D")),
         daily_np=daily_ret.to_numpy(),
         refs=(panel, mask, aux),
@@ -171,6 +177,11 @@ def _run_backtest(
     close = panel["close"][cols]
     r, fund, member, ivol, beta = ctx.r, ctx.fund, ctx.member, ctx.ivol, ctx.beta
     mkt_var, costs, day_pos, daily_np = ctx.mkt_var, ctx.costs, ctx.day_pos, ctx.daily_np
+    open_, high, low = ctx.open_, ctx.high, ctx.low
+    k_stop = cfg.risk.stop_loss_daily_sigmas
+    stop_px = np.full(close.shape[1], np.nan)  # catastrophe stop of each open position (as placed on OKX)
+    prev_side = np.zeros(close.shape[1])
+    close_np = close.to_numpy()
     z = cs_zscore(signal.score[cols], mask[cols]).to_numpy()
     ic = signal.ic_est.reindex(index).fillna(0.0).to_numpy()
     malpha = signal.market_alpha.reindex(index).fillna(0.0).to_numpy() if signal.market_alpha is not None else None
@@ -196,6 +207,7 @@ def _run_backtest(
             "gross_pnl",
             "pnl_long",
             "pnl_short",
+            "stops",
             "funding",
             "fees",
             "spread",
@@ -219,9 +231,24 @@ def _run_backtest(
         # 1) P&L of bar t on weights held since close(t-1)
         rt = r[t]
         held = w != 0
+        hit = np.zeros(len(w), dtype=bool)
+        if k_stop > 0 and held.any() and t > 0:
+            # A stop placed at close(t-1) triggers on the bar's range; a gap through it fills at the open.
+            with np.errstate(invalid="ignore"):
+                hit_long = (w > 0) & (low[t] <= stop_px)
+                hit_short = (w < 0) & (high[t] >= stop_px)
+            hit = (hit_long | hit_short) & np.isfinite(stop_px)
+            if hit.any():
+                exit_px = np.where(
+                    hit_long,
+                    np.minimum(stop_px, np.nan_to_num(open_[t], nan=np.inf)),
+                    np.maximum(stop_px, np.nan_to_num(open_[t], nan=-np.inf)),
+                )
+                rt = np.where(hit, exit_px / close_np[t - 1] - 1.0, rt)
         valid = np.isfinite(rt)
         contrib = np.where(valid & held, w * np.nan_to_num(rt), 0.0)
         gross_pnl = float(contrib.sum())
+        pnl_long, pnl_short = float(contrib[w > 0].sum()), float(contrib[w < 0].sum())
         fpay = float(np.sum(w[held] * np.nan_to_num(fund[t][held])))
         pnl = gross_pnl - fpay
         equity_prev = equity
@@ -234,11 +261,21 @@ def _run_backtest(
         grow = np.where(valid, 1.0 + np.nan_to_num(rt), 1.0)
         w = w * grow / (1.0 + pnl)
         w[held & ~valid] = 0.0  # contract stopped trading: exited at the last price
+        stop_fees = stop_spread = stop_impact = stop_turn = 0.0
+        if hit.any():
+            stop_fees, stop_spread, stop_impact = (
+                cost_multiplier * x for x in costs.taker_cost(t, np.where(hit, w, 0.0) * equity)
+            )
+            stop_turn = float(np.abs(w[hit]).sum())
+            equity -= stop_fees + stop_spread + stop_impact
+            w[hit] = 0.0
+            stop_px[hit] = np.nan
+            out["stops"][k] = float(hit.sum())
         ewma.update(np.where(member[t], rt, np.nan))
         overlay.observe(ts, equity, day=int(day_keys[t]))
         out["gross_pnl"][k] = gross_pnl
-        out["pnl_long"][k] = float(contrib[w > 0].sum())  # price P&L of the long leg (before costs, funding)
-        out["pnl_short"][k] = float(contrib[w < 0].sum())
+        out["pnl_long"][k] = pnl_long  # price P&L of each leg (before costs and funding)
+        out["pnl_short"][k] = pnl_short
         out["funding"][k] = -fpay
 
         # 2) rebalance at close(t)
@@ -279,6 +316,17 @@ def _run_backtest(
                 out["vol_ex_ante"][k] = book.ex_ante_vol_annual
                 out["budget"][k] = info.get("budget", 1.0)
                 out["es_1d"][k] = info.get("es_1d", 0.0)
+        # Stops carried by the positions now held, as the live broker places them: one per position, k daily
+        # sigmas from the price at which it was opened; a resized position keeps its stop, a flip gets a new one.
+        if k_stop > 0:
+            side = np.sign(w)
+            new = (side != 0) & ((side != prev_side) | ~np.isfinite(stop_px))
+            frac = np.clip(k_stop * costs._sig[t], 0.03, 0.5)
+            stop_px = np.where(new, close_np[t] * (1.0 - side * frac), stop_px)
+            stop_px[side == 0] = np.nan
+            prev_side = side
+        fees, spread, impact = fees + stop_fees, spread + stop_spread, impact + stop_impact
+        turnover += stop_turn
         out["ret"][k] = equity / equity_prev - 1.0
         out["fees"][k] = fees / max(equity_prev, 1e-9)
         out["spread"][k] = spread / max(equity_prev, 1e-9)

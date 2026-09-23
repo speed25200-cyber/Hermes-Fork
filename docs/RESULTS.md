@@ -10,8 +10,9 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 
 > **Aucune configuration n'a franchi la porte de promotion à ce jour ; le système refuse donc de trader de
 > l'argent réel.** Les meilleures (horizons 4-48 h) sont rentables sur l'ensemble de la période (+11 à
-> +13 %/an nets) et, à détention 24 h, résistent à des coûts doublés ; mais le gain vient surtout de 2024
-> et la significativité statistique n'est pas atteinte : la porte les rejette, à juste titre.
+> +15 %/an nets, Sharpe jusqu'à 0,93) et, à détention 24 h, résistent à des coûts doublés ; mais le gain
+> dépend du régime (2024) et la significativité après correction des essais multiples n'est pas atteinte :
+> la porte les rejette, à juste titre.
 
 ## Tous les essais
 
@@ -26,6 +27,8 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 | `research_15m_intrabar` (agrégats 1 min) | 15 min | 30 min-2 h | 2023-07 → 2026-08 | 0,054 (35,7) | 3,8 % | 12,7 % | −8,9 % | −1,71 | −25 % (arrêt) | 0,00 | 1,00 | 0,60 | −1,07 | −2,22 | ❌ |
 | `research_1m_long` | 1 min | 1 h-8 h | 2025-07 → 2026-08 | 0,050 (9,1) | 5,3 % | 15,8 % | −9,1 % | −0,79 | −19 % | 0,01 | 0,72 | 0,79 | −1,66 | −0,84 | ❌ |
 | `research_30m_xl` | 30 min | 8 h-48 h (détention 24 h, aversion 2) | 2023-07 → 2026-08 | 0,074 (9,3) | 22,7 % | 8,5 % | **+11,9 %** | 0,77 | −20 % | 0,58 | **0,04** | 0,48 | **0,45** | **0,71** | ❌ |
+| `research_15m_xl` | 15 min | 8 h-48 h (détention 24 h, aversion 2) | 2023-07 → 2026-08 | 0,074 (9,4) | 23,5 % | 9,2 % | **+11,0 %** | 0,74 | −20 % | 0,53 | **0,04** | 0,60 | **0,33** | **0,65** | ❌ |
+| `research_30m_xl_lb` (fenêtres 14-30 j) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 24,8 % | ~7 % | **+15,1 %** | **0,93** | −18 % | 0,55 | **0,04** | 0,86 | **0,62** | **0,89** | ❌ |
 
 IC : Spearman transversal à l'horizon de détention, t de Newey-West sur les IC journaliers. En gras : ce
 qui franchit son seuil.
@@ -80,12 +83,21 @@ funding en 2026 (biais net acheteur d'un livre bêta-neutre), et l'intervalle bo
 Les agrégats 1 min (variance réalisée, sauts, asymétrie, flux de fin de bougie) n'apportent rien de
 mesurable à 15 min (IC 0,0535 contre 0,0532).
 
+Variables à fenêtres longues (`research_30m_xl_lb`) : **Sharpe net 0,93** (seuil franchi), CAGR +15 %,
+drawdown −18 %, coûts ×2 : 0,62, une bougie de latence : 0,89, PSR 0,96, intervalle bootstrap
+[−0,08 ; 2,15]. Refusé quand même : années positives 2/4 (2023 −5 %, 2024 +69 %, 2025 +9 %, 2026 −11 %),
+DSR 0,55 avec 13 essais effectifs, PBO 0,86. Les variables dominantes deviennent des caractéristiques lentes
+— illiquidité, volatilité, taille, bêta — : une partie du P&L vient de **paris de style** (petites
+capitalisations peu liquides, faible volatilité) dont le rendement dépend du régime. La décomposition par
+jambe le confirme indirectement : chaque jambe suit surtout le marché (2024 haussier : achats +61 %, ventes
+−8 % ; 2025 : l'inverse) et le livre garde un biais net acheteur de 0,1-0,2 qui paie le funding en 2026.
+L'hypothèse « ventes à découvert squeezées » est réfutée pour 2026 (la jambe vendeuse y gagne).
+
 ## 4. En cours
 
-- `research_15m_xl` : détention 24 h sur bougies 15 min ;
-- `research_30m_xl` réévalué avec la décomposition du P&L par jambe (acheteuse / vendeuse) : vérifier si
-  2026 perd sur les ventes à découvert (hausses brutales) malgré un IC positif ;
-- `research_30m_xl_lb` : mêmes horizons avec des variables à fenêtres longues (momentum 14-30 jours,
-  funding cumulé 7-30 jours) — pour prédire 24-48 h, les variables ne regardaient qu'au plus 14 jours.
+- `research_30m_xl_lb_style` : même modèle, livre **neutre aux styles** (taille/liquidité et volatilité
+  traitées comme un risque aussi cher que le marché) — pour ne garder que la prédiction idiosyncratique ;
+- `research_30m_xl_lb` réévalué avec les **stops catastrophe désormais simulés** (comme placés sur OKX en
+  live), pour comparer à code égal.
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.

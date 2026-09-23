@@ -115,3 +115,32 @@ def test_market_alpha_is_causal_and_follows_realised_skill():
     y2.iloc[-100:] = 0.0
     a2 = market_alpha_series(skilled, y2, mkt, 0.0, 8, 24)
     pd.testing.assert_series_equal(a_sk.iloc[: -100 - 8], a2.iloc[: -100 - 8])
+
+
+def test_style_neutral_book_hedges_size_and_volatility_bets():
+    from hermes.config import PortfolioConfig
+    from hermes.portfolio.construct import BookInputs, PortfolioConstructor, style_exposures
+
+    r = np.random.default_rng(7)
+    n = 30
+    adv = np.exp(r.normal(17, 1.5, n))
+    ivol = np.exp(r.normal(np.log(0.006), 0.4, n))
+    size_z = (np.log(adv) - np.log(adv).mean()) / np.log(adv).std()
+    score = -1.5 * size_z + r.normal(0, 0.5, n)  # the signal mostly says "buy small caps"
+    inp = BookInputs(
+        score=score,
+        ivol=ivol,
+        beta=np.ones(n),
+        mkt_var=2.5e-5,
+        cost_rate=np.full(n, 1e-4),
+        adv=adv,
+        w0=np.zeros(n),
+        ic=0.05,
+    )
+    exposures = {}
+    for neutral in (False, True):
+        cfg = PortfolioConfig(style_neutral=neutral, holding_horizon=16, weight_max=0.2)
+        w = PortfolioConstructor(cfg, 35040, 0.03).target(inp, 1e6).weights
+        S = style_exposures(adv, ivol, np.ones(n, dtype=bool))
+        exposures[neutral] = np.abs(S.T @ w) / max(np.abs(w).sum(), 1e-12)
+    assert exposures[True][0] < 0.5 * exposures[False][0]  # size exposure per unit of gross at least halved

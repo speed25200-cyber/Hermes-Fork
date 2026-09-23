@@ -107,7 +107,12 @@ def test_rebalancing_follows_the_clock_aligned_grid(small_panel, setup):
     from hermes.backtest.engine import is_rebalance_bar
 
     cfg, mask, feats = setup
-    cfg4 = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={"rebalance_every": 4})})
+    cfg4 = cfg.model_copy(
+        update={
+            "portfolio": cfg.portfolio.model_copy(update={"rebalance_every": 4}),
+            "risk": cfg.risk.model_copy(update={"stop_loss_daily_sigmas": 0.0}),  # stops may exit between decisions
+        }
+    )
     fwd = (small_panel["close"].shift(-4) / small_panel["close"] - 1).where(mask)
     sig = SignalBundle(fwd, pd.Series(0.05, index=mask.index))
     bt = run_backtest(small_panel, mask, feats.aux, sig, cfg4, start=mask.index[96 * 20 + 1], end=mask.index[-10])
@@ -124,3 +129,38 @@ def test_exhausted_drawdown_cushion_is_reported(tmp_path):
     ov.observe(t, 100.0)
     assert not ov.cushion_exhausted(85.0)  # 15% drawdown: half the budget left
     assert ov.cushion_exhausted(80.2) and not ov.state.halted  # nearly idle, yet never formally halted
+
+
+def test_catastrophe_stops_cap_a_crash_like_the_exchange_would(small_panel, setup):
+    from hermes.data.panel import Panel
+
+    cfg, mask, feats = setup
+    members = [c for c in mask.columns[mask.iloc[96 * 25].to_numpy()] if c not in ("BTCUSDT", "ETHUSDT")]
+    sym = members[0]  # a member at the crash date with its own (residual) risk
+    T0 = 96 * 26
+    fields = {k: v.copy() for k, v in small_panel.fields.items()}
+    f = pd.Series(1.0, index=fields["close"].index)
+    f.iloc[T0 : T0 + 5] = 0.9 ** np.arange(1, 6)
+    f.iloc[T0 + 5 :] = 0.9**5
+    prev = f.shift(1).fillna(1.0)
+    c = fields["close"][sym].copy()
+    fields["close"][sym] = c * f
+    fields["open"][sym] = c.shift(1).fillna(c) * prev  # no gap: each bar opens at the previous close
+    fields["high"][sym] = np.maximum(fields["open"][sym], fields["close"][sym])
+    fields["low"][sym] = np.minimum(fields["open"][sym], fields["close"][sym])
+    panel = Panel(fields, bar=small_panel.bar)
+    score = pd.DataFrame(0.0, index=mask.index, columns=mask.columns).where(mask)
+    score[sym] = score[sym] + 3.0  # always the top long
+    sig = SignalBundle(score, pd.Series(0.05, index=mask.index))
+    kw = {"start": mask.index[96 * 21], "end": mask.index[T0 + 10]}
+    runs = {}
+    for k in (4.0, 0.0):
+        c2 = cfg.model_copy(update={"risk": cfg.risk.model_copy(update={"stop_loss_daily_sigmas": k})})
+        runs[k] = run_backtest(panel, mask, feats.aux, sig, c2, **kw)
+    with_stop, without = runs[4.0], runs[0.0]
+    assert with_stop.stats["stops"].sum() >= 1 and without.stats["stops"].sum() == 0
+    crash = slice(T0 - 96 * 21, T0 - 96 * 21 + 6)
+    assert with_stop.stats["pnl_long"].iloc[crash].sum() > without.stats["pnl_long"].iloc[crash].sum()
+    st = with_stop.stats  # accounting still closes, stop exits included
+    approx = st["gross_pnl"] + st["funding"] - st["fees"] - st["spread"] - st["impact"]
+    assert np.allclose(approx, with_stop.returns, atol=1e-6)

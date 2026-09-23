@@ -76,6 +76,17 @@ class CostModel:
         impact = self.cfg.impact_coef * self._sig[t] * np.sqrt(part)
         return self.fee_blend + (1 - self.cfg.maker_fill_ratio) * self._hs[t] + impact
 
+    def taker_cost(self, t: int, dollars: np.ndarray) -> tuple[float, float, float]:
+        """Cost of a market order (a stop being triggered): taker fee, full half-spread, impact."""
+        q = np.abs(dollars)
+        adv = self._adv[t]
+        part = np.where(np.isfinite(adv) & (adv > 0), q / np.where(adv > 0, adv, 1.0), 1.0)
+        return (
+            float(np.sum(q) * self.cfg.taker_fee),
+            float(np.sum(q * self._hs[t])),
+            float(np.sum(q * self.cfg.impact_coef * self._sig[t] * np.sqrt(part))),
+        )
+
     def trade_cost(self, t: int, dollars: np.ndarray) -> tuple[float, float, float]:
         """Total cost of trading ``dollars`` (signed) at bar ``t``: (fees, spread, impact) in dollars."""
         q = np.abs(dollars)
