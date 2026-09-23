@@ -284,7 +284,7 @@ def evaluate(
             grid_rows.append(
                 {
                     "config": k[5:],
-                    "sharpe": s.get("sharpe_daily"),
+                    "sharpe": sharpe(d.to_numpy(), 365.0),
                     "return": s.get("cagr"),
                     "max_dd": s.get("max_drawdown"),
                     "turnover": s.get("turnover_annual"),
@@ -292,11 +292,11 @@ def evaluate(
             )
             grid_daily[k[5:]] = d
         elif k.startswith("market"):
-            stress["sharpe_with_market"] = float(s.get("sharpe_daily", np.nan))
+            stress["sharpe_with_market"] = sharpe(d.to_numpy(), 365.0)
         elif k.startswith("costx2"):
-            stress["sharpe_costx2"] = float(s.get("sharpe_daily", np.nan))
+            stress["sharpe_costx2"] = sharpe(d.to_numpy(), 365.0)
         elif k.startswith("lag1"):
-            stress["sharpe_lag1"] = float(s.get("sharpe_daily", np.nan))
+            stress["sharpe_lag1"] = sharpe(d.to_numpy(), 365.0)
     grid_df = pd.DataFrame(grid_rows).set_index("config") if grid_rows else pd.DataFrame()
 
     # --- statistics -----------------------------------------------------------------------------------------

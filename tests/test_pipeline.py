@@ -48,3 +48,37 @@ def test_bundle_roundtrip(cfg_small, tmp_path):
     (tmp_path / "m" / "ridge.npz").write_bytes(b"corrupt")
     with pytest.raises(ValueError):
         ModelBundle.load(tmp_path / "m")
+
+
+@pytest.mark.slow
+def test_research_run_end_to_end_report_resume_and_compare(cfg_small, tmp_path, monkeypatch):
+    """run_research on a small synthetic market: gate, report, ledger, bundle, resume and comparison table."""
+    import json
+
+    from hermes.research.report import comparison_table
+    from hermes.research.run import run_research
+
+    panel = make_synthetic_panel(n_assets=12, n_bars=96 * 60, bar="15m", seed=14, signal_strength=1.0)
+    out, ledger = tmp_path / "run", tmp_path / "trials"
+    ev, wf, _ = run_research(cfg_small, out, panel=panel, n_null=4, workers=1, ledger=ledger)
+    rep = json.loads((out / "report.json").read_text())
+    tests = rep["evaluation"]["tests"]
+    for k in ("dsr", "null_pvalue", "n_trials", "sharpe_costx2", "sharpe_lag1", "positive_year_fraction"):
+        assert k in tests and np.isfinite(tests[k]), k
+    assert 1 / 5 <= tests["null_pvalue"] <= 1.0  # exact permutation p-value with 4 nulls
+    assert set(ev.gate) >= {"dsr", "null_pvalue", "pbo", "cost_stress", "latency_stress", "oos_months"}
+    assert (out / "REPORT.md").exists() and (out / "model" / "bundle.json").exists()
+    assert len(list(ledger.glob("*.json"))) == 1
+    table = comparison_table([out])
+    assert table.count("\n") == 2 and "15m" in table
+    # Only evaluation settings change: the saved walk-forward is reused, not retrained.
+    marker = (out / "walkforward" / "training_hash").read_text()
+    cfg2 = cfg_small.model_copy(update={"costs": cfg_small.costs.model_copy(update={"taker_fee": 0.0006})})
+
+    def no_retraining(*a, **k):
+        raise AssertionError("the walk-forward was retrained")
+
+    monkeypatch.setattr("hermes.research.run.walk_forward_train", no_retraining)
+    _, wf2, _ = run_research(cfg2, out, panel=panel, n_null=2, workers=1, ledger=ledger, save_model=False)
+    assert (out / "walkforward" / "training_hash").read_text() == marker
+    np.testing.assert_allclose(wf2.score.to_numpy(), wf.score.to_numpy(), rtol=1e-5, atol=1e-6)

@@ -238,3 +238,55 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         "",
     ]
     return "\n".join(L)
+
+
+def comparison_table(reports: list[Path]) -> str:
+    """Markdown table comparing research reports (``report.json``) side by side, gate verdict included."""
+    rows = []
+    for path in reports:
+        f = path / "report.json" if path.is_dir() else path
+        meta = json.loads(f.read_text())
+        ev = meta["evaluation"]
+        t, s, ic, d = ev["tests"], ev["summary"], ev["ic"], meta["data"]
+        H = meta["config"]["portfolio"]["holding_horizon"]
+        ich = ic.get(f"h{H}") or next((v for k, v in ic.items() if k.startswith("h")), {})
+        fees = sum(float(s.get(k, 0.0) or 0.0) for k in ("fees_annual", "spread_annual", "impact_annual"))
+        rows.append(
+            [
+                meta["config"].get("name", f.parent.name),
+                d["bar"],
+                f"{d['oos_start'][:10]} → {d['end'][:10]}",
+                _num(ich.get("ic_mean"), 4) + f" (t {_num(ich.get('ic_t'), 1)})",
+                _pct(float(s.get("gross_pnl_annual", float("nan")))),
+                _pct(fees),
+                _pct(float(s.get("cagr", float("nan")))),
+                _num(float(t.get("sharpe_daily", float("nan")))),
+                _pct(float(s.get("max_drawdown", float("nan")))),
+                _num(float(t.get("dsr", float("nan"))), 3),
+                _num(float(t.get("null_pvalue", float("nan"))), 3),
+                _num(float(t.get("pbo", float("nan"))), 2),
+                _num(float(t.get("sharpe_costx2", float("nan")))),
+                _num(float(t.get("sharpe_lag1", float("nan")))),
+                "✅" if ev.get("promoted") else "❌",
+            ]
+        )
+    head = [
+        "Config",
+        "Bougie",
+        "Hors échantillon",
+        "IC (t)",
+        "P&L brut/an",
+        "Coûts/an",
+        "CAGR net",
+        "Sharpe net",
+        "Drawdown max",
+        "DSR",
+        "p nul",
+        "PBO",
+        "Sharpe coûts×2",
+        "Sharpe +1 barre",
+        "Promu",
+    ]
+    lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+    lines += ["| " + " | ".join(r) + " |" for r in rows]
+    return "\n".join(lines)

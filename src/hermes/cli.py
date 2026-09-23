@@ -89,6 +89,14 @@ def research_run(
     typer.echo(f"\nVerdict : {'PROMU' if ev.promoted else 'NON PROMU'}")
 
 
+@research_app.command("compare")
+def research_compare(reports: list[Path] = typer.Argument(..., help="Dossiers de rapports (ou report.json)")) -> None:
+    """Tableau Markdown comparant des rapports de recherche (porte comprise)."""
+    from hermes.research.report import comparison_table
+
+    typer.echo(comparison_table(reports))
+
+
 @model_app.command("install")
 def model_install(
     source: Path = typer.Argument(..., help="Dossier du bundle (ex. reports/latest/model)"),
