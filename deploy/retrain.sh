@@ -7,6 +7,11 @@
 # ne l'est pas lui-même. Le moteur recharge le modèle à chaud.
 set -euo pipefail
 cd /opt/hermes
+MEM_GB=$(awk '/MemTotal/ {print int($2 / 1048576)}' /proc/meminfo)
+if [ "$MEM_GB" -lt 12 ] && [ "${HERMES_FORCE_RETRAIN:-0}" != 1 ]; then
+  echo "mémoire ${MEM_GB} Go < 12 Go : réentraînement refusé ici (il mettrait le moteur en danger) ; utiliser le workflow Research"
+  exit 0
+fi
 MODE="$(cat /etc/hermes/mode 2>/dev/null || echo paper)"
 OUT="reports/auto/$(date -u +%Y-%m-%d)"
 as_hermes() { runuser -u hermes -- "$@"; }

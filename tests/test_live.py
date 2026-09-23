@@ -290,3 +290,17 @@ def test_live_sizes_the_restandardised_smoothed_score(cfg_small, tmp_path):
     for k in range(12):  # enough bars for the smoothing to shrink the raw dispersion
         eng.decide(panel.iloc(slice(t + k - 96 * 30, t + k)), {}, 10_000.0)
     assert 0.8 < seen["std"] < 1.2  # z-scored across members as in the backtest, not a shrunk average
+
+
+def test_paper_trades_only_what_okx_lists(cfg_small, tmp_path):
+    # The paper broker accepts any symbol; with venue okx the engine must still restrict itself to OKX's
+    # crypto swaps, the universe research validated and the OKX broker would trade.
+    cfg = with_overrides(cfg_small, {"data.universe.venue": "okx"})
+    broker = PaperBroker(tmp_path / "acc.json", 10_000, 0.0002, 0.0005)
+    eng = LiveEngine(cfg, type("B", (), {"meta": {}})(), None, broker, StateStore(tmp_path / "s"), mode="paper")
+    today = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
+    eng._venue = (today, {"BTC-USDT-SWAP", "PEPE-USDT-SWAP"})
+    assert eng.tradable(["BTCUSDT", "MYXUSDT", "1000PEPEUSDT", "USDCUSDT"]) == ["BTCUSDT", "1000PEPEUSDT"]
+    cfg_any = with_overrides(cfg_small, {"data.universe.venue": "any"})
+    eng_any = LiveEngine(cfg_any, type("B", (), {"meta": {}})(), None, broker, StateStore(tmp_path / "t"), "paper")
+    assert eng_any.tradable(["BTCUSDT", "MYXUSDT"]) == ["BTCUSDT", "MYXUSDT"]

@@ -20,6 +20,7 @@ def cfg_small():
             "data.bar": "15m",
             "data.universe.top_n": 10,
             "data.universe.min_history_days": 3,
+            "data.universe.venue": "any",  # synthetic contracts exist on no exchange
             "model.gbm.seeds": [1],
             "model.gbm.n_estimators": 300,
             "model.gbm.learning_rate": 0.08,

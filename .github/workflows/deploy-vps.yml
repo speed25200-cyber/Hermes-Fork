@@ -12,10 +12,19 @@ on:
         default: "paper"
         type: choice
         options: [paper, demo, live]
+      model_run:
+        description: "ID d'un run « Research » (dépôt model_repo) : son modèle, entraîné sur un runner GitHub, est installé comme champion. Recommandé : l'entraînement demande bien plus de mémoire qu'un petit VPS."
+        default: ""
+      model_config:
+        description: "Configuration dont prendre le modèle dans ce run"
+        default: "research_30m_xl_lb_sres"
+      model_repo:
+        description: "Dépôt (public) du run Research"
+        default: "speed25200-cyber/Hermes"
       train:
-        description: "Lancer l'entraînement complet sur le VPS après l'installation (~1 h, en arrière-plan)"
+        description: "Entraîner sur le VPS après l'installation (ignoré sous 12 Go de mémoire)"
         type: boolean
-        default: true
+        default: false
       retire_old:
         description: "Arrêter les anciens moteurs (okxq Docker, service Node 'hermes') — ne ferme AUCUNE position"
         type: boolean
@@ -56,8 +65,8 @@ jobs:
         run: |
           sshpass -e ssh $SSHOPTS "root@$VPS" 'mkdir -p /opt/hermes'
           sshpass -e rsync -az --delete -e "ssh $SSHOPTS" \
-            --exclude .git --exclude data/ --exclude state/ --exclude artifacts/ --exclude reports/auto/ \
-            --exclude .venv/ ./ "root@$VPS:/opt/hermes/"
+            --exclude /.git --exclude /data/ --exclude /state/ --exclude /artifacts/ --exclude /reports/auto/ \
+            --exclude /.venv/ ./ "root@$VPS:/opt/hermes/"
       - name: Installer et démarrer
         env:
           SSHPASS: ${{ secrets.VPS_PASSWORD }}
@@ -78,6 +87,31 @@ jobs:
             [ -n "$D1" ] && printf 'HERMES_DASHBOARD_TOKEN=%s\n' "$D1"
             true
           } | sshpass -e ssh $SSHOPTS "root@$VPS" "bash /opt/hermes/deploy/install.sh $MODE"
+      - name: Modèle entraîné sur runner
+        if: ${{ inputs.model_run != '' }}
+        env:
+          MODE: ${{ inputs.mode }}
+          RUN: ${{ inputs.model_run }}
+          CONF: ${{ inputs.model_config }}
+          REPO: ${{ inputs.model_repo }}
+        run: |
+          [[ "$RUN" =~ ^[0-9]+$ && "$CONF" =~ ^[a-z0-9_]+$ && "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
+            || { echo "::error::entrées model_run / model_config / model_repo invalides"; exit 1; }
+          NAME="research-$CONF-$RUN"
+          ID=$(curl -fsSL "https://api.github.com/repos/$REPO/actions/runs/$RUN/artifacts?per_page=100" \
+            | jq -r --arg n "$NAME" '.artifacts[] | select(.name == $n and (.expired | not)) | .id' | head -1)
+          [ -n "$ID" ] || { echo "::error::artefact $NAME introuvable (ou expiré) dans $REPO"; exit 1; }
+          curl -fsSL "https://api.github.com/repos/$REPO/actions/artifacts/$ID/zip" -o model.zip
+          unzip -q model.zip -d art
+          B=$(find art -name bundle.json -path '*/model/*' | head -1)
+          [ -n "$B" ] || { echo "::error::pas de modèle (model/bundle.json) dans $NAME"; exit 1; }
+          M=$(dirname "$B")
+          sshpass -e ssh $SSHOPTS "root@$VPS" 'rm -rf /opt/hermes/artifacts/incoming && mkdir -p /opt/hermes/artifacts/incoming'
+          sshpass -e rsync -az -e "ssh $SSHOPTS" "$M/" "root@$VPS:/opt/hermes/artifacts/incoming/"
+          sshpass -e ssh $SSHOPTS "root@$VPS" "cd /opt/hermes && chown -R hermes:hermes artifacts \
+            && runuser -u hermes -- .venv/bin/hermes model install artifacts/incoming --to artifacts/models/champion \
+            && systemctl enable hermes@$MODE >/dev/null && systemctl restart hermes@$MODE && echo hermes@$MODE démarré"
+
       - name: Entraînement initial (arrière-plan)
         if: ${{ inputs.train }}
         env:

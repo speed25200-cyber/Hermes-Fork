@@ -237,10 +237,22 @@ def run_research(
         persist = signal_persistence(
             traded_score(wf.score, cfg, H), H, cfg.bars_per_day * 30, floor=cfg.portfolio.cost_scale_floor
         ).dropna()
+        ich = ev.ic.get(f"h{H}") if isinstance(ev.ic.get(f"h{H}"), dict) else {}
         bundle.meta.update(
             {
                 "promoted": ev.promoted,
                 "evaluation": dict(ev.tests.items()),
+                # What research expects of the live book: the dashboard compares the incubation to it.
+                "research": {
+                    "name": cfg.name,
+                    "bar": cfg.data.bar,
+                    "horizon_bars": int(H),
+                    "sharpe": float(ev.tests.get("sharpe_daily", float("nan"))),
+                    "cagr": float(ev.summary.get("cagr", float("nan"))),
+                    "vol": float(ev.summary.get("ann_vol", float("nan"))),
+                    "max_drawdown": float(ev.summary.get("max_drawdown", float("nan"))),
+                    "ic": float(ich.get("ic_mean", float("nan"))),  # type: ignore[union-attr]
+                },
                 "cost_scale": float(persist.iloc[-1]) if len(persist) else 1.0,
                 "market_promoted": bool(ev.tests.get("market_promoted", 0.0)),
             }

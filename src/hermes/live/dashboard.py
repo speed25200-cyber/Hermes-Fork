@@ -17,6 +17,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 PAGE = (Path(__file__).with_name("dashboard.html")).read_text(encoding="utf-8")
+# Fixed, read-only queries (no parameter ever reaches SQL).
+QUERIES = {
+    "/api/equity": "SELECT ts, equity, gross, net, drawdown, ic_est, n_positions FROM equity ORDER BY ts",
+    "/api/events": "SELECT ts, level, message FROM events ORDER BY id DESC LIMIT 40",
+    "/api/ic": "SELECT ts, value FROM series WHERE name = 'ic' ORDER BY ts",
+    "/api/fills": "SELECT ts, symbol, side, qty, price, fee, maker FROM fills ORDER BY id DESC LIMIT 60",
+}
 
 
 def make_handler(state_dir: Path, token: str | None) -> type[BaseHTTPRequestHandler]:
@@ -64,19 +71,15 @@ def make_handler(state_dir: Path, token: str | None) -> type[BaseHTTPRequestHand
             elif path == "/api/status":
                 p = state_dir / "status.json"
                 self._send(200, p.read_bytes() if p.exists() else b"{}", "application/json")
-            elif path in ("/api/equity", "/api/events"):
+            elif path in QUERIES:
                 db = state_dir / "hermes.sqlite3"
                 rows: list[object] = []
                 if db.exists():
                     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
                     try:
-                        if path == "/api/equity":
-                            rows = [list(r) for r in con.execute("SELECT ts, equity FROM equity ORDER BY ts")]
-                        else:
-                            rows = [
-                                list(r)
-                                for r in con.execute("SELECT ts, level, message FROM events ORDER BY id DESC LIMIT 30")
-                            ]
+                        rows = [list(r) for r in con.execute(QUERIES[path])]
+                    except sqlite3.OperationalError:  # a table the engine has not created yet
+                        rows = []
                     finally:
                         con.close()
                 self._send(200, json.dumps(rows).encode(), "application/json")

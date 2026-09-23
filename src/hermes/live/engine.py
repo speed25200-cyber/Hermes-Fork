@@ -31,7 +31,9 @@ from hermes.config import HermesConfig, with_overrides
 from hermes.data.live_feed import BinanceLiveFeed, DailyHistory
 from hermes.data.panel import BAR_TO_OFFSET, Panel
 from hermes.data.universe import is_excluded, universe_mask
+from hermes.data.venue import OkxListing
 from hermes.execution.broker import Broker, PaperBroker
+from hermes.execution.okx.instruments import okx_inst_id
 from hermes.features.library import build_features
 from hermes.labels.targets import build_targets
 from hermes.live.alerts import alert
@@ -146,6 +148,7 @@ class LiveEngine:
         self.overlay = RiskOverlay(cfg.risk, state)
         self.candidates: list[str] = list(store.get("candidates", []) or [])  # type: ignore[arg-type]
         self.candidates_day = store.get("candidates_day")
+        self._venue: tuple[str, set[str]] | None = None  # (UTC day, OKX crypto swaps) for the paper broker
         self.model_dir = Path(model_dir) if model_dir is not None else None
         self._model_mtime = self._bundle_mtime()
         self._cache: dict[str, pd.DataFrame] = {}
@@ -246,7 +249,18 @@ class LiveEngine:
         register = getattr(self.broker, "register", None)
         if register is not None:  # OKX: only contracts listed there (mapped on the fly)
             out = register(out)
+        elif u.venue == "okx":  # paper: the same universe as research and as the OKX broker
+            listed = self.okx_swaps()
+            out = [s for s in out if okx_inst_id(s) in listed]
         return out
+
+    def okx_swaps(self) -> set[str]:
+        """OKX crypto USDT swaps live today (instrument list cached per day; snapshot if OKX is unreachable)."""
+        today = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
+        if self._venue is None or self._venue[0] != today:
+            cat = OkxListing(Path(self.cfg.live.state_dir)).catalog()
+            self._venue = (today, {inst for inst, (category, _) in cat.items() if category == "1"})
+        return self._venue[1]
 
     def n_candidates(self) -> int:
         """Contracts watched each day: a superset of the point-in-time top-N (``live.candidates`` caps it)."""
@@ -635,7 +649,15 @@ class LiveEngine:
                 "shortfall_bps": round(shortfall, 2) if np.isfinite(shortfall) else None,
                 "errors": rep.errors[:10],
             },
-            "bundle": {k: self.bundle.meta.get(k) for k in ("config_hash", "train_end", "promoted")},
+            "bundle": {k: self.bundle.meta.get(k) for k in ("config_hash", "train_end", "promoted", "research")},
+            "risk_limits": {
+                "drawdown_soft": self.cfg.risk.drawdown_soft,
+                "drawdown_hard": self.cfg.risk.drawdown_hard,
+                "daily_loss_limit": self.cfg.risk.daily_loss_limit,
+                "gross_max": self.cfg.portfolio.gross_max,
+            },
+            "halted": self.overlay.state.halted,
+            "halt_reason": self.overlay.state.halt_reason,
         }
         self.store.write_status(status)
         if self.overlay.state.halted:

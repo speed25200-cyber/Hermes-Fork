@@ -47,8 +47,16 @@ systemctl daemon-reload
 for m in paper demo live; do
   [ "$m" = "$MODE" ] || systemctl disable --now "hermes@$m" 2>/dev/null || true
 done
-systemctl enable hermes-retrain.timer >/dev/null
-systemctl start hermes-retrain.timer
+# Le réentraînement (walk-forward complet) demande bien plus de mémoire qu'un petit VPS : en dessous de
+# 12 Go il se fait sur un runner GitHub (workflow Research) et le modèle est installé par le déploiement.
+MEM_GB=$(awk '/MemTotal/ {print int($2 / 1048576)}' /proc/meminfo)
+if [ "$MEM_GB" -ge 12 ]; then
+  systemctl enable hermes-retrain.timer >/dev/null
+  systemctl start hermes-retrain.timer
+else
+  systemctl disable --now hermes-retrain.timer 2>/dev/null || true
+  echo "mémoire ${MEM_GB} Go < 12 Go : réentraînement hebdomadaire sur runner GitHub, pas sur ce VPS"
+fi
 
 for m in paper demo live; do
   [ "$m" = "$MODE" ] || systemctl disable --now "hermes-dashboard@$m" 2>/dev/null || true
@@ -63,5 +71,5 @@ if [ -f "$APP/artifacts/models/champion/bundle.json" ]; then
   systemctl restart "hermes@$MODE"
   echo "service hermes@$MODE démarré"
 else
-  echo "aucun modèle installé : lancer d'abord l'entraînement (systemctl start hermes-retrain)"
+  echo "aucun modèle installé : déployer avec model_run (modèle entraîné sur runner), ou entraîner ici si la mémoire suffit"
 fi
