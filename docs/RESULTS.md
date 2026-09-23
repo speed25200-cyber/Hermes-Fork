@@ -233,4 +233,12 @@ le résultat de recherche tient : l'IC réalisé (≈ 0,045 attendu), la courbe 
 de bord. Il faut plusieurs mois pour conclure : à Sharpe 1, un an de papier ne sépare encore un vrai
 avantage du hasard qu'avec environ 84 % de confiance.
 
+**Premier constat (23 septembre, 20 h 30 UTC) : le livre est à plat, et c'est voulu.** La taille des positions
+est proportionnelle à l'IC estimé causalement ; or l'IC réalisé des derniers plis est nul ou négatif (plis de
+mai et juillet 2026 : −0,054 et −0,006) et la borne prudente de validation vaut 0. Le backtest de recherche
+finissait lui-même sans position fin août 2026. Le moteur décide donc toutes les 30 minutes, mesure l'IC réalisé
+de ses scores une fois l'horizon de 24 h écoulé, et ne prendra des positions que si cet IC redevient positif.
+L'incubation mesure dès maintenant la question qui compte : **le classement du modèle tient-il sur des
+données jamais vues ?** Un IC réalisé durablement nul signerait la fin de cet avantage.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.
