@@ -1,6 +1,6 @@
 """OKX listing calendar and the venue-restricted universe, offline (simulated OKX endpoints)."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 import numpy as np
@@ -10,8 +10,15 @@ from hermes.config import UniverseConfig
 from hermes.data.universe import daily_membership, universe_mask
 from hermes.data.venue import OkxListing
 
-LISTED_NOW = {"AAA-USDT-SWAP": ("1", date(2023, 3, 10)), "BB-USDT-SWAP": ("3", date(2022, 1, 1))}
+LISTED_NOW = {
+    "AAA-USDT-SWAP": ("1", date(2023, 3, 10)),
+    "BB-USDT-SWAP": ("3", date(2022, 1, 1)),
+    "BTC-USDT-SWAP": ("1", date(2020, 1, 1)),
+    "ZZZ-USDT-SWAP": ("1", date(2022, 1, 1)),  # listTime predates a delisting and relisting
+}
 ARCHIVED = {"CCC-USDT-SWAP": (date(2022, 8, 3), date(2023, 1, 20))}  # listed then delisted by OKX
+GAPS = {"ZZZ-USDT-SWAP": (date(2023, 1, 5), date(2023, 5, 20))}
+PUBLISHED = date.today() - timedelta(days=2)  # archives appear with a lag
 
 
 def _okx(request: httpx.Request) -> httpx.Response:
@@ -29,6 +36,8 @@ def _okx(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": data})
     name = url.rsplit("/", 1)[-1]  # {inst}-trades-{YYYY-MM-DD}.zip
     inst, day = name[: name.index("-trades-")], date.fromisoformat(name[-14:-4])
+    if day > PUBLISHED or (inst in GAPS and GAPS[inst][0] <= day <= GAPS[inst][1]):
+        return httpx.Response(404)
     if inst in LISTED_NOW and LISTED_NOW[inst][0] == "1" and day >= LISTED_NOW[inst][1]:
         return httpx.Response(200)
     if inst in ARCHIVED and ARCHIVED[inst][0] <= day <= ARCHIVED[inst][1]:
@@ -38,8 +47,9 @@ def _okx(request: httpx.Request) -> httpx.Response:
 
 def test_listing_calendar_locates_each_change_to_the_day(tmp_path):
     client = httpx.Client(transport=httpx.MockTransport(_okx))
-    okx = OkxListing(tmp_path, client=client, workers=4)
-    windows = {s: (date(2022, 6, 1), date(2023, 6, 30)) for s in ("AAAUSDT", "BBUSDT", "CCCUSDT", "DDDUSDT")}
+    okx = OkxListing(tmp_path, client=client, workers=4, seed=None)
+    windows = {s: (date(2022, 6, 1), date(2023, 6, 30)) for s in ("AAAUSDT", "BBUSDT", "CCCUSDT", "DDDUSDT", "ZZZUSDT")}
+    windows["AAAUSDT"] = (date(2022, 6, 1), date.today())  # up to today: the unpublished days are not delistings
     cal = okx.calendar(windows)
     first = lambda s: cal.index[cal[s]][0].date()  # noqa: E731
     last = lambda s: cal.index[cal[s]][-1].date()  # noqa: E731
@@ -48,10 +58,16 @@ def test_listing_calendar_locates_each_change_to_the_day(tmp_path):
     assert (first("CCCUSDT"), last("CCCUSDT")) == ARCHIVED["CCC-USDT-SWAP"]  # delisted since: from the archives
     assert cal["CCCUSDT"].sum() == (ARCHIVED["CCC-USDT-SWAP"][1] - ARCHIVED["CCC-USDT-SWAP"][0]).days + 1
     assert not cal["DDDUSDT"].any()
+    gap = cal["ZZZUSDT"]
+    window = (gap.index >= pd.Timestamp("2022-06-01", tz="UTC")) & (gap.index <= pd.Timestamp("2023-06-30", tz="UTC"))
+    off = gap.index[~gap & window]
+    assert (off[0].date(), off[-1].date()) == GAPS["ZZZ-USDT-SWAP"]  # the gap listTime does not show
+    assert cal["AAAUSDT"].iloc[-3:].all()  # today and the unpublished days: live on OKX now
     n = len(okx.probes)
-    assert n < 400  # weekly grid + bisection, not one probe per day
+    assert n < 500  # grid + bisection, not one probe per day
     # Probes are cached: a second calendar makes no request at all.
-    offline = OkxListing(tmp_path, client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500))))
+    down = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    offline = OkxListing(tmp_path, client=down, seed=None)
     offline._catalog = okx.catalog()
     pd.testing.assert_frame_equal(offline.calendar(windows), cal)
 
