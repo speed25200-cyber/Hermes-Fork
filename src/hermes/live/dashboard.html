@@ -25,6 +25,8 @@ h2{font-size:13px;font-weight:600;color:var(--ink2);margin:0 0 2px}
 .card{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:12px 14px;min-width:0}
 .tile .lab{font-size:12px;color:var(--ink2)}.tile .val{font-size:22px;font-weight:600;margin-top:2px}
 .tile .sub{font-size:12px;color:var(--mute);margin-top:2px}
+.tile .val small{font-size:13px;font-weight:500;color:var(--ink2);margin-left:3px}
+@media(max-width:520px){.tile .val{font-size:19px}.tiles{grid-template-columns:1fr 1fr}.opt{display:none}}
 .up{color:var(--up)}.down{color:var(--crit)}
 .charts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .charts .wide{grid-column:1/-1}
@@ -55,7 +57,7 @@ details{margin-top:6px;font-size:12px;color:var(--ink2)}
 <section class="tiles" id="tiles"></section>
 <section class="charts">
  <div class="card wide"><h2>Équité face à ce que la recherche attend</h2>
-  <p class="cap">Si le modèle se comporte comme hors échantillon, la courbe reste le plus souvent dans la bande foncée (±1σ) et presque toujours dans la claire (±2σ).</p>
+  <p class="cap">Si le modèle se comporte comme hors échantillon, la courbe reste le plus souvent dans la bande intérieure (±1σ) et presque toujours dans l'extérieure (±2σ).</p>
   <div class="legend" id="leg-eq"></div><div class="chart" id="c-eq"></div>
   <details><summary>Valeurs quotidiennes</summary><div class="scroll"><table id="t-eq"></table></div></details></div>
  <div class="card"><h2>Drawdown</h2><p class="cap">Depuis le plus haut, avec les seuils de réduction et d'arrêt du risque.</p>
@@ -149,14 +151,14 @@ function render(){
  const roll=(k)=>dm.map((p,i)=>{const w=dm.slice(Math.max(0,i-k+1),i+1);return [p[0],w.reduce((a,x)=>a+x[1],0)/w.length]});
  const ic7=roll(7),ic30=dm.length?roll(30).at(-1)[1]:null;
  const tiles=[
-  ["Équité",f(s.equity,0)+" USDT",e0?`départ ${f(e0,0)}`:""],
+  ["Équité",f(s.equity,0)+"<small>USDT</small>",e0?`départ ${f(e0,0)} USDT`:""],
   ["Rendement depuis le début",`<span class="${ret>=0?"up":"down"}">${ret==null?"—":(ret>=0?"▲ ":"▼ ")+pct(Math.abs(ret),2)}</span>`,E.length?`depuis le ${day(E[0].t)}`:""],
   ["Drawdown",pct(risk.drawdown,2),`réduction à ${pct(lim.drawdown_soft,0)}, arrêt à ${pct(lim.drawdown_hard,0)}`],
-  ["Exposition brute / nette",`${f(s.gross)}× / ${f(s.net)}×`,`plafond brut ${f(lim.gross_max,1)}×`],
+  ["Exposition brute · nette",`${f(s.gross)}× <small>· ${f(s.net)}×</small>`,`plafond brut ${f(lim.gross_max,1)}×`],
   ["Positions",`${pos.length}`,`${nl} longues · ${ns} courtes`],
   ["IC réalisé (30 j)",f(ic30,3),isFinite(rs.ic)?`recherche : ${f(rs.ic,3)}`:"IC estimé "+f(s.ic_est,3)],
-  ["Exécution",`${pct(ex.maker_share,0)} maker`,`écart ${f(ex.shortfall_bps,1)} pb`],
-  ["Dérive des variables (PSI)",f(risk.psi_max,2),"au-delà de 0,25 : alerte"],
+  ["Exécution maker",`${pct(ex.maker_share,0)}`,`écart au prix de décision ${f(ex.shortfall_bps,1)} pb`],
+  ["Dérive des variables",f(risk.psi_max,2),"PSI ; alerte au-delà de 0,25"],
  ];
  $("tiles").innerHTML=tiles.map(([a,v,c])=>`<div class="card tile"><div class="lab">${a}</div><div class="val">${v}</div><div class="sub">${esc(c)}</div></div>`).join("");
  /* equity vs research cone: median (1+CAGR)^t, bands exp(±k σ √t) */
@@ -183,12 +185,12 @@ function render(){
  pos.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
  $("pos-cap").textContent=pos.length?`${nl} longues pour ${f(pos.filter(p=>p[1]>0).reduce((a,p)=>a+p[1],0),0)} USDT, ${ns} courtes pour ${f(-pos.filter(p=>p[1]<0).reduce((a,p)=>a+p[1],0),0)} USDT.`:"";
  $("pos").innerHTML=pos.length?"<tr><th>Contrat</th><th>Sens</th><th>Notionnel</th><th>% du capital</th></tr>"+pos.map(([k,v])=>
-  `<tr><td>${esc(k)}</td><td>${v>0?"▲ long":"▼ court"}</td><td>${f(Math.abs(v),0)}</td><td>${pct(cap?Math.abs(v)/cap:null,1)}</td></tr>`).join(""):'<tr><td class="empty">Aucune position.</td></tr>';
+  `<tr><td>${esc(k)}</td><td style="white-space:nowrap">${v>0?"▲ long":"▼ court"}</td><td>${f(Math.abs(v),0)}</td><td>${pct(cap?Math.abs(v)/cap:null,1)}</td></tr>`).join(""):'<tr><td class="empty">Aucune position.</td></tr>';
  $("ev").innerHTML=(ev||[]).length?(ev||[]).map(x=>`<tr><td>${stamp(x[0]*1000)}<div class="meta">${esc(x[1])}</div></td><td style="text-align:left">${esc(x[2])}</td></tr>`).join(""):'<tr><td class="empty">Aucun événement.</td></tr>';
  const F=fills||[];const fees=F.reduce((a,x)=>a+(x[5]||0),0),mk=F.filter(x=>x[6]).length;
  $("fills-cap").textContent=F.length?`${F.length} dernières : ${mk} en maker, ${f(fees,2)} USDT de frais.`:"";
- $("fills").innerHTML=F.length?"<tr><th>Heure</th><th>Contrat</th><th>Sens</th><th>Quantité</th><th>Prix</th><th>Frais</th><th>Type</th></tr>"+F.map(x=>
-  `<tr><td>${stamp(x[0]*1000)}</td><td>${esc(x[1])}</td><td>${x[2]==="buy"?"achat":"vente"}</td><td>${f(x[3],4)}</td><td>${f(x[4],4)}</td><td>${f(x[5],3)}</td><td>${x[6]?"maker":"taker"}</td></tr>`).join(""):'<tr><td class="empty">Aucune exécution.</td></tr>';
+ $("fills").innerHTML=F.length?"<tr><th>Heure</th><th>Contrat</th><th>Sens</th><th class=opt>Quantité</th><th>Prix</th><th class=opt>Frais</th><th>Type</th></tr>"+F.map(x=>
+  `<tr><td>${stamp(x[0]*1000)}</td><td>${esc(x[1])}</td><td>${x[2]==="buy"?"achat":"vente"}</td><td class=opt>${f(x[3],4)}</td><td>${f(x[4],4)}</td><td class=opt>${f(x[5],3)}</td><td>${x[6]?"maker":"taker"}</td></tr>`).join(""):'<tr><td class="empty">Aucune exécution.</td></tr>';
 }
 async function load(){const [s,eq,ic,ev,fills]=await Promise.all([j("api/status"),j("api/equity"),j("api/ic"),j("api/events"),j("api/fills")]);
  DATA={s:s||{},eq:eq||[],ic:ic||[],ev:ev||[],fills:fills||[]};render()}

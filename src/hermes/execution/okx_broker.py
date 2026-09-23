@@ -84,7 +84,8 @@ class OKXBroker:
         self.symbols = list(symbols) if symbols is not None else None
         self.leverage = leverage
         self.maker_fee, self.taker_fee = maker_fee, taker_fee
-        self.catalog: dict[str, Instrument] = {}  # every live OKX USDT swap, by instId
+        self.catalog: dict[str, Instrument] = {}  # live OKX crypto USDT swaps (what the model may trade), by instId
+        self.known: dict[str, Instrument] = {}  # every live USDT swap: a position on any of them stays visible
         self.instruments: dict[str, Instrument] = {}  # model symbol -> instrument
         self.inst_to_symbol: dict[str, str] = {}
         self._derived: set[str] = set()  # symbols inferred from an exchange position, not chosen by the model
@@ -115,12 +116,13 @@ class OKXBroker:
         """Every live crypto USDT swap. Equity/commodity swaps are excluded: BB-USDT-SWAP or ON-USDT-SWAP are
         BlackBerry and ON Semiconductor, not the Binance contracts BBUSDT / ONUSDT the model scored -- the
         research universe (``hermes.data.venue``) applies the same rule."""
-        self.catalog = {}
+        self.catalog, self.known = {}, {}
         for d in instruments:
             inst = Instrument.from_okx(d)
-            live = inst.state == "live" and inst.ct_val > 0 and inst.category == "1"
-            if inst.inst_id.endswith("-USDT-SWAP") and live:
-                self.catalog[inst.inst_id] = inst
+            if inst.inst_id.endswith("-USDT-SWAP") and inst.state == "live" and inst.ct_val > 0:
+                self.known[inst.inst_id] = inst  # reconciled and closable (kill switch) whatever its category
+                if inst.category == "1":
+                    self.catalog[inst.inst_id] = inst
 
     def register(self, symbols: list[str]) -> list[str]:
         """Map model (Binance) symbols to OKX instruments; returns those that exist on OKX."""
@@ -194,9 +196,12 @@ class OKXBroker:
             if pos == 0:
                 continue
             s = self.inst_to_symbol.get(iid)
-            if s is None and iid in self.catalog:
-                s = iid.split("-")[0] + "USDT"
-                self.instruments[s] = self.catalog[iid]
+            if s is None and iid in self.known:
+                inst = self.known[iid]
+                # A crypto swap maps to its Binance-style symbol; any other keeps its OKX id, so that it is never
+                # mistaken for a Binance contract with the same ticker (BBUSDT is BounceBit, BB-USDT-SWAP is not).
+                s = iid.split("-")[0] + "USDT" if inst.category == "1" else iid
+                self.instruments[s] = inst
                 self.inst_to_symbol[iid] = s
                 self._derived.add(s)
             if s is None:

@@ -89,7 +89,7 @@ def load_panel(cfg: DataConfig, seed: int = 0) -> Panel:
                 cfg.intrabar,
                 cfg.intrabar_start,
                 cfg.universe.venue,
-                "v2",  # fields vwap_first and venue_listed
+                "v3",  # fields vwap_first (bounded by the bar's range) and venue_listed
             ]
         ).encode()
     ).hexdigest()[:10]
@@ -130,7 +130,8 @@ def with_execution_fields(panel: Panel, cfg: DataConfig) -> Panel:
     """
     fields = {}
     vol = panel["volume"].astype("float64")
-    fields["vwap_first"] = (panel["quote_volume"] / vol.where(vol > 0)).astype("float32")
+    vwap = panel["quote_volume"] / vol.where(vol > 0)
+    fields["vwap_first"] = vwap.where((vwap >= panel["low"]) & (vwap <= panel["high"])).astype("float32")
     if cfg.universe.venue == "okx":
         qv, _ = daily_activity(panel)
         listed = OkxListing(cfg.cache_dir).calendar(activity_windows(qv))

@@ -22,7 +22,7 @@ import json
 import logging
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 
@@ -40,6 +40,11 @@ GRID_DAYS = 7
 # Snapshot of probes and of the instrument list (committed): research is reproducible and does not depend on
 # reaching OKX (its site may refuse some regions); the network only completes what the snapshot lacks.
 SEED = Path(__file__).parent / "okx_seed"
+BTC = "BTC-USDT-SWAP"
+
+
+def _utc_today() -> date:
+    return datetime.now(UTC).date()
 
 
 class OkxListing:
@@ -58,14 +63,23 @@ class OkxListing:
                 self.probes.update(json.load(fh))
         if self._probes_file.exists():
             self.probes.update(json.loads(self._probes_file.read_text()))
-        self._catalog: dict[str, tuple[str, date]] | None = None
+        # BTC has been listed throughout the archives: a cached "absent" for it can only be a day probed before
+        # its archive was published (earlier versions cached those).
+        for k in [k for k, ok in self.probes.items() if not ok and k.startswith(f"{BTC}|")]:
+            del self.probes[k]
+        self._catalog: dict[str, tuple[str, date, bool]] | None = None
+        self.catalog_date: date | None = None  # day of the instrument list in use
 
     # -- sources -------------------------------------------------------------------------------------------
-    def catalog(self) -> dict[str, tuple[str, date]]:
-        """Live USDT swaps: instId -> (instCategory, first full listed day). Snapshot cached per day."""
+    def catalog(self) -> dict[str, tuple[str, date, bool]]:
+        """USDT swaps: instId -> (instCategory, first full listed day, live now). Every state is kept (the
+        category of a suspended swap still says it is not a crypto contract). Snapshot cached per UTC day;
+        without network, the most recent of the cached snapshots and the committed one."""
         if self._catalog is not None:
             return self._catalog
-        snap = self.dir / f"okx_instruments_{date.today().isoformat()}.json"
+        today = _utc_today()
+        snap = self.dir / f"okx_instruments_{today.isoformat()}.json"
+        when = today
         if snap.exists():
             data = json.loads(snap.read_text())
         else:
@@ -77,21 +91,27 @@ class OkxListing:
                     raise ValueError("empty instrument list")
                 snap.write_text(json.dumps(data))
             except (httpx.HTTPError, ValueError) as exc:
-                older = sorted(self.dir.glob("okx_instruments_*.json"))
-                if not older and self.seed is None:
+                found: list[tuple[date, Path]] = [
+                    (date.fromisoformat(f.stem.rsplit("_", 1)[1]), f) for f in self.dir.glob("okx_instruments_*.json")
+                ]
+                if self.seed is not None and (self.seed / "instruments.json").exists():
+                    raw = json.loads((self.seed / "instruments.json").read_text())
+                    found.append((date.fromisoformat(raw.get("fetched", "2000-01-01")), self.seed / "instruments.json"))
+                if not found:
                     raise
-                src = older[-1] if older else self.seed / "instruments.json"  # type: ignore[operator]
-                log.warning("OKX instrument list unavailable (%s): using %s", exc, src.name)
+                when, src = max(found)
+                log.warning("OKX instrument list unavailable (%s): using %s of %s", exc, src.name, when)
                 raw = json.loads(src.read_text())
                 data = raw["data"] if isinstance(raw, dict) else raw
         out = {}
         for d in data:
             inst = str(d.get("instId", ""))
-            if not inst.endswith("-USDT-SWAP") or d.get("state", "live") != "live":
+            if not inst.endswith("-USDT-SWAP"):
                 continue
             listed = pd.Timestamp(int(d.get("listTime") or 0), unit="ms", tz="UTC")
-            out[inst] = (str(d.get("instCategory", "1")), (listed + pd.Timedelta(days=1)).date())
-        self._catalog = out
+            live = d.get("state", "live") == "live"
+            out[inst] = (str(d.get("instCategory", "1")), (listed + pd.Timedelta(days=1)).date(), live)
+        self._catalog, self.catalog_date = out, when
         return out
 
     def _probe_one(self, inst: str, day: date) -> tuple[str, bool]:
@@ -125,18 +145,19 @@ class OkxListing:
 
     # -- calendar ------------------------------------------------------------------------------------------
     def archive_end(self) -> date:
-        """Latest day whose archives are published (they lag a day or two): later days are not probed."""
-        today = date.today()
+        """Latest day whose archives are published (OKX uploads day D around 23:30 UTC on D, sometimes later):
+        later days are not probed. A missing archive here may only be late, so it is never cached."""
+        today = _utc_today()
         try:
             for k in range(1, 15):
                 day = today - timedelta(days=k)
-                self._probe([("BTC-USDT-SWAP", day)])
-                if self._listed("BTC-USDT-SWAP", day):
+                key = f"{BTC}|{day.isoformat()}"
+                if self.probes.get(key) or self._probe_one(BTC, day)[1]:
+                    self.probes[key] = True
                     return day
         except RuntimeError as exc:  # archives unreachable: the snapshot's last published day
             log.warning("OKX archives unreachable (%s): using the probe snapshot", exc)
-        btc = "BTC-USDT-SWAP|"
-        known = [date.fromisoformat(k[len(btc) :]) for k, ok in self.probes.items() if ok and k.startswith(btc)]
+        known = [date.fromisoformat(k.split("|")[1]) for k, ok in self.probes.items() if ok and k.startswith(f"{BTC}|")]
         if not known:
             raise RuntimeError("no OKX trade archive known")
         return max(known)
@@ -163,7 +184,7 @@ class OkxListing:
             entry = cat.get(inst)
             if entry is not None and entry[0] != "1":
                 continue  # an equity/commodity swap with the same ticker: never the crypto contract
-            plans[sym] = (inst, entry is not None)
+            plans[sym] = (inst, entry is not None and entry[2])
             start, end = max(a, ARCHIVE_START), min(b, last)
             if start <= end:
                 # A calendar-anchored grid: the same days whatever the window, so probes are shared across
@@ -196,6 +217,8 @@ class OkxListing:
             by_inst.setdefault(i, []).append((pd.Timestamp(d, tz="UTC"), ok))
         out = pd.DataFrame(False, index=days, columns=sorted(windows))
         after = days > pd.Timestamp(last, tz="UTC")
+        # Past the instrument list in use, a contract missing from it is of unknown category: not selectable.
+        stale = days > pd.Timestamp(self.catalog_date or last, tz="UTC")
         for sym, (inst, listed_now) in plans.items():
             obs = [(d, ok) for d, ok in by_inst.get(inst, []) if days[0] <= d <= days[-1]]
             status = pd.Series(pd.NA, index=days, dtype="boolean")
@@ -204,6 +227,8 @@ class OkxListing:
                 status.loc[o.index] = o.to_numpy()
             status[after] = listed_now
             status = status.ffill().bfill().fillna(listed_now).astype(bool)  # piecewise constant between probes
+            if inst not in cat:
+                status[stale] = False
             a, b = windows[sym]
             inside = (days >= pd.Timestamp(a, tz="UTC")) & (days <= pd.Timestamp(b, tz="UTC"))
             out[sym] = status & inside

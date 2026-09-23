@@ -147,6 +147,12 @@ def _fill_premium(panel: Panel, close: pd.DataFrame) -> np.ndarray:
     if "vwap_first" not in panel:
         return np.zeros(close.shape)
     fill = panel["vwap_first"][close.columns].shift(-1).to_numpy(dtype=np.float64)
+    lo = panel["low"][close.columns].shift(-1).to_numpy(dtype=np.float64)
+    hi = panel["high"][close.columns].shift(-1).to_numpy(dtype=np.float64)
+    # A VWAP lies inside its bar: an archive row with a truncated volume does not (ARBUSDT 2023-09-19 16:00:
+    # 1.40 against a 0.841-0.846 range). Such a fill is dropped (filled at the close) instead of paid.
+    with np.errstate(invalid="ignore"):
+        fill = np.where((fill >= lo) & (fill <= hi), fill, np.nan)
     with np.errstate(invalid="ignore", divide="ignore"):
         prem = fill / close.to_numpy(dtype=np.float64) - 1.0
     return np.where(np.isfinite(prem), prem, 0.0)

@@ -259,7 +259,7 @@ class LiveEngine:
         today = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
         if self._venue is None or self._venue[0] != today:
             cat = OkxListing(Path(self.cfg.live.state_dir)).catalog()
-            self._venue = (today, {inst for inst, (category, _) in cat.items() if category == "1"})
+            self._venue = (today, {inst for inst, (category, _, live) in cat.items() if category == "1" and live})
         return self._venue[1]
 
     def n_candidates(self) -> int:

@@ -213,3 +213,6 @@ def test_decisions_fill_at_the_next_vwap(small_panel, setup):
     assert (st["slippage"].abs().iloc[1:].to_numpy() <= 0.01 * st["turnover"].iloc[:-1].to_numpy() + 1e-9).all()
     approx = st["gross_pnl"] + st["funding"] - st["fees"] - st["spread"] - st["impact"]
     assert np.allclose(approx, runs[0.01].returns, atol=1e-6)  # slippage is part of the price P&L
+    # A "VWAP" outside its bar's range is a corrupted archive row: ignored (fill at the close), never paid.
+    bad = small_panel.with_fields({"vwap_first": small_panel["high"] * 1.65})
+    assert np.allclose(run_backtest(bad, mask, feats.aux, sig, cfg, **kw).returns, base.returns)

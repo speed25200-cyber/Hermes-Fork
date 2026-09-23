@@ -270,7 +270,7 @@ def test_unknown_instrument_position_is_mapped_and_closable():
             return super().handler(request)
 
     b = _broker(PosOKX())
-    b.catalog = {"ETH-USDT-SWAP": Instrument.from_okx({**INST, "instId": "ETH-USDT-SWAP"})}
+    b.load_catalog([{**INST, "instId": "ETH-USDT-SWAP"}])
     pos = asyncio.run(b.positions())
     assert "ETHUSDT" in pos and pos["ETHUSDT"].contracts == 3
     # A model symbol registered later for the same contract takes over the derived mapping.
@@ -381,3 +381,23 @@ def test_catalog_keeps_crypto_swaps_only():
     b.load_catalog([INST, equity, crypto])
     assert set(b.catalog) == {"BTC-USDT-SWAP", "ETH-USDT-SWAP"}
     assert b.register(["BBUSDT", "ETHUSDT"]) == ["ETHUSDT"]
+
+
+def test_position_on_a_non_crypto_swap_stays_visible_and_is_closed():
+    # The model never trades equity swaps, but one already on the account (manual trade, older version)
+    # must stay visible, under its OKX id (BB-USDT-SWAP is BlackBerry, not Binance's BBUSDT), and be closed.
+    class PosOKX(FakeOKX):
+        def handler(self, request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/api/v5/account/positions":
+                row = {"instId": "BB-USDT-SWAP", "pos": "-4", "markPx": "5", "avgPx": "5.2"}
+                return httpx.Response(200, json={"code": "0", "msg": "", "data": [row]})
+            return super().handler(request)
+
+    b = _broker(PosOKX())
+    b.instruments, b.inst_to_symbol = {}, {}
+    b.load_catalog([{**INST, "instId": "BB-USDT-SWAP", "instCategory": "3"}])
+    assert b.register(["BBUSDT"]) == []  # never tradable by the model
+    pos = asyncio.run(b.positions())
+    assert list(pos) == ["BB-USDT-SWAP"] and pos["BB-USDT-SWAP"].contracts == -4
+    kids = b.plan({}, pos, {"BB-USDT-SWAP": 5.0})
+    assert len(kids) == 1 and kids[0].reduce_only and kids[0].side == "buy"
