@@ -17,10 +17,11 @@ arrondis, stops) → `live` avec `capital_fraction` 0,25, puis augmentation si l
    `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` (droits *lecture + trading*, **jamais retrait**,
    restreints à l'IP du VPS) ; optionnel `HERMES_TELEGRAM_TOKEN` + `HERMES_TELEGRAM_CHAT` pour les alertes.
    Variable optionnelle `VPS_HOST` (défaut : l'adresse historique du VPS).
-2. Workflow **Deploy** : choisir le mode, cocher « Lancer l'entraînement » au premier déploiement. Le code
+2. Workflow **Deploy** (`.github/workflows/deploy-vps.yml` ; ce nom de fichier est celui déjà enregistré sur la
+   branche par défaut, condition pour le lancer à la main depuis une autre branche) : choisir le mode, cocher « Lancer l'entraînement » au premier déploiement. Le code
    est copié dans `/opt/hermes`, installé dans un venv, les services systemd sont posés, l'entraînement
    tourne en arrière-plan (~1 h) et démarre le moteur dès que le premier modèle existe.
-3. Workflow **VPS status** : services, état publié, journaux, derniers rapports.
+3. Workflow **VPS status** (`vps-status.yml`) : services, état publié, journaux, derniers rapports.
 
 Sans GitHub Actions (quota épuisé, compte bloqué…), le même déploiement depuis n'importe quel poste
 disposant d'un accès SSH root au VPS :

@@ -1,0 +1,92 @@
+# Déploiement de Hermes sur le VPS par SSH depuis un runner GitHub.
+# Secrets utilisés (Settings → Secrets and variables → Actions) : VPS_PASSWORD, et pour les modes
+# demo/live OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE ; optionnels HERMES_TELEGRAM_TOKEN/CHAT.
+# Les secrets transitent par l'entrée standard de ssh et ne sont jamais imprimés.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "paper (simulé, sans clé) | demo (compte démo OKX) | live (argent réel)"
+        default: "paper"
+        type: choice
+        options: [paper, demo, live]
+      train:
+        description: "Lancer l'entraînement complet sur le VPS après l'installation (~1 h, en arrière-plan)"
+        type: boolean
+        default: true
+      retire_old:
+        description: "Arrêter les anciens moteurs (okxq Docker, service Node 'hermes') — ne ferme AUCUNE position"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VPS: ${{ vars.VPS_HOST || '178.104.191.79' }}
+      SSHOPTS: -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Outils SSH
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass rsync
+      - name: Authentification
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          [ -n "$SSHPASS" ] || { echo "::error::secret VPS_PASSWORD absent"; exit 1; }
+          sshpass -e ssh $SSHOPTS "root@$VPS" 'echo connecté à $(hostname)'
+      - name: Retirer les anciens moteurs
+        if: ${{ inputs.retire_old }}
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+        run: sshpass -e ssh $SSHOPTS "root@$VPS" bash -s < deploy/retire_old.sh
+      - name: Copier le code
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          sshpass -e ssh $SSHOPTS "root@$VPS" 'mkdir -p /opt/hermes'
+          sshpass -e rsync -az --delete -e "ssh $SSHOPTS" \
+            --exclude .git --exclude data/ --exclude state/ --exclude artifacts/ --exclude reports/auto/ \
+            --exclude .venv/ ./ "root@$VPS:/opt/hermes/"
+      - name: Installer et démarrer
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+          MODE: ${{ inputs.mode }}
+          K1: ${{ secrets.OKX_API_KEY }}
+          K2: ${{ secrets.OKX_API_SECRET }}
+          K3: ${{ secrets.OKX_API_PASSPHRASE }}
+          T1: ${{ secrets.HERMES_TELEGRAM_TOKEN }}
+          T2: ${{ secrets.HERMES_TELEGRAM_CHAT }}
+          D1: ${{ secrets.HERMES_DASHBOARD_TOKEN }}
+        run: |
+          if [ "$MODE" != "paper" ] && { [ -z "$K1" ] || [ -z "$K2" ] || [ -z "$K3" ]; }; then
+            echo "::error::mode $MODE : secrets OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSPHRASE requis"; exit 1
+          fi
+          {
+            [ -n "$K1" ] && printf 'OKX_API_KEY=%s\nOKX_API_SECRET=%s\nOKX_API_PASSPHRASE=%s\n' "$K1" "$K2" "$K3"
+            [ -n "$T1" ] && printf 'HERMES_TELEGRAM_TOKEN=%s\nHERMES_TELEGRAM_CHAT=%s\n' "$T1" "$T2"
+            [ -n "$D1" ] && printf 'HERMES_DASHBOARD_TOKEN=%s\n' "$D1"
+            true
+          } | sshpass -e ssh $SSHOPTS "root@$VPS" "bash /opt/hermes/deploy/install.sh $MODE"
+      - name: Entraînement initial (arrière-plan)
+        if: ${{ inputs.train }}
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          # retrain.sh démarre le moteur du mode choisi dès que le premier champion est installé.
+          sshpass -e ssh $SSHOPTS "root@$VPS" "systemctl start --no-block hermes-retrain.service && echo entraînement lancé"
+      - name: État
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+        run: sshpass -e ssh $SSHOPTS "root@$VPS" bash -s < deploy/status.sh
