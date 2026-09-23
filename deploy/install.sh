@@ -55,6 +55,7 @@ if [ "$MEM_GB" -ge 12 ]; then
   systemctl start hermes-retrain.timer
 else
   systemctl disable --now hermes-retrain.timer 2>/dev/null || true
+  systemctl reset-failed hermes-retrain.service 2>/dev/null || true
   echo "mémoire ${MEM_GB} Go < 12 Go : réentraînement hebdomadaire sur runner GitHub, pas sur ce VPS"
 fi
 

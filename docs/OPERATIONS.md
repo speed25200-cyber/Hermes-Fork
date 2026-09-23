@@ -18,16 +18,25 @@ arrondis, stops) → `live` avec `capital_fraction` 0,25, puis augmentation si l
    restreints à l'IP du VPS) ; optionnel `HERMES_TELEGRAM_TOKEN` + `HERMES_TELEGRAM_CHAT` pour les alertes.
    Variable optionnelle `VPS_HOST` (défaut : l'adresse historique du VPS).
 2. Workflow **Deploy** (`.github/workflows/deploy-vps.yml` ; ce nom de fichier est celui déjà enregistré sur la
-   branche par défaut, condition pour le lancer à la main depuis une autre branche) : choisir le mode, cocher « Lancer l'entraînement » au premier déploiement. Le code
-   est copié dans `/opt/hermes`, installé dans un venv, les services systemd sont posés, l'entraînement
-   tourne en arrière-plan (~1 h) et démarre le moteur dès que le premier modèle existe.
+   branche par défaut, condition pour le lancer à la main depuis une autre branche) : choisir le mode. Le code
+   est copié dans `/opt/hermes`, installé dans un venv, les services systemd sont posés. Le modèle :
+   - `train_on_runner` (par défaut) : la configuration `model_config` (défaut `research_30m_xl_lb_sres`) est
+     entraînée **sur le runner GitHub** (≈ 1 h 30, 16 Go de mémoire), puis le modèle est copié sur le VPS,
+     installé comme champion, et le moteur (re)démarre ;
+   - `model_run` : à la place, installer le modèle d'un run **Research** de ce même dépôt ;
+   - ni l'un ni l'autre : redéploiement du code seul, le champion en place est gardé.
+
+   Le VPS actuel a 2 Go de mémoire : il exécute le moteur, pas l'entraînement (un walk-forward complet en
+   demande bien davantage, et le manque de mémoire tuerait le moteur). Sous 12 Go, `install.sh` n'active pas
+   le réentraînement hebdomadaire local et `retrain.sh` refuse de tourner : on réentraîne en relançant ce
+   workflow.
 3. Workflow **VPS status** (`vps-status.yml`) : services, état publié, journaux, derniers rapports.
 
 Sans GitHub Actions (quota épuisé, compte bloqué…), le même déploiement depuis n'importe quel poste
 disposant d'un accès SSH root au VPS :
 
 ```bash
-VPS=178.104.191.79 MODE=paper TRAIN=1 bash deploy/deploy.sh
+VPS=178.104.191.79 MODE=paper TRAIN=0 bash deploy/deploy.sh   # puis copier un modèle : hermes model install
 # demo / live : exporter d'abord OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE dans le shell
 ```
 
