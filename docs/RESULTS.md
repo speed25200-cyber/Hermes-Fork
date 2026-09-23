@@ -41,6 +41,8 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 | `research_30m_xl_lb_sres_u50_h16` (idem, détention 8 h) — **biaisé, voir § 7** | 30 min | 8 h-48 h (détention 8 h) | 2023-07 → 2026-08 | 0,049* (16,3) | 25,6 % | 7,5 % | (+22,9 %) | (1,50) | (−10 %) | 0,73 | 0,04 | 0,05 | 0,85 | 1,41 | ❌ |
 | **`research_30m_xl_lb_sres`, corrigé** (univers OKX, VWAP, stops 8 σ) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,045* (8,3) | 15,6 % | 6,0 % | **+12,6 %** | **1,10** | **−11 %** | 0,46 | **0,04** | 0,38 | **0,64** | **1,08** | ❌ |
 | `research_30m_xl_lb_sres_u50_h16`, corrigé | 30 min | 8 h-48 h (détention 8 h) | 2023-07 → 2026-08 | 0,051* (16,5) | 18,8 % | 8,5 % | **+12,7 %** | **1,09** | −16 % | 0,44 | 0,08 | **0,08** | **0,55** | **1,02** | ❌ |
+| `research_30m_xl_lb_sres_gate` (garde de régime : taille ×0,5 si BTC < −15 % de son plus haut 90 j) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,045* (8,3) | 13,7 % | 5,0 % | **+10,6 %** | **1,00** | **−10,5 %** | 0,38 | **0,04** | **0,26** | **0,50** | **0,98** | ❌ |
+| `research_30m_xl_lb_sres_v2` (funding 8 h, 300 arbres, poids égaux) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,047* (9,1) | 12,0 % | 6,3 % | +8,4 % | **0,82** | **−12 %** | 0,25 | **0,04** | **0,10** | −0,01 | **0,75** | ❌ |
 
 IC : Spearman transversal à l'horizon de détention, t de Newey-West sur les IC journaliers. En gras : ce
 qui franchit son seuil (drawdown en gras : meilleur que −15 %). * IC mesuré contre la cible nette des
@@ -320,7 +322,30 @@ Lecture : quand les gros comptes d'un contrat sont inhabituellement acheteurs, i
 bêta et styles), **et cela a tenu en 2026**, là où les variations d'intérêt ouvert se sont retournées comme la
 partie lente du modèle. Avec 17 variables testées, un t de −3,5 garde une p corrigée (Bonferroni) d'environ 0,01.
 Les deux variables sélectionnées sur 2023-2025 entrent dans le modèle (lues une bougie en retard, z-score sur
-28 jours pour être reproductibles avec les 30 jours que sert l'API en direct) : essai
-`research_30m_xl_lb_sres_pos`.
+28 jours pour être reproductibles avec les 30 jours que sert l'API en direct), ainsi que le rang transversal
+de l'écart (la forme exacte testée ci-dessus) : essai `research_30m_xl_lb_sres_pos`.
+
+## 12. Essais du 23 septembre : ni V1 ni V2 ne font mieux
+
+| | `sres` corrigé (papier) | V1 : garde de régime | V2 : funding 8 h, 300 arbres, poids égaux |
+|---|---:|---:|---:|
+| IC (t) | 0,045 (8,3) | 0,045 (8,3) | 0,047 (9,1) |
+| Sharpe net / CAGR | **1,10** / **+12,6 %** | 1,00 / +10,6 % | 0,82 / +8,4 % |
+| Drawdown max | −11,0 % | **−10,5 %** | −12,3 % |
+| 2023 / 2024 / 2025 / 2026 | +0,6 / +12,4 / +36,7 / −6,8 % | −1,5 / +15,2 / +24,4 / **−3,2 %** | +1,3 / +9,9 / +25,9 / −8,3 % |
+| DSR / PBO / coûts ×2 / stops au pire | 0,46 / 0,38 / 0,64 / 0,39 | 0,38 / **0,26** / 0,50 / 0,28 | 0,25 / **0,10** / −0,01 / — |
+| Critères franchis | 7 sur 9 | 7 sur 9 (PBO oui, années positives non) | 6 sur 9 |
+
+**V1** fait ce que le diagnostic annonçait sur 2026 (perte divisée par deux, estimation préalable −3,5 %) et
+rend le choix de réglage plus stable, mais coûte davantage dans les années porteuses (2025 : +24 % au lieu de
++37 %) et fait passer 2023 sous zéro : le Sharpe baisse. La variable ayant été choisie après examen des
+données, ce résultat est de plus une borne haute. **Pas d'amélioration nette : le modèle en papier reste
+`sres`**, sans garde ; la garde reste disponible (`portfolio.regime_gate_*`).
+
+L'hygiène d'ajustement relève à peine l'IC et rend le choix de réglage plus stable (PBO 0,10), mais le livre
+gagne moins et 2026 reste négatif (IC réalisé −0,023) : l'hypothèse « du bruit dans l'ajustement explique
+2026 » est écartée. Le passage de `to_funding` aux variables par contrat retire aussi cette variable du
+modèle de direction du marché (un quatrième changement, sans effet sur la porte). En cours : le
+positionnement des gros comptes (`sres_pos`).
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.

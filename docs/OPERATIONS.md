@@ -61,12 +61,27 @@ une durée de cycle supérieure à la bougie est journalisée.
 
 ## Tableau de bord
 
-Lecture seule, processus séparé du moteur. Si le secret `HERMES_DASHBOARD_TOKEN` est défini, il est servi
-sur `http://<vps>:8899/?token=<jeton>` (puis un cookie de session ; port ouvert dans ufw s'il est actif) ; sinon
-il n'écoute que localement (`ssh -L 8899:127.0.0.1:8899 root@<vps>` puis `hermes live dashboard`). Les anciens
-systèmes du VPS (okxq, ancien moteur Node) s'effacent avec l'option `retire_old` du déploiement. Il affiche équité, expositions,
-IC estimé, drawdown, part maker, positions, état du risque et événements, ainsi que deux contrôles de
-qualité :
+Lecture seule, processus séparé du moteur : il ne peut passer, modifier ni annuler aucun ordre. Si le secret
+`HERMES_DASHBOARD_TOKEN` est défini, il est servi sur `http://<vps>:8899/?token=<jeton>` : le jeton devient un
+cookie HttpOnly et disparaît aussitôt de la barre d'adresse (port ouvert dans ufw s'il est actif) ; sinon il
+n'écoute que localement (`ssh -L 8899:127.0.0.1:8899 root@<vps>` puis `hermes live dashboard`). Un seul service
+sert tous les modes (onglets **Papier** et **Réel**, **Démo OKX** s'il a tourné) en lisant la racine des états.
+Les anciens systèmes du VPS (okxq, ancien moteur Node) s'effacent avec l'option `retire_old` du déploiement.
+
+Sections : **Terminal** (indicateurs clés, graphique des prix TradingView Lightweight Charts avec ouvertures,
+sorties et stops de chaque position, lignes d'entrée et de stop, positions longues et courtes, équité face au
+cône de la recherche, composition du livre, exécutions, événements), **Positions** (entrée, prix, P&L latent,
+stop et distance, score, cible, ancienneté), **Historique** (positions fermées reconstruites des exécutions :
+P&L net, rendement, durée, sortie par rééquilibrage ou stop ; statistiques ; exécutions), **Signaux**
+(classement du modèle, poids visés, IC réalisé), **Risque** (limites face aux seuils, garde-fous, drawdown,
+exposition, stops), **Modèle** (modèle en service, porte de promotion critère par critère, contrôles
+pré-enregistrés), **Système** (chaîne de décision, compte, notes), **Journal**. La stratégie ne pose pas de
+take-profit : les sorties se font par rééquilibrage ; le stop affiché est le stop catastrophe réellement posé.
+Les bougies viennent de l'API publique Binance (mises en cache 15 s). Démonstration sur un marché
+synthétique, sans réseau : `python scripts/dashboard_demo.py build /tmp/demo` puis
+`python scripts/dashboard_demo.py serve /tmp/demo`.
+
+Il affiche aussi deux contrôles de qualité :
 
 - **écart d'exécution** (implementation shortfall) : prix obtenu contre le prix de décision (clôture Binance
   de la bougie), pondéré par le notionnel, en points de base, frais exclus ; il inclut la base Binance/OKX.

@@ -18,6 +18,7 @@ explicitly set ``live.allow_unpromoted``.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import asdict, dataclass, field
@@ -32,7 +33,7 @@ from hermes.data.live_feed import BinanceLiveFeed, DailyHistory
 from hermes.data.panel import BAR_TO_OFFSET, Panel
 from hermes.data.universe import is_excluded, universe_mask
 from hermes.data.venue import OkxListing
-from hermes.execution.broker import Broker, PaperBroker
+from hermes.execution.broker import Broker, Fill, PaperBroker, Position
 from hermes.execution.okx.instruments import okx_inst_id
 from hermes.features.library import build_features
 from hermes.labels.targets import build_targets
@@ -161,6 +162,9 @@ class LiveEngine:
         self._model_mtime = self._bundle_mtime()
         self._cache: dict[str, pd.DataFrame] = {}
         self._drift_rows: list[tuple[pd.Timestamp, np.ndarray]] = []
+        self.clock = lambda: pd.Timestamp.now(tz="UTC")  # replaced in tests and demonstrations
+        self.last_cycle_s: float | None = None
+        self._closed_now: set[str] = set()  # contracts closed this cycle before the rebalance (stops)
 
     def _set_config(self, cfg: HermesConfig) -> None:
         self.cfg = cfg
@@ -185,30 +189,33 @@ class LiveEngine:
         try:
             new = ModelBundle.load(self.model_dir)
         except (OSError, ValueError) as exc:
-            self.store.event("ERROR", f"new bundle rejected: {exc}")
+            self.store.event("ERROR", f"nouveau modèle refusé : {exc}")
             self._model_mtime = m
             return False
         if self.mode == "live" and not new.promoted and not self.cfg.live.allow_unpromoted:
             if new.meta.get("config_hash") != self.bundle.meta.get("config_hash"):
-                self.store.event("WARNING", "new bundle not promoted: kept the current one for live trading")
+                self.store.event("WARNING", "nouveau modèle non promu : le modèle actuel reste en service en réel")
                 self._model_mtime = m
                 return False
             # Same strategy re-evaluated on more data and now failing the gate: a demotion. The engine takes
             # it, and decide() then flattens the book (live trading refuses an unpromoted bundle).
-            self.store.event("ERROR", "champion demoted by its latest evaluation: live book will be flattened")
+            self.store.event("ERROR", "modèle rétrogradé par sa dernière évaluation : le livre réel sera fermé")
         operator = self.operator_cfg or self.cfg
         new_cfg = live_config(new.config, operator, self.overrides)
         old = self.cfg.data
         if (new_cfg.data.bar, new_cfg.data.intrabar) != (old.bar, old.intrabar) or live_history_bars(
             new_cfg
         ) > live_history_bars(self.cfg):
-            self.store.event("WARNING", "new bundle needs another data feed: restarting the engine")
+            self.store.event("WARNING", "le nouveau modèle demande un autre flux de données : redémarrage du moteur")
             raise SystemExit(3)
         self.bundle, self._model_mtime = new, m
         self._set_config(new_cfg)
+        set_pos = getattr(self.feed, "set_positioning", None)
+        if set_pos is not None:  # a champion that reads other positioning data needs them from the next cycle
+            set_pos(new_cfg.features.positioning if new_cfg.data.include_metrics else ())
         self.overlay.cfg = new_cfg.risk
         self.store.event(
-            "INFO", f"bundle reloaded ({new.meta.get('config_hash')}, trained to {new.meta.get('train_end')})"
+            "INFO", f"modèle rechargé ({new.meta.get('config_hash')}, entraîné jusqu'au {new.meta.get('train_end')})"
         )
         return True
 
@@ -264,7 +271,7 @@ class LiveEngine:
 
     def okx_swaps(self) -> set[str]:
         """OKX crypto USDT swaps live today (instrument list cached per day; snapshot if OKX is unreachable)."""
-        today = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
+        today = self.clock().strftime("%Y-%m-%d")
         if self._venue is None or self._venue[0] != today:
             cat = OkxListing(Path(self.cfg.live.state_dir)).catalog()
             self._venue = (today, {inst for inst, (category, _, live) in cat.items() if category == "1" and live})
@@ -277,7 +284,7 @@ class LiveEngine:
     async def refresh_candidates(self, held: list[str]) -> list[str]:
         """Today's candidates (cached per UTC day) plus anything held. Every symbol the engine may trade is
         (re-)registered with the broker on each call: after a restart the broker's contract map starts empty."""
-        today = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
+        today = self.clock().strftime("%Y-%m-%d")
         if self.feed is not None and (self.candidates_day != today or not self.candidates):
             n = self.n_candidates()
             top = await self.feed.top_symbols(n * 2)
@@ -314,7 +321,7 @@ class LiveEngine:
         d.risk["psi_drifted"] = float(len(drifted))
         if len(drifted) > 0.1 * len(values):
             worst = ", ".join(k for _, k in drifted[::-1][:3])
-            d.notes.append(f"feature drift vs training: {len(drifted)} features with PSI > 0.25 ({worst})")
+            d.notes.append(f"dérive des variables face à l'entraînement : {len(drifted)} avec un PSI > 0,25 ({worst})")
 
     # -- score / realised-IC memory: in RAM, backed by the state store for restarts ----------------------------
     def _memory(self, name: str, ts: pd.Timestamp) -> pd.DataFrame:
@@ -557,10 +564,10 @@ class LiveEngine:
         target = book.weights
         if stale:
             target = RiskOverlay.restrict_to_reductions(target, pos_w[idx])
-            d.notes.append("stale data: reductions only")
+            d.notes.append("données périmées : réductions seulement")
         if self.mode == "live" and not self.bundle.promoted and not cfg.live.allow_unpromoted:
             target = np.zeros_like(target)
-            d.notes.append("bundle not promoted: live trading refused, book flattened")
+            d.notes.append("modèle non promu : trading réel refusé, livre fermé")
         self.overlay.observe(ts, nav)
         w, info = self.overlay.apply(
             ts, nav, target, pos_w[idx], book.cov_bar, self.bpd, self._daily_returns(panel, daily, ts, idx)
@@ -576,11 +583,11 @@ class LiveEngine:
                 d.targets[syms[i]] = float(w[j] * capital)
         for i in np.nonzero(frozen)[0]:
             d.hold.append(syms[i])
-            d.notes.append(f"{syms[i]}: missing data this bar, position left unchanged")
+            d.notes.append(f"{syms[i]} : données manquantes à cette bougie, position laissée telle quelle")
         for s, v in positions_notional.items():
             if s not in syms and v != 0:
                 d.hold.append(s)
-                d.notes.append(f"{s}: not in the data feed, position left unchanged")
+                d.notes.append(f"{s} : absent du flux de données, position laissée telle quelle")
         self._save_risk_state()
         return d
 
@@ -598,29 +605,51 @@ class LiveEngine:
         positions = await self.broker.positions()
         if positions:
             rep = await self.broker.rebalance({}, urgent=True)
-            self.store.add_fills(rep.fills)
+            self.store.add_fills(rep.fills, "flatten", getattr(self.broker, "price_to_model", None))
             for e in rep.errors:
                 self.store.event("ERROR", e)
             await self.broker.protect({})
+        equity = await self.broker.equity()
+        left = await self.broker.positions()
+        prev = self._read_status()
         self.store.write_status(
             {
+                **{k: prev[k] for k in ("bar", "capital_fraction", "ic_est", "execution", "n_members") if k in prev},
                 "mode": self.mode,
-                "updated": pd.Timestamp.now(tz="UTC").isoformat(),
+                "updated": self.clock().isoformat(),
                 "halted": True,
                 "halt_reason": reason,
-                "equity": await self.broker.equity(),
-                "risk": {"halted": 1.0},
+                "equity": equity,
+                "gross": 0.0 if not left else prev.get("gross"),
+                "net": 0.0 if not left else prev.get("net"),
+                "risk": {
+                    **(prev.get("risk") or {}),
+                    "halted": 1.0,
+                    "drawdown": round(self.overlay.drawdown(self.strategy_nav(equity)), 5),
+                },
                 "notes": [f"ARRÊT : {reason}"],
-                "positions": {s: round(p.notional, 2) for s, p in (await self.broker.positions()).items()},
+                "positions": {s: round(p.notional, 2) for s, p in left.items()},
+                "positions_detail": await self._positions_detail(
+                    left,
+                    Decision("", equity, False, 0, 0.0),
+                    max(equity * self.cfg.live.capital_fraction, 1e-9),
+                    self.clock(),
+                )
+                if left
+                else [],
+                "bundle": self._bundle_summary(),
+                "risk_limits": self._risk_limits(),
+                "account": self._account(equity),
+                "strategy": self._strategy_summary(),
             }
         )
 
     async def guard(self) -> bool:
         """Risk checks that must not depend on the market-data feed or the model: kill switch and the
         drawdown halt. Returns True (after flattening) when the engine must not trade this bar."""
-        ts = BinanceLiveFeed.last_closed_bar(self.cfg.data.bar)
+        ts = BinanceLiveFeed.last_closed_bar(self.cfg.data.bar, self.clock())
         if self.overlay.kill_requested() and not self.overlay.state.halted:
-            self.overlay.halt(ts, "kill switch file present")
+            self.overlay.halt(ts, "interrupteur d'urgence posé")
         if not self.overlay.state.halted:
             nav = self.strategy_nav(await self.broker.equity())
             self.overlay.observe(ts, nav)
@@ -639,22 +668,24 @@ class LiveEngine:
         every = self.cfg.portfolio.rebalance_every
         decision_bar = True
         if every > 1:
-            last = BinanceLiveFeed.last_closed_bar(self.cfg.data.bar)
+            last = BinanceLiveFeed.last_closed_bar(self.cfg.data.bar, self.clock())
             bar = pd.Timedelta(BAR_TO_OFFSET[self.cfg.data.bar])
             decision_bar = bool(is_rebalance_bar(pd.DatetimeIndex([last]), bar, every)[0])
         positions = await self.broker.positions()
+        self._reconcile_external(positions)
         symbols = await self.refresh_candidates(list(positions))
         # Market data must arrive within the bar; otherwise the cycle fails and the guard runs again.
         budget = 0.6 * self.cfg.bar_minutes * 60.0
         panel = await asyncio.wait_for(self.feed.update(symbols), timeout=budget)
         daily = await asyncio.wait_for(self.feed.daily(symbols), timeout=budget)
-        now = pd.Timestamp.now(tz="UTC")
+        now = self.clock()
         if isinstance(self.broker, PaperBroker):
             last = {f: panel[f].iloc[-1].dropna().to_dict() for f in ("open", "high", "low", "close")}
             stopped = self.broker.check_stops(last["high"], last["low"], last["open"])  # before the new marks
             if stopped:
-                self.store.add_fills(stopped)
-                self.store.event("WARNING", f"paper stops triggered: {', '.join(f.symbol for f in stopped)}")
+                self.store.add_fills(stopped, "stop")
+                self._closed_now.update(f.symbol for f in stopped)
+                self.store.event("WARNING", f"stops déclenchés (papier) : {', '.join(f.symbol for f in stopped)}")
             self.broker.set_prices(last["close"])
             self._accrue_paper_funding(panel)
         equity = await self.broker.equity()
@@ -664,14 +695,14 @@ class LiveEngine:
         if not decision_bar:
             # Scores, realised IC and the smoothed signal are updated every bar, as in research; the book only
             # moves on the clock-aligned decision grid (portfolio.rebalance_every).
-            d.notes.append("scoring bar: no trade (portfolio.rebalance_every)")
+            d.notes.append("bougie de notation : pas d'échange (portfolio.rebalance_every)")
             return d
         if d.stale:
             await alert(f"données périmées ({d.ts}) : aucune nouvelle prise de risque", "WARNING")
         urgent = self.overlay.state.halted
         self._remember_traded([s for s, v in d.targets.items() if v != 0])
         rep = await self.broker.rebalance(d.targets, urgent=urgent, hold=set(d.hold))
-        self.store.add_fills(rep.fills)
+        self.store.add_fills(rep.fills, "flatten" if urgent else "trade", getattr(self.broker, "price_to_model", None))
         for e in rep.errors:
             self.store.event("ERROR", e)
         shortfall = self._shortfall_bps(rep.fills, panel["close"].iloc[-1])
@@ -718,15 +749,15 @@ class LiveEngine:
                 "shortfall_bps": round(shortfall, 2) if np.isfinite(shortfall) else None,
                 "errors": rep.errors[:10],
             },
-            "bundle": {k: self.bundle.meta.get(k) for k in ("config_hash", "train_end", "promoted", "research")},
-            "risk_limits": {
-                "drawdown_soft": self.cfg.risk.drawdown_soft,
-                "drawdown_hard": self.cfg.risk.drawdown_hard,
-                "daily_loss_limit": self.cfg.risk.daily_loss_limit,
-                "gross_max": self.cfg.portfolio.gross_max,
-            },
+            "bundle": self._bundle_summary(),
+            "risk_limits": self._risk_limits(),
             "halted": self.overlay.state.halted,
             "halt_reason": self.overlay.state.halt_reason,
+            "positions_detail": await self._positions_detail(pos_after, d, capital_after, now),
+            "account": self._account(equity_after),
+            "strategy": self._strategy_summary(),
+            "n_members": d.n_members,
+            "cycle_s": self.last_cycle_s,
         }
         self.store.write_status(status)
         if self.overlay.state.halted:
@@ -749,6 +780,166 @@ class LiveEngine:
             100 * rep.maker_share,
         )
         return d
+
+    def _reconcile_external(self, positions: dict[str, Position]) -> None:
+        """Record what changed on the exchange since the engine's last cycle without going through it (an
+        exchange-side catastrophe stop, a liquidation, a manual trade), so the trade history stays whole. The
+        paper broker records its own stops; on OKX the size change is known, its price only approximately (the
+        stop's trigger when one was placed and the position is gone, else the current mark), fees unknown."""
+        self._closed_now = set()
+        if isinstance(self.broker, PaperBroker):
+            return
+        prev = self.store.get("book_after") or {}
+        if not isinstance(prev, dict):
+            return
+        conv = getattr(self.broker, "price_to_model", None) or (lambda _s, px: px)
+        fills = []
+        for s, rec in prev.items():
+            try:
+                c0, n0, px0, stop = (float(x) if x is not None else None for x in rec)  # type: ignore[union-attr]
+            except (TypeError, ValueError):
+                continue
+            if not c0:
+                continue
+            p = positions.get(s)
+            c1 = p.contracts if p is not None else 0.0
+            if abs(c1 - c0) <= 1e-9 * max(1.0, abs(c0)):
+                continue
+            gone = c1 == 0.0 or np.sign(c1) != np.sign(c0)
+            px = stop if gone and stop else (float(conv(s, p.mark_px)) if p is not None else px0)
+            if not px:
+                continue
+            dq = (0.0 if gone else c1) - c0  # the part closed outside the engine (a flip counts as a close)
+            notional = abs(dq / c0) * abs(n0) * px / px0 if px0 else abs(n0)  # type: ignore[operator]
+            kind = "stop" if gone and stop else "external"
+            fills.append(Fill(s, "buy" if dq > 0 else "sell", dq, px, 0.0, False, notional=notional))
+            self.store.event(
+                "WARNING", f"{s} : position modifiée hors du moteur ({'stop' if kind == 'stop' else 'externe'})"
+            )
+            if gone:
+                self._closed_now.add(s)
+            self.store.add_fills(fills[-1:], kind)
+
+    def _save_book(self, positions: dict[str, Position], stops: dict[str, float]) -> None:
+        conv = getattr(self.broker, "price_to_model", None) or (lambda _s, px: px)
+        self.store.put(
+            "book_after",
+            {s: [p.contracts, p.notional, float(conv(s, p.mark_px)), stops.get(s)] for s, p in positions.items()},
+        )
+
+    async def _positions_detail(
+        self, positions: dict[str, Position], d: Decision, capital: float, now: pd.Timestamp
+    ) -> list[dict[str, object]]:
+        """Open positions as the dashboard shows them: prices in the model's (Binance) units, the catastrophe
+        stop's trigger, unrealised P&L at mark, and when the position was opened (kept while its side is)."""
+        try:
+            stops = await self.broker.stop_levels()
+        except Exception as exc:  # the positions are still worth showing
+            log.warning("stop levels unavailable: %s", exc)
+            stops = {}
+        conv = getattr(self.broker, "price_to_model", None) or (lambda _s, px: px)
+        self._save_book(positions, stops)
+        prev = self.store.get("opened", {}) or {}
+        opened: dict[str, list[object]] = {}
+        out = []
+        for s, p in sorted(positions.items(), key=lambda kv: -abs(kv[1].notional)):
+            if not p.notional:
+                continue
+            side = 1 if p.notional > 0 else -1
+            # Closed earlier in this cycle (a stop) and reopened by the rebalance: a new position.
+            old = prev.get(s) if isinstance(prev, dict) and s not in self._closed_now else None
+            opened[s] = old if isinstance(old, list) and len(old) == 2 and old[0] == side else [side, now.isoformat()]
+            entry, mark = float(conv(s, p.avg_px)), float(conv(s, p.mark_px))
+            stop = stops.get(s)
+            out.append(
+                {
+                    "symbol": s,
+                    "side": "long" if side > 0 else "short",
+                    "notional": round(p.notional, 2),
+                    "weight": round(p.notional / capital, 5) if capital > 0 else None,
+                    "entry": entry,
+                    "mark": mark,
+                    "upnl": round(p.notional * (1.0 - entry / mark), 2) if entry > 0 and mark > 0 else None,
+                    "upnl_pct": round(side * (mark / entry - 1.0), 5) if entry > 0 and mark > 0 else None,
+                    "stop": stop,
+                    "stop_dist": round(side * (mark - stop) / mark, 5) if stop and mark > 0 else None,
+                    "score": d.scores.get(s),
+                    "target": round(d.targets.get(s, 0.0), 2),
+                    "opened": opened[s][1],
+                }
+            )
+        self.store.put("opened", opened)
+        return out
+
+    def _bundle_summary(self) -> dict[str, object]:
+        keys = ("config_hash", "train_start", "train_end", "promoted", "research", "gate", "cost_scale")
+        return {k: self.bundle.meta.get(k) for k in keys} | {"prior_ic": self.bundle.prior_ic}
+
+    def _risk_limits(self) -> dict[str, float]:
+        return {
+            "drawdown_soft": self.cfg.risk.drawdown_soft,
+            "drawdown_hard": self.cfg.risk.drawdown_hard,
+            "daily_loss_limit": self.cfg.risk.daily_loss_limit,
+            "gross_max": self.cfg.portfolio.gross_max,
+        }
+
+    def _read_status(self) -> dict[str, object]:
+        try:
+            out = json.loads((self.store.dir / "status.json").read_text())
+            return out if isinstance(out, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _account(self, equity: float) -> dict[str, object]:
+        if isinstance(self.broker, PaperBroker):
+            return {
+                "equity": equity,
+                "initial": self.cfg.live.paper_initial_equity,
+                "cash": self.broker.cash,
+                "fees_paid": self.broker.fees_paid,
+                "funding_paid": self.broker.funding_paid,
+            }
+        return {"equity": equity}
+
+    def _strategy_summary(self) -> dict[str, object]:
+        """The validated strategy's settings, as the dashboard documents them."""
+        c = self.cfg
+        pc, rc, u = c.portfolio, c.risk, c.data.universe
+        return {
+            "name": (self.bundle.meta.get("research") or {}).get("name")
+            if isinstance(self.bundle.meta.get("research"), dict)
+            else None,
+            "bar": c.data.bar,
+            "holding_bars": pc.holding_horizon,
+            "horizons": list(c.labels.horizons),
+            "target": c.labels.residualize,
+            "universe_top_n": u.top_n,
+            "venue": u.venue,
+            "vol_target": pc.vol_target_annual,
+            "gross_max": pc.gross_max,
+            "net_max": pc.net_max,
+            "weight_max": pc.weight_max,
+            "beta_neutral": pc.beta_neutral,
+            "style_neutral": pc.style_neutral,
+            "cost_aversion": pc.cost_aversion,
+            "signal_halflife": pc.signal_halflife,
+            "rebalance_every": pc.rebalance_every,
+            "ensemble": c.model.ensemble,
+            "stop_sigmas": rc.stop_loss_daily_sigmas,
+            "daily_loss_limit": rc.daily_loss_limit,
+            "drawdown_soft": rc.drawdown_soft,
+            "drawdown_hard": rc.drawdown_hard,
+            "es_limit_daily": rc.es_limit_daily,
+            "max_positions": rc.max_positions,
+            "capital_fraction": c.live.capital_fraction,
+            "regime_gate": {
+                "drawdown": pc.regime_gate_drawdown,
+                "lookback_days": pc.regime_gate_lookback_days,
+                "scale": pc.regime_gate_scale,
+            },
+            "positioning": list(c.features.positioning) if c.data.include_metrics else [],
+            "funding_per_8h": c.features.funding_per_8h,
+        }
 
     def _shortfall_bps(self, fills: list, ref: pd.Series) -> float:  # type: ignore[type-arg]
         """Implementation shortfall of this bar's fills against the decision price (the Binance close the
@@ -799,7 +990,7 @@ class LiveEngine:
             except SystemExit:
                 raise
             except Exception as exc:
-                self.store.event("ERROR", f"cycle failed: {exc!r}")
+                self.store.event("ERROR", f"cycle en échec : {exc!r}")
                 await alert(f"cycle en échec : {exc!r}", "ERROR")
                 log.exception("cycle failed")
                 # The kill switch and the drawdown halt still act when the data or model path is broken.
@@ -808,6 +999,7 @@ class LiveEngine:
                 except Exception:  # the broker itself may be down: nothing more to do this bar
                     log.exception("risk guard failed")
             elapsed = time.time() - t0
+            self.last_cycle_s = round(elapsed, 2)
             log.info("cycle took %.1fs", elapsed)
             if elapsed > bar.total_seconds():
-                self.store.event("WARNING", f"cycle took {elapsed:.0f}s, longer than one bar")
+                self.store.event("WARNING", f"cycle de {elapsed:.0f} s, plus long qu'une bougie")

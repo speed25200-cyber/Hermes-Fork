@@ -310,7 +310,9 @@ def build_features(panel: Panel, mask: pd.DataFrame, cfg: FeatureConfig) -> Feat
     # Positioning (Binance "metrics": open interest, long/short ratios). Read one bar late: the live API publishes
     # a snapshot some time after it is taken. Z-scores over at most 28 days: the live API serves 30.
     def positioning(name: str) -> pd.DataFrame | None:
-        if name not in panel or not panel[name].notna().any().any():
+        # A column present but empty (a failed live fetch) still yields the features, as NaN: the model's
+        # feature set never changes with the data's availability.
+        if name not in panel:
             return None
         x = panel[name].astype("float64")
         return x.where(x > 0).ffill(limit=4).shift(1)

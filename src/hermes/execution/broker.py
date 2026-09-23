@@ -75,6 +75,8 @@ class Broker(Protocol):
 
     async def protect(self, stop_fraction: dict[str, float]) -> None: ...
 
+    async def stop_levels(self) -> dict[str, float]: ...
+
     async def flatten(self) -> ExecutionReport: ...
 
     async def heartbeat(self) -> None: ...
@@ -235,6 +237,10 @@ class PaperBroker:
             side = float(np.sign(q))
             self.stops[sym] = (side, px * (1.0 - side * stop_fraction.get(sym, 0.15)))
         self._save()
+
+    async def stop_levels(self) -> dict[str, float]:
+        """Trigger price of each position's catastrophe stop."""
+        return {s: level for s, (_side, level) in self.stops.items() if self.qty.get(s)}
 
     def check_stops(self, high: dict[str, float], low: dict[str, float], open_: dict[str, float]) -> list[Fill]:
         """Trigger the stops on the last closed bar's range (a gap through the level fills at the open), exit at

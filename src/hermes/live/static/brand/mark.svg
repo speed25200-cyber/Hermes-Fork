@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Hermes">
+  <title>Hermes</title>
+  <defs>
+    <linearGradient id="hermes-gold" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f3dfae"/><stop offset="0.42" stop-color="#dcbb7a"/><stop offset="0.7" stop-color="#c79d57"/><stop offset="1" stop-color="#9c7632"/></linearGradient>
+  </defs>
+  <path fill="url(#hermes-gold)" d="M8 4 20 11 20 16 8 9ZM44 11 56 4 56 9 44 16ZM8 12 20 19 20 33 56 12 56 60 44 60 44 31 20 45 20 60 8 60Z"/>
+</svg>

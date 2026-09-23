@@ -36,6 +36,11 @@ POSITIONING = {
 }
 POSITIONING_FIELDS = {"ls_top": "ls_top", "ls_account": "ls_account", "oi": "oi_value"}
 POSITIONING_DAYS = 29.5  # within the 30 days served
+SNAPSHOT_MS = 300_000
+# The API stamps a snapshot 5 minutes after the archives' create_time for the same values (measured on BTC, ETH,
+# SOL: 100 % of rows match at +5 min, 2-16 % at +0).
+API_STAMP_LAG_MS = 300_000
+POSITIONING_RPM = 150  # /futures/data allows 1000 requests per 5 minutes and IP
 
 
 def kline_weight(limit: int) -> int:
@@ -71,6 +76,8 @@ class BinanceLiveFeed:
         self.bar = bar
         self.positioning = [POSITIONING_FIELDS[p] for p in positioning]
         self.pos: dict[str, pd.DataFrame] = {}
+        self._pos_calls: list[float] = []
+        self._pos_sem = asyncio.Semaphore(1)  # one /futures/data request at a time: the rate limit is shared
         self.history_bars = history_bars
         self.intrabar_minutes = intrabar_minutes if BAR_MINUTES[bar] > 1 else 0
         self.http = client or httpx.AsyncClient(base_url=FAPI, timeout=15.0)
@@ -163,7 +170,19 @@ class BinanceLiveFeed:
         return pd.DataFrame({"premium": a[:, 4]}, index=idx)
 
     async def _funding(self, symbol: str, start_ms: int) -> pd.Series:
-        rows = await self._get("/fapi/v1/fundingRate", {"symbol": symbol, "startTime": start_ms, "limit": 1000})
+        """Every settlement since ``start_ms``, in pages of 1000 (a contract settling hourly has 1600+ in the
+        history window)."""
+        rows: list = []  # type: ignore[type-arg]
+        s = start_ms
+        for _ in range(20):
+            page = await self._get("/fapi/v1/fundingRate", {"symbol": symbol, "startTime": s, "limit": 1000})
+            if not page:
+                break
+            rows += page
+            last = max(int(r["fundingTime"]) for r in page)
+            if len(page) < 1000 or last < s:
+                break
+            s = last + 1
         if not rows:
             return pd.Series(dtype=float)
         ts = pd.to_datetime([int(r["fundingTime"]) for r in rows], unit="ms", utc=True).round("1min")
@@ -277,26 +296,42 @@ class BinanceLiveFeed:
             )
         self.frames[symbol] = merged.iloc[-self.history_bars :]
 
+    async def _pos_rate(self) -> None:
+        """Client-side budget of the /futures/data endpoints (their own per-IP request limit)."""
+        now = time.time()
+        self._pos_calls = [t for t in self._pos_calls if now - t < 60.0]
+        if len(self._pos_calls) >= POSITIONING_RPM:
+            await asyncio.sleep(60.0 - (now - self._pos_calls[0]) + 0.05)
+        self._pos_calls.append(time.time())
+
     async def _snapshots(self, field: str, symbol: str, start_ms: int) -> pd.Series:
-        """5-minute positioning snapshots from ``start_ms`` (pages of 500)."""
+        """5-minute positioning snapshots from ``start_ms``, indexed by the archives' create_time.
+
+        Binance answers a range of more than 500 snapshots with the *latest* 500, so the history is read in
+        bounded windows of 500 (startTime and endTime), advancing by the window whatever a page holds."""
         path, key = POSITIONING[field]
         now_ms = int(time.time() * 1000)
         values: dict[int, float] = {}
-        s = start_ms
-        while s < now_ms - 300_000:
-            rows = await self._get(path, {"symbol": symbol, "period": "5m", "limit": 500, "startTime": s})
-            if not rows:
-                break
-            for r in rows:
-                values[int(r["timestamp"])] = float(r[key])
-            last = max(int(r["timestamp"]) for r in rows)
-            if len(rows) < 500 or last < s:
-                break
-            s = last + 300_000
+        s = max(start_ms, now_ms - int(POSITIONING_DAYS * 86_400_000))  # older than 30 days: refused
+        while s <= now_ms:
+            e = min(s + 499 * SNAPSHOT_MS, now_ms)
+            async with self._pos_sem:
+                await self._pos_rate()
+                rows = await self._get(
+                    path, {"symbol": symbol, "period": "5m", "limit": 500, "startTime": s, "endTime": e}
+                )
+            for r in rows or []:
+                values[int(r["timestamp"]) - API_STAMP_LAG_MS] = float(r[key])
+            s = e + SNAPSHOT_MS
         if not values:
             return pd.Series(dtype=float)
         idx = pd.to_datetime(list(values), unit="ms", utc=True)
         return pd.Series(list(values.values()), index=idx).sort_index()
+
+    def set_positioning(self, families: tuple[str, ...] | list[str]) -> None:
+        """Follow a new champion's positioning families (hot reload)."""
+        self.positioning = [POSITIONING_FIELDS[p] for p in families]
+        self.pos = {}
 
     async def _refresh_positioning(self, symbol: str) -> None:
         now_ms = int(time.time() * 1000)
@@ -305,7 +340,7 @@ class BinanceLiveFeed:
         for field in self.positioning:
             old = have[field].dropna() if have is not None and field in have else pd.Series(dtype=float)
             start = (
-                int(old.index[-1].value // 1_000_000) - 600_000
+                int(old.index[-1].value // 1_000_000) - 2 * SNAPSHOT_MS
                 if len(old)
                 else now_ms - int(POSITIONING_DAYS * 86_400_000)
             )

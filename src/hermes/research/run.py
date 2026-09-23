@@ -255,6 +255,11 @@ def run_research(
                 },
                 "cost_scale": float(persist.iloc[-1]) if len(persist) else 1.0,
                 "market_promoted": bool(ev.tests.get("market_promoted", 0.0)),
+                # Each promotion criterion (value, threshold, passed), in plain JSON types, for the dashboard.
+                "gate": {
+                    k: {kk: bool(vv) if isinstance(vv, (bool, np.bool_)) else float(vv) for kk, vv in g.items()}
+                    for k, g in ev.gate.items()
+                },
             }
         )
         bundle.save(out / "model")

@@ -12,7 +12,8 @@ Environment=HERMES_DASHBOARD_PORT=8899
 EnvironmentFile=/etc/hermes/hermes.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 # Écoute publique seulement si HERMES_DASHBOARD_TOKEN est défini (sinon le service refuse de démarrer).
-ExecStart=/opt/hermes/.venv/bin/hermes live dashboard --state state/%i --host 0.0.0.0 --port ${HERMES_DASHBOARD_PORT}
+# Un seul tableau de bord pour tous les modes (onglets papier / démo / réel) : il lit la racine des états.
+ExecStart=/opt/hermes/.venv/bin/hermes live dashboard --state state --host 0.0.0.0 --port ${HERMES_DASHBOARD_PORT}
 Restart=always
 RestartSec=10
 NoNewPrivileges=true

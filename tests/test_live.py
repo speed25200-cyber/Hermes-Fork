@@ -68,7 +68,7 @@ def test_live_refuses_unpromoted_bundle_in_live_mode(cfg_small, tmp_path):
     )
     d = eng.decide(panel.iloc(slice(96 * 10, 96 * 50)), {}, 10_000.0)
     assert all(v == 0 for v in d.targets.values())
-    assert any("not promoted" in n for n in d.notes)
+    assert any("non promu" in n for n in d.notes)
 
 
 class FakeFeed:
@@ -253,7 +253,7 @@ def test_drift_warning_and_implementation_shortfall(cfg_small, tmp_path):
     for k in range(40):
         x = np.column_stack([r.normal(size=30), r.normal(2.0, 1.0, size=30)])  # feature b has moved
         eng._check_drift(ts + pd.Timedelta(minutes=15 * k), x, d)
-    assert d.risk["psi_drifted"] >= 1 and any("drift" in n for n in d.notes)
+    assert d.risk["psi_drifted"] >= 1 and any("dérive" in n for n in d.notes)
     fills = [
         Fill("BTCUSDT", "buy", 1.0, 101.0, 0.0, True, notional=101.0),
         Fill("ETHUSDT", "sell", -1.0, 9.9, 0.0, False, notional=9.9),
@@ -327,3 +327,80 @@ def test_regime_gate_is_the_same_in_research_and_live(cfg_small, tmp_path):
     assert d.risk["regime_scale"] == research[day]
     gated = research[research < 1].index
     assert len(gated) and (research.loc[gated] == 0.5).all()  # the synthetic BTC does cross the threshold
+
+
+@pytest.mark.slow
+def test_status_details_positions_for_the_dashboard(cfg_small, tmp_path):
+    import json
+
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path)
+    t = 96 * 45 + 40
+    feed = FakeFeed(panel, t, 96 * 30)
+    eng = LiveEngine(cfg, bundle, feed, broker, store, mode="paper")
+    asyncio.run(eng.step())
+    st = json.loads((tmp_path / "state" / "status.json").read_text())
+    det = st["positions_detail"]
+    assert det and {p["symbol"] for p in det} == set(st["positions"])
+    for p in det:
+        side = 1 if p["side"] == "long" else -1
+        assert np.sign(p["notional"]) == side and p["entry"] > 0 and p["mark"] > 0
+        assert p["stop"] is not None and side * (p["mark"] - p["stop"]) > 0  # the stop is on the losing side
+        assert abs(p["upnl"] - p["notional"] * (1 - p["entry"] / p["mark"])) < 0.02
+        assert p["opened"] and p["weight"] is not None
+    assert st["account"]["initial"] == cfg.live.paper_initial_equity and st["strategy"]["bar"] == cfg.data.bar
+    first = {p["symbol"]: p["opened"] for p in det}
+    feed.t = t + 1
+    asyncio.run(eng.step())
+    again = json.loads((tmp_path / "state" / "status.json").read_text())["positions_detail"]
+    for p in again:  # a position keeps its opening time while it keeps its side
+        if p["symbol"] in first:
+            assert p["opened"] == first[p["symbol"]]
+    kinds = {r[0] for r in store.db.execute("SELECT DISTINCT kind FROM fills")}
+    assert kinds == {"trade"}
+
+
+class _ExchangeBroker:
+    """An exchange-like broker (not the paper one): stops fire on the exchange, outside the engine."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+
+@pytest.mark.slow
+def test_exchange_side_stops_are_recorded_in_the_history(cfg_small, tmp_path):
+    import json
+
+    from hermes.live.dashboard import reconstruct_trades
+
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path)
+    ex = _ExchangeBroker(broker)
+    t = 96 * 45 + 40
+    feed = FakeFeed(panel, t, 96 * 30)
+    eng = LiveEngine(cfg, bundle, feed, ex, store, mode="paper")
+    broker.set_prices(feed.panel["close"].iloc[t - 1].dropna().to_dict())  # an exchange marks its own prices
+    asyncio.run(eng.step())
+    held = {p["symbol"]: p for p in json.loads((tmp_path / "state" / "status.json").read_text())["positions_detail"]}
+    victim = next(iter(held))
+    broker.qty.pop(victim)  # the exchange's stop closed it between two cycles
+    broker.stops.pop(victim, None)
+    feed.t = t + 1
+    broker.set_prices(feed.panel["close"].iloc[t].dropna().to_dict())
+    asyncio.run(eng.step())
+    rows = [
+        dict(zip(("id", "ts", "symbol", "side", "qty", "price", "fee", "maker", "notional", "kind", "px_model"), r))
+        for r in store.db.execute(
+            "SELECT id, ts, symbol, side, qty, price, fee, maker, notional, kind, px_model FROM fills"
+        )
+    ]
+    stop = [r for r in rows if r["kind"] == "stop"]
+    assert len(stop) == 1 and stop[0]["symbol"] == victim
+    assert abs(stop[0]["px_model"] - held[victim]["stop"]) < 1e-9  # priced at the stop's trigger
+    closed = [c for c in reconstruct_trades(rows)["closed"] if c["symbol"] == victim]
+    assert closed and closed[-1]["exit_kind"] == "stop"
+    # Reopened by this cycle's rebalance: a new position, with a new opening time.
+    now = {p["symbol"]: p for p in json.loads((tmp_path / "state" / "status.json").read_text())["positions_detail"]}
+    if victim in now:
+        assert now[victim]["opened"] != held[victim]["opened"]

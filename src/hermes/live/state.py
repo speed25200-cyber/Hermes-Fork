@@ -17,7 +17,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS scores (ts TEXT, symbol TEXT, score REAL, PRIMARY KEY (ts, symbol));
 CREATE TABLE IF NOT EXISTS decisions (ts TEXT PRIMARY KEY, payload TEXT);
 CREATE TABLE IF NOT EXISTS fills (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, symbol TEXT, side TEXT, qty REAL,
-                                  price REAL, fee REAL, maker INTEGER);
+                                  price REAL, fee REAL, maker INTEGER, notional REAL, kind TEXT, px_model REAL);
 CREATE TABLE IF NOT EXISTS equity (ts TEXT PRIMARY KEY, equity REAL, gross REAL, net REAL, drawdown REAL,
                                    ic_est REAL, n_positions INTEGER);
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, level TEXT, message TEXT);
@@ -32,6 +32,11 @@ class StateStore:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.dir / "hermes.sqlite3")
         self.db.executescript(SCHEMA)
+        # Stores created before a column existed gain it (older rows keep NULL).
+        have = {r[1] for r in self.db.execute("PRAGMA table_info(fills)")}
+        for col, typ in (("notional", "REAL"), ("kind", "TEXT"), ("px_model", "REAL")):
+            if col not in have:
+                self.db.execute(f"ALTER TABLE fills ADD COLUMN {col} {typ}")
         self.db.commit()
 
     def close(self) -> None:
@@ -89,10 +94,29 @@ class StateStore:
         )
         self.db.commit()
 
-    def add_fills(self, fills: list) -> None:  # type: ignore[type-arg]
+    def add_fills(self, fills: list, kind: str = "trade", to_model: object = None) -> None:  # type: ignore[type-arg]
+        """``kind``: ``trade`` (rebalance), ``stop`` (catastrophe stop) or ``flatten`` (kill switch, halt).
+        ``notional`` is the USDT value (``qty`` is in the venue's units: coins on paper, contracts on OKX);
+        ``px_model`` the price in the model's (Binance) units, via ``to_model(symbol, price)`` when given."""
+        conv = to_model if callable(to_model) else (lambda _s, p: p)
         self.db.executemany(
-            "INSERT INTO fills (ts, symbol, side, qty, price, fee, maker) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [(f.ts, f.symbol, f.side, f.qty, f.price, f.fee, int(f.maker)) for f in fills],
+            "INSERT INTO fills (ts, symbol, side, qty, price, fee, maker, notional, kind, px_model) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    f.ts,
+                    f.symbol,
+                    f.side,
+                    f.qty,
+                    f.price,
+                    f.fee,
+                    int(f.maker),
+                    f.notional or abs(f.qty * f.price),
+                    kind,
+                    float(conv(f.symbol, f.price)),
+                )
+                for f in fills
+            ],
         )
         self.db.commit()
 

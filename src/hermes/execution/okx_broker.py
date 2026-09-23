@@ -436,6 +436,18 @@ class OKXBroker:
         return okx_price_to_model(symbol, price)
 
     # -- protection -----------------------------------------------------------------------------------------
+    async def stop_levels(self) -> dict[str, float]:
+        """Trigger price of each position's catastrophe stop (our conditional algos), in the model's units."""
+        out = {}
+        for a in await self.c.pending_algos("conditional"):
+            if a.get("tag") != self.cfg.order_tag:
+                continue
+            s = self.inst_to_symbol.get(a.get("instId", ""))
+            trig = float(a.get("slTriggerPx") or 0.0)
+            if s is not None and trig > 0:
+                out[s] = self.price_to_model(s, trig)
+        return out
+
     async def protect(self, stop_fraction: dict[str, float]) -> None:
         """One catastrophe stop per open position, on the right side, ``stop_fraction`` away from mark."""
         positions = await self.positions()

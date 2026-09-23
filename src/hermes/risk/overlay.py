@@ -57,7 +57,7 @@ class RiskOverlay:
             s.day_start_equity = s.last_equity if s.last_equity > 0 else equity
         s.last_equity = equity
         if not s.halted and self.drawdown(equity) >= self.cfg.drawdown_hard:
-            self.halt(ts, f"drawdown {self.drawdown(equity):.1%} >= hard limit")
+            self.halt(ts, f"drawdown de {self.drawdown(equity):.1%} au-delà de la limite d'arrêt")
 
     def halt(self, ts: pd.Timestamp, reason: str) -> None:
         self.state.halted = True
@@ -130,7 +130,7 @@ class RiskOverlay:
     ) -> tuple[np.ndarray, dict[str, float]]:
         info: dict[str, float] = {}
         if self.kill_requested() and not self.state.halted:
-            self.halt(ts, "kill switch file present")
+            self.halt(ts, "interrupteur d'urgence posé")
         b = self.budget(equity)
         info["budget"] = b
         w = target * b

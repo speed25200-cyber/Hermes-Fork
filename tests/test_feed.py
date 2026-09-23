@@ -13,6 +13,7 @@ from hermes.data.binance_archive import BinanceArchive
 from hermes.data.live_feed import BinanceLiveFeed
 
 STEP = 300_000  # 5-minute snapshots
+CALLS: list[tuple[int, int]] = []
 
 
 def _ratio(ts_ms: int) -> float:
@@ -23,9 +24,14 @@ def _live_handler(request: httpx.Request) -> httpx.Response:
     p = request.url.params
     now = int(datetime.now(UTC).timestamp() * 1000)
     if request.url.path.startswith("/futures/data/"):
-        start = int(p["startTime"])
-        ts = range(-(-start // STEP) * STEP, now, STEP)
-        rows = [{"timestamp": t, "longShortRatio": str(_ratio(t))} for t in list(ts)[: int(p["limit"])]]
+        # Binance's semantics: a range holding more than `limit` snapshots returns the LATEST `limit` of it, and
+        # a snapshot is stamped 5 minutes after the archives' create_time for the same value.
+        start, end = int(p["startTime"]), int(p.get("endTime", now))
+        if start < now - 30 * 86_400_000:
+            return httpx.Response(400, json={"code": -1130, "msg": "startTime too old"})
+        ts = list(range(-(-start // STEP) * STEP, min(end, now) + 1, STEP))[-int(p["limit"]) :]
+        rows = [{"timestamp": t, "longShortRatio": str(_ratio(t - STEP))} for t in ts]
+        CALLS.append((start, end))
         return httpx.Response(200, json=rows)
     if request.url.path in ("/fapi/v1/klines", "/fapi/v1/premiumIndexKlines"):
         step = 1_800_000
@@ -89,4 +95,8 @@ def test_live_positioning_matches_the_archives(tmp_path):
     np.testing.assert_allclose(live.reindex(common).to_numpy(), research.reindex(common).to_numpy())
     # The bar opening at 00:00 holds the snapshot of its close (00:30), known when the bar closes.
     assert np.isclose(live[t], _ratio(int((t + pd.Timedelta(minutes=30)).value // 1_000_000)))
-    assert feed.pos["BTCUSDT"].index[0] >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30)
+    held = feed.pos["BTCUSDT"]
+    assert held.index[0] >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30)
+    # The whole 29.5 days are read (bounded windows), not just Binance's latest 500 snapshots.
+    assert held.index[0] <= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=29)
+    assert len(CALLS) >= 17 and all(e - s <= 499 * STEP for s, e in CALLS)
