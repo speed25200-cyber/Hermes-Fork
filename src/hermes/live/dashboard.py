@@ -23,6 +23,8 @@ QUERIES = {
     "/api/events": "SELECT ts, level, message FROM events ORDER BY id DESC LIMIT 40",
     "/api/ic": "SELECT ts, value FROM series WHERE name = 'ic' ORDER BY ts",
     "/api/fills": "SELECT ts, symbol, side, qty, price, fee, maker FROM fills ORDER BY id DESC LIMIT 60",
+    "/api/diag": "SELECT name, ts, value FROM series WHERE name IN "
+    "('ic_raw', 'ic_lag', 'btc_dd90', 'mkt_ret30', 'xs_ac1') ORDER BY ts",
 }
 
 

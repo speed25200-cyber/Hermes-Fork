@@ -131,6 +131,11 @@ def test_step_runs_a_full_cycle_with_daily_history_ending_yesterday(cfg_small, t
         feed.t = t + k
         asyncio.run(eng.step())
     assert not store.get_series("ic", panel.index[0]).empty
+    # Pre-registered incubation checks: raw and one-horizon-old rank ICs, and the daily regime variables.
+    for name in ("ic_raw", "ic_lag", "btc_dd90", "mkt_ret30", "xs_ac1"):
+        v = store.get_series(name, panel.index[0])
+        assert not v.empty and np.isfinite(v.to_numpy(dtype=float)).all(), name
+    assert (store.get_series("btc_dd90", panel.index[0]) <= 0).all()
 
 
 @pytest.mark.slow

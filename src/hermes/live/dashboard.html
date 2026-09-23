@@ -4,13 +4,13 @@
 <style>
 :root{color-scheme:light;
  --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--mute:#898781;--grid:#e1e0d9;--axis:#c3c2b7;
- --ring:rgba(11,11,11,.10);--s1:#2a78d6;--s2:#eb6834;--band1:#b7d3f6;--band2:#cde2fb;--up:#006300;
+ --ring:rgba(11,11,11,.10);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--band1:#b7d3f6;--band2:#cde2fb;--up:#006300;
  --good:#0ca30c;--warn:#fab219;--crit:#d03b3b}
 @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;
  --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--mute:#898781;--grid:#2c2c2a;--axis:#383835;
- --ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--band1:#184f95;--band2:#104281;--up:#0ca30c}}
+ --ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--band1:#184f95;--band2:#104281;--up:#0ca30c}}
 :root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--mute:#898781;
- --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--band1:#184f95;--band2:#104281;--up:#0ca30c}
+ --grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--band1:#184f95;--band2:#104281;--up:#0ca30c}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1180px;margin:0 auto;padding:16px}
@@ -62,8 +62,11 @@ details{margin-top:6px;font-size:12px;color:var(--ink2)}
   <details><summary>Valeurs quotidiennes</summary><div class="scroll"><table id="t-eq"></table></div></details></div>
  <div class="card"><h2>Drawdown</h2><p class="cap">Depuis le plus haut, avec les seuils de réduction et d'arrêt du risque.</p>
   <div class="chart short" id="c-dd"></div></div>
- <div class="card"><h2>IC réalisé (moyenne 7 jours)</h2><p class="cap">Qualité du classement une fois l'horizon écoulé, face à l'IC hors échantillon de la recherche.</p>
+ <div class="card"><h2>IC réalisé (moyenne 7 jours)</h2><p class="cap">Qualité du classement une fois l'horizon écoulé : score tradé (lissé), score brut, et score vieux d'un horizon, face à l'IC de la recherche.</p>
   <div class="legend" id="leg-ic"></div><div class="chart short" id="c-ic"></div></div>
+ <div class="card wide"><h2>Contrôles pré-enregistrés de l'incubation</h2>
+  <p class="cap">Fixés avant de voir les données en direct (docs/RESULTS.md, § 10). Si l'IC remonte hors drawdown de BTC : le creux de 2026 était un régime. Si l'IC brut reste positif mais celui du score vieux de 24 h nul : seule la partie lente est perdue. Si tout reste près de zéro : l'avantage est perdu.</p>
+  <div class="scroll"><table id="diag"></table></div></div>
  <div class="card wide"><h2>Exposition</h2><p class="cap">Brute (longs + shorts) et nette (longs − shorts), en multiple du capital.</p>
   <div class="legend" id="leg-ex"></div><div class="chart short" id="c-ex"></div></div>
 </section>
@@ -134,7 +137,7 @@ function legend(host,items){host.innerHTML=items.map(it=>it.band?`<span><i class
 
 let DATA=null;
 function render(){
- if(!DATA)return;const {s,eq,ic,ev,fills}=DATA;const risk=s.risk||{},ex=s.execution||{},lim=s.risk_limits||{},b=s.bundle||{},rs=b.research||{};
+ if(!DATA)return;const {s,eq,ic,ev,fills,diag}=DATA;const risk=s.risk||{},ex=s.execution||{},lim=s.risk_limits||{},b=s.bundle||{},rs=b.research||{};
  const mode={paper:"Papier (argent fictif)",demo:"Démo OKX",live:"Réel"}[s.mode]||s.mode||"—";$("mode").textContent=mode;
  const age=s.updated?(Date.now()-new Date(s.updated).getTime())/60000:Infinity;const barMin={"1m":1,"15m":15,"30m":30}[rs.bar]||30;
  let st;if(s.halted)st=["--crit","Arrêté : "+(s.halt_reason||"")];else if(age>3*barMin+5)st=["--warn",`Pas de décision depuis ${f(age,0)} min`];else st=["--good","Actif"];
@@ -146,10 +149,13 @@ function render(){
  const pos=Object.entries(s.positions||{}),cap=(s.equity||0)*(s.capital_fraction||1);
  const nl=pos.filter(p=>p[1]>0).length,ns=pos.filter(p=>p[1]<0).length;
  /* realised IC: daily means, then 7-day and 30-day averages */
- const byDay={};(ic||[]).forEach(([t,v])=>{const d=String(t).slice(0,10);(byDay[d]=byDay[d]||[]).push(v)});
- const days=Object.keys(byDay).sort(),dm=days.map(d=>[new Date(d+"T12:00:00Z").getTime(),byDay[d].reduce((a,x)=>a+x,0)/byDay[d].length]);
- const roll=(k)=>dm.map((p,i)=>{const w=dm.slice(Math.max(0,i-k+1),i+1);return [p[0],w.reduce((a,x)=>a+x[1],0)/w.length]});
- const ic7=roll(7),ic30=dm.length?roll(30).at(-1)[1]:null;
+ const daily=rows=>{const by={};rows.forEach(([t,v])=>{const d=String(t).slice(0,10);(by[d]=by[d]||[]).push(v)});
+  return Object.keys(by).sort().map(d=>[new Date(d+"T12:00:00Z").getTime(),by[d].reduce((a,x)=>a+x,0)/by[d].length])};
+ const roll=(dm,k)=>dm.map((p,i)=>{const w=dm.slice(Math.max(0,i-k+1),i+1);return [p[0],w.reduce((a,x)=>a+x[1],0)/w.length]});
+ const tail=(dm,k)=>dm.length?roll(dm,k).at(-1)[1]:null;
+ const D={};(diag||[]).forEach(([n,t,v])=>{(D[n]=D[n]||[]).push([t,v])});
+ const dm=daily(ic||[]),dmRaw=daily(D.ic_raw||[]),dmLag=daily(D.ic_lag||[]);
+ const ic7=roll(dm,7),ic30=tail(dm,30);
  const tiles=[
   ["Équité",f(s.equity,0)+"<small>USDT</small>",e0?`départ ${f(e0,0)} USDT`:""],
   ["Rendement depuis le début",`<span class="${ret>=0?"up":"down"}">${ret==null?"—":(ret>=0?"▲ ":"▼ ")+pct(Math.abs(ret),2)}</span>`,E.length?`depuis le ${day(E[0].t)}`:""],
@@ -174,8 +180,17 @@ function render(){
  legend($("leg-eq"),legEq);chart($("c-eq"),{series:eqS,bands,fmt:v=>f(v,0)});
  const dd=E.map(r=>[r.t,-(r.dd||0)]);
  chart($("c-dd"),{series:[{name:"Drawdown",color:s2,pts:dd}],refs:[{y:-(lim.drawdown_soft||0.1),label:"réduction du risque"},{y:-(lim.drawdown_hard||0.25),label:"arrêt"}],fmt:v=>pct(v,0),zero:true});
- legend($("leg-ic"),[{name:"IC réalisé, 7 j",color:s1}].concat(isFinite(rs.ic)?[{name:"IC de la recherche",color:ink2,dash:true}]:[]));
- chart($("c-ic"),{series:[{name:"IC 7 j",color:s1,pts:ic7}],refs:isFinite(rs.ic)?[{y:rs.ic,label:"recherche"}]:[],fmt:v=>f(v,3),zero:true});
+ const s3=css("--s3");
+ legend($("leg-ic"),[{name:"Score tradé",color:s1},{name:"Score brut",color:s2},{name:"Score vieux de 24 h",color:s3}].concat(isFinite(rs.ic)?[{name:"IC de la recherche",color:ink2,dash:true}]:[]));
+ chart($("c-ic"),{series:[{name:"Tradé",color:s1,pts:ic7},{name:"Brut",color:s2,pts:roll(dmRaw,7)},{name:"Vieux de 24 h",color:s3,pts:roll(dmLag,7)}],refs:isFinite(rs.ic)?[{y:rs.ic,label:"recherche"}]:[],fmt:v=>f(v,3),zero:true});
+ const lv=n=>{const a=D[n]||[];return a.length?a[a.length-1][1]:null};
+ const rows=[["IC du score tradé, 30 j",f(ic30,3),"dimensionne le livre (Pearson, score lissé)"],
+  ["IC du score brut, 30 j",f(tail(dmRaw,30),3),"le modèle classe-t-il encore ?"],
+  ["IC du score vieux de 24 h, 30 j",f(tail(dmLag,30),3),"la partie lente, celle que le livre détient, tient-elle ?"],
+  ["BTC face à son plus haut 90 j",pct(lv("btc_dd90"),1),"au-delà de −15 % : régime de drawdown (IC historiquement plus faible)"],
+  ["Rendement moyen du marché, 30 j",pct(lv("mkt_ret30"),1),"négatif : marché baissier"],
+  ["Autocorrélation transversale 1 j (moy. 30 j)",f(lv("xs_ac1"),3),"positive : la continuation remplace le retournement"]];
+ $("diag").innerHTML="<tr><th>Contrôle</th><th>Valeur</th><th style='text-align:left'>Lecture</th></tr>"+rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td style="text-align:left" class="meta">${esc(r[2])}</td></tr>`).join("");
  legend($("leg-ex"),[{name:"Brute",color:s1},{name:"Nette",color:s2}]);
  chart($("c-ex"),{series:[{name:"Brute",color:s1,pts:E.map(r=>[r.t,r.g])},{name:"Nette",color:s2,pts:E.map(r=>[r.t,r.n])}],fmt:v=>f(v,2)+"×",zero:true});
  /* daily equity table (table view of the main chart) */
@@ -192,8 +207,8 @@ function render(){
  $("fills").innerHTML=F.length?"<tr><th>Heure</th><th>Contrat</th><th>Sens</th><th class=opt>Quantité</th><th>Prix</th><th class=opt>Frais</th><th>Type</th></tr>"+F.map(x=>
   `<tr><td>${stamp(x[0]*1000)}</td><td>${esc(x[1])}</td><td>${x[2]==="buy"?"achat":"vente"}</td><td class=opt>${f(x[3],4)}</td><td>${f(x[4],4)}</td><td class=opt>${f(x[5],3)}</td><td>${x[6]?"maker":"taker"}</td></tr>`).join(""):'<tr><td class="empty">Aucune exécution.</td></tr>';
 }
-async function load(){const [s,eq,ic,ev,fills]=await Promise.all([j("api/status"),j("api/equity"),j("api/ic"),j("api/events"),j("api/fills")]);
- DATA={s:s||{},eq:eq||[],ic:ic||[],ev:ev||[],fills:fills||[]};render()}
+async function load(){const [s,eq,ic,ev,fills,diag]=await Promise.all([j("api/status"),j("api/equity"),j("api/ic"),j("api/events"),j("api/fills"),j("api/diag")]);
+ DATA={s:s||{},eq:eq||[],ic:ic||[],ev:ev||[],fills:fills||[],diag:diag||[]};render()}
 load();setInterval(load,30000);let rt;addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(render,150)});
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change",render);
 </script></body></html>

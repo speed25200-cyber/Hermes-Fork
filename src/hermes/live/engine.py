@@ -59,6 +59,13 @@ log = logging.getLogger(__name__)
 SCORE_MEMORY_DAYS = 120
 
 
+def _rank_ic(a: pd.DataFrame, b: pd.DataFrame) -> pd.Series:
+    """Per-row Spearman correlation over the cells where both frames are finite."""
+    b = b.reindex(index=a.index, columns=a.columns)
+    ok = a.notna() & b.notna()
+    return rowwise_corr(a.where(ok).rank(axis=1), b.where(ok).rank(axis=1))
+
+
 def live_config(
     strategy: HermesConfig, operator: HermesConfig, overrides: dict[str, object] | None = None
 ) -> HermesConfig:
@@ -339,6 +346,55 @@ class LiveEngine:
         self._cache[name] = cache
         return cache[name]
 
+    def _record_once(self, name: str, values: pd.Series, ts: pd.Timestamp) -> None:
+        """Persist the values of ``name`` not recorded yet (a value, once its horizon has elapsed, is final)."""
+        new = values.dropna()
+        new = new[~new.index.isin(self._series(name, ts).index)]
+        if len(new):
+            self.store.put_series(name, new)
+            self._remember_series(name, new, ts)
+
+    def _incubation_checks(
+        self,
+        mem: pd.DataFrame,
+        panel: Panel,
+        tgt: pd.DataFrame,
+        H: int,
+        ts: pd.Timestamp,
+        members: list[str],
+        daily: DailyHistory | None,
+    ) -> None:
+        """Pre-registered incubation checks, logged and never used for sizing (docs/RESULTS.md, § 10).
+
+        * ``ic_raw``: rank IC of the raw score -- does the model still rank?
+        * ``ic_lag``: rank IC of the score one holding horizon old -- does the slow part the book trades hold?
+        * daily regime: ``btc_dd90`` (BTC close against its 90-day high), ``mkt_ret30`` (members' mean 30-day
+          return), ``xs_ac1`` (trailing 30-day mean of the cross-sectional correlation of consecutive daily
+          returns). Each explanation of the 2026 decay predicts a different pattern in them."""
+        if len(mem):
+            raw = mem.reindex(index=panel.index, columns=panel.symbols)
+            self._record_once("ic_raw", _rank_ic(raw, tgt), ts)
+            self._record_once("ic_lag", _rank_ic(raw.shift(H), tgt), ts)
+        if daily is None or daily.close.empty:
+            return
+        close = daily.close.sort_index()
+        day = close.index[-1]
+        if day in self._series("btc_dd90", ts).index:
+            return
+        out: dict[str, float] = {}
+        if "BTCUSDT" in close:
+            btc = close["BTCUSDT"].dropna().iloc[-90:]
+            if len(btc) >= 30:
+                out["btc_dd90"] = float(btc.iloc[-1] / btc.max() - 1.0)
+        mc = close.reindex(columns=[s for s in members if s in close.columns])
+        if mc.shape[1] >= 5 and len(mc) > 31:
+            out["mkt_ret30"] = float((mc.iloc[-1] / mc.iloc[-31] - 1.0).mean())
+            r = mc.pct_change().iloc[-31:]
+            ac = rowwise_corr(r.iloc[1:], r.shift(1).iloc[1:])
+            out["xs_ac1"] = float(ac.mean()) if ac.notna().any() else float("nan")
+        for name, value in out.items():
+            self._record_once(name, pd.Series({day: value}), ts)
+
     def _remember_series(self, name: str, values: pd.Series, ts: pd.Timestamp) -> None:
         cur = self._series(name, ts)
         merged = pd.concat([cur[~cur.index.isin(values.index)], values.astype(float)]).sort_index()
@@ -417,6 +473,7 @@ class LiveEngine:
         ric_new = ric_new[~ric_new.index.isin(self._series("ic", ts).index)]
         self.store.put_series("ic", ric_new)
         self._remember_series("ic", ric_new, ts)
+        self._incubation_checks(mem, panel, tgt, H, ts, members, daily)
         ric = self._series("ic", ts).reindex(grid)
         est = estimate_ic(ric, H, self.bundle.prior_ic, halflife_bars=self.bpd * 30)
         ic_est = float(est.iloc[-1]) if np.isfinite(est.iloc[-1]) else self.bundle.prior_ic
