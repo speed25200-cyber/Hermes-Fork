@@ -350,3 +350,24 @@ def test_paper_broker_hold_and_marks_survive_restart(tmp_path):
     assert pos["ETHUSDT"].contracts == pytest.approx(-50.0)
     pb2 = PaperBroker(tmp_path / "acc.json", 1.0, 0.0, 0.0)
     assert pb2.prices["BTCUSDT"] == 120.0  # valued at the last mark after a restart, not at entry
+
+
+def test_paper_stops_trigger_like_the_exchange(tmp_path):
+    pb = PaperBroker(tmp_path / "acc.json", 10_000, 0.0, 0.0005, maker_share=1.0, half_spread=0.0, slippage=0.0)
+    pb.set_prices({"AUSDT": 100.0, "BUSDT": 50.0})
+
+    async def run():
+        await pb.rebalance({"AUSDT": 1_000.0, "BUSDT": -500.0})
+        await pb.protect({"AUSDT": 0.10, "BUSDT": 0.10})  # long stop at 90, short stop at 55
+
+    asyncio.run(run())
+    assert pb.stops["AUSDT"] == (1.0, 90.0) and pb.stops["BUSDT"][1] == pytest.approx(55.0)
+    asyncio.run(pb.protect({"AUSDT": 0.5}))  # an existing stop is never moved while the side is kept
+    assert pb.stops["AUSDT"] == (1.0, 90.0)
+    # A bar that trades through the long stop, and gaps through the short one (opens at 58).
+    fills = pb.check_stops(
+        high={"AUSDT": 101.0, "BUSDT": 60.0}, low={"AUSDT": 88.0, "BUSDT": 57.0}, open_={"AUSDT": 99.0, "BUSDT": 58.0}
+    )
+    px = {f.symbol: f.price for f in fills}
+    assert px["AUSDT"] == pytest.approx(90.0) and px["BUSDT"] == pytest.approx(58.0)
+    assert not pb.qty and not pb.stops and all(not f.maker for f in fills)

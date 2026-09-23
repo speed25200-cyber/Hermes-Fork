@@ -230,6 +230,7 @@ def _run_backtest(
         ts = index[t]
         # 1) P&L of bar t on weights held since close(t-1)
         rt = r[t]
+        r_bar = rt  # the bar's own return (covariance), whatever a stop made the position earn
         held = w != 0
         hit = np.zeros(len(w), dtype=bool)
         if k_stop > 0 and held.any() and t > 0:
@@ -249,7 +250,9 @@ def _run_backtest(
         contrib = np.where(valid & held, w * np.nan_to_num(rt), 0.0)
         gross_pnl = float(contrib.sum())
         pnl_long, pnl_short = float(contrib[w > 0].sum()), float(contrib[w < 0].sum())
-        fpay = float(np.sum(w[held] * np.nan_to_num(fund[t][held])))
+        # A position stopped out during the bar is gone before the settlement at its end: no funding.
+        paying = held & ~hit
+        fpay = float(np.sum(w[paying] * np.nan_to_num(fund[t][paying])))
         pnl = gross_pnl - fpay
         equity_prev = equity
         equity *= 1.0 + pnl
@@ -271,7 +274,7 @@ def _run_backtest(
             w[hit] = 0.0
             stop_px[hit] = np.nan
             out["stops"][k] = float(hit.sum())
-        ewma.update(np.where(member[t], rt, np.nan))
+        ewma.update(np.where(member[t], r_bar, np.nan))
         overlay.observe(ts, equity, day=int(day_keys[t]))
         out["gross_pnl"][k] = gross_pnl
         out["pnl_long"][k] = pnl_long  # price P&L of each leg (before costs and funding)
@@ -280,7 +283,8 @@ def _run_backtest(
 
         # 2) rebalance at close(t)
         fees = spread = impact = turnover = 0.0
-        if rebalance_bar[t]:
+        # Decision bars, plus any bar where a hard halt must flatten at once (the live guard acts every bar).
+        if rebalance_bar[t] or (overlay.state.halted and np.any(w)):
             active = member[t] & np.isfinite(z[t])
             idx = np.nonzero(active | (w != 0))[0]
             if len(idx):

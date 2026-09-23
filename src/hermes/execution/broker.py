@@ -14,6 +14,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+import numpy as np
+
 log = logging.getLogger(__name__)
 
 
@@ -106,6 +108,7 @@ class PaperBroker:
         self.maker_fee, self.taker_fee = maker_fee, taker_fee
         self.maker_share, self.half_spread, self.slippage = maker_share, half_spread, slippage
         self.prices: dict[str, float] = {}
+        self.stops: dict[str, tuple[float, float]] = {}  # symbol -> (side, trigger price), as placed on OKX
         if self.path.exists():
             s = json.loads(self.path.read_text())
             self.cash = float(s["cash"])
@@ -115,6 +118,7 @@ class PaperBroker:
             self.funding_paid = float(s.get("funding_paid", 0.0))
             # Last marks: after a restart the book is valued at market, not at entry prices.
             self.prices = {k: float(v) for k, v in s.get("prices", {}).items()}
+            self.stops = {k: (float(v[0]), float(v[1])) for k, v in s.get("stops", {}).items()}
         else:
             self.cash = float(initial_equity)
             self.qty, self.avg = {}, {}
@@ -135,6 +139,7 @@ class PaperBroker:
                     "fees_paid": self.fees_paid,
                     "funding_paid": self.funding_paid,
                     "prices": {k: v for k, v in self.prices.items() if k in self.qty},
+                    "stops": {k: list(v) for k, v in self.stops.items()},
                 }
             )
         )
@@ -217,7 +222,45 @@ class PaperBroker:
             self.avg.pop(s, None)
 
     async def protect(self, stop_fraction: dict[str, float]) -> None:
-        return None
+        """Catastrophe stops as the OKX broker places them: one per position, ``stop_fraction`` from the mark
+        when the position is opened, kept while it keeps its side, replaced when it flips."""
+        for sym in list(self.stops):
+            q = self.qty.get(sym, 0.0)
+            if q == 0 or np.sign(q) != self.stops[sym][0]:
+                del self.stops[sym]
+        for sym, q in self.qty.items():
+            px = self.prices.get(sym)
+            if q == 0 or sym in self.stops or not px:
+                continue
+            side = float(np.sign(q))
+            self.stops[sym] = (side, px * (1.0 - side * stop_fraction.get(sym, 0.15)))
+        self._save()
+
+    def check_stops(self, high: dict[str, float], low: dict[str, float], open_: dict[str, float]) -> list[Fill]:
+        """Trigger the stops on the last closed bar's range (a gap through the level fills at the open), exit at
+        market: taker fee plus the aggressive side of the spread and slippage. Same rule as the backtest."""
+        fills = []
+        for sym, (side, level) in list(self.stops.items()):
+            q = self.qty.get(sym, 0.0)
+            if q == 0:
+                del self.stops[sym]
+                continue
+            lo, hi, op = low.get(sym), high.get(sym), open_.get(sym)
+            if side > 0 and lo is not None and lo <= level:
+                exit_px = min(level, op) if op else level
+            elif side < 0 and hi is not None and hi >= level:
+                exit_px = max(level, op) if op else level
+            else:
+                continue
+            sgn = -side  # closing trade direction
+            px = exit_px * (1 + sgn * (self.half_spread + self.slippage))
+            fee = abs(q * px) * self.taker_fee
+            self._apply(sym, -q, px, fee)
+            fills.append(Fill(sym, "sell" if q > 0 else "buy", -q, px, fee, False, notional=abs(q * px)))
+            del self.stops[sym]
+        if fills:
+            self._save()
+        return fills
 
     @staticmethod
     def price_to_model(symbol: str, price: float) -> float:

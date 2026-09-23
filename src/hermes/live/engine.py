@@ -39,6 +39,7 @@ from hermes.live.state import StateStore
 from hermes.models.bundle import ModelBundle
 from hermes.models.drift import psi
 from hermes.portfolio.alpha import (
+    cs_zscore,
     estimate_ic,
     market_alpha_series,
     rowwise_corr,
@@ -434,10 +435,15 @@ class LiveEngine:
             frozen |= (pos_w != 0) & ~has_daily
         active = mask.iloc[t].to_numpy() & np.isin(syms, members)
         idx = np.nonzero((active | (pos_w != 0)) & ~frozen)[0]
+        # The traded (smoothed) score, re-standardised across this bar's members exactly as the backtest does
+        # (cs_zscore over the universe, clipped at 3): smoothing shrinks the dispersion, sizing must not.
+        row = pd.Series({s: traded.get(s, np.nan) for s in scores.index}, dtype=float)
+        row = row.where(np.isfinite(row), scores.reindex(row.index))
+        frame = pd.DataFrame([row.to_numpy()], index=mask.index[[t]], columns=row.index)
+        zrow = cs_zscore(frame, mask.iloc[[t]].reindex(columns=row.index)).iloc[0]
         z = np.full(len(syms), np.nan)
-        for s in scores.index:
-            v = traded.get(s, np.nan)
-            z[syms.index(s)] = v if np.isfinite(v) else scores[s]
+        for s, v in zrow.items():
+            z[syms.index(s)] = v
         costs = CostModel.from_panel(
             cfg.costs, panel["high"], panel["low"], panel["close"], panel["quote_volume"], feats.aux["vol"], self.bpd
         )
@@ -544,11 +550,11 @@ class LiveEngine:
         if await self.guard():
             return None
         every = self.cfg.portfolio.rebalance_every
+        decision_bar = True
         if every > 1:
-            ts = BinanceLiveFeed.last_closed_bar(self.cfg.data.bar)
+            last = BinanceLiveFeed.last_closed_bar(self.cfg.data.bar)
             bar = pd.Timedelta(BAR_TO_OFFSET[self.cfg.data.bar])
-            if not is_rebalance_bar(pd.DatetimeIndex([ts]), bar, every)[0]:
-                return None  # not a decision bar (portfolio.rebalance_every): the risk guard above still ran
+            decision_bar = bool(is_rebalance_bar(pd.DatetimeIndex([last]), bar, every)[0])
         positions = await self.broker.positions()
         symbols = await self.refresh_candidates(list(positions))
         # Market data must arrive within the bar; otherwise the cycle fails and the guard runs again.
@@ -557,12 +563,22 @@ class LiveEngine:
         daily = await asyncio.wait_for(self.feed.daily(symbols), timeout=budget)
         now = pd.Timestamp.now(tz="UTC")
         if isinstance(self.broker, PaperBroker):
-            self.broker.set_prices(panel["close"].iloc[-1].dropna().to_dict())
+            last = {f: panel[f].iloc[-1].dropna().to_dict() for f in ("open", "high", "low", "close")}
+            stopped = self.broker.check_stops(last["high"], last["low"], last["open"])  # before the new marks
+            if stopped:
+                self.store.add_fills(stopped)
+                self.store.event("WARNING", f"paper stops triggered: {', '.join(f.symbol for f in stopped)}")
+            self.broker.set_prices(last["close"])
             self._accrue_paper_funding(panel)
         equity = await self.broker.equity()
         positions = await self.broker.positions()
         notional = {s: p.notional for s, p in positions.items()}
         d = self.decide(panel, notional, equity, now=now, daily=daily, nav=self.strategy_nav(equity))
+        if not decision_bar:
+            # Scores, realised IC and the smoothed signal are updated every bar, as in research; the book only
+            # moves on the clock-aligned decision grid (portfolio.rebalance_every).
+            d.notes.append("scoring bar: no trade (portfolio.rebalance_every)")
+            return d
         if d.stale:
             await alert(f"données périmées ({d.ts}) : aucune nouvelle prise de risque", "WARNING")
         urgent = self.overlay.state.halted

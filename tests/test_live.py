@@ -251,3 +251,23 @@ def test_held_contract_without_daily_history_is_left_alone(cfg_small, tmp_path):
     broken = DailyHistory(*(x.drop(columns=held) for x in (daily.quote_volume, daily.alive, daily.close)))
     d = eng.decide(window, {held: 1_000.0}, 10_000.0, daily=broken)
     assert held in d.hold and held not in d.targets
+
+
+@pytest.mark.slow
+def test_live_sizes_the_restandardised_smoothed_score(cfg_small, tmp_path):
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path)
+    cfg = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={"signal_halflife": 2.0})})
+    eng = LiveEngine(cfg, bundle, None, broker, store, mode="paper")
+    seen = {}
+    real_target = eng.constructor.target
+
+    def spy(inp, capital):
+        z = inp.score[np.isfinite(inp.score)]
+        seen["std"] = float(np.std(z, ddof=1)) if len(z) > 2 else float("nan")
+        return real_target(inp, capital)
+
+    eng.constructor.target = spy
+    t = 96 * 45 + 40
+    for k in range(12):  # enough bars for the smoothing to shrink the raw dispersion
+        eng.decide(panel.iloc(slice(t + k - 96 * 30, t + k)), {}, 10_000.0)
+    assert 0.8 < seen["std"] < 1.2  # z-scored across members as in the backtest, not a shrunk average

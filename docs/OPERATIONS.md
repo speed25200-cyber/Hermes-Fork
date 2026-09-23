@@ -81,6 +81,22 @@ Même si le processus meurt : les ordres en attente sont annulés par OKX en moi
 (dead-man switch `cancel-all-after`) et chaque position porte un stop catastrophe côté exchange
 (`risk.stop_loss_daily_sigmas` volatilités quotidiennes, déclenché sur le prix mark).
 
+## Incubation en papier (avant toute promotion)
+
+Un modèle non promu peut tourner en **papier** (jamais en réel) pour accumuler un historique réellement
+hors échantillon — la seule preuve que ni le walk-forward ni la porte ne remplacent :
+
+```bash
+hermes model install reports/<meilleur-essai>/model     # champion (promu=False)
+sudo systemctl enable --now hermes@paper                  # sur le VPS : moteur papier
+```
+
+Suivi (tableau de bord) : l'IC réalisé en continu doit rester proche de l'IC hors échantillon de la
+recherche ; l'écart d'exécution (pb) doit rester proche du coût modélisé ; la dérive des variables (PSI) doit
+rester faible. Le réentraînement hebdomadaire réévalue la même configuration sur des données plus longues ;
+si elle franchit un jour la porte, le mode réel devient possible — sur décision humaine, à capital réduit
+(`live.capital_fraction`).
+
 ## Recherche
 
 ```bash

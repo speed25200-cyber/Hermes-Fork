@@ -64,11 +64,12 @@ class WalkForwardResult:
         def series(x: pd.Series | None) -> pd.Series | None:
             return None if x is None else x.reindex(index)
 
+        end = str(index[-1]) if len(index) else ""
         return WalkForwardResult(
             score=frame(self.score),
             model_scores={k: frame(v) for k, v in self.model_scores.items()},
             prior_ic=self.prior_ic.reindex(index),
-            folds=self.folds,
+            folds=[f for f in self.folds if str(f.get("test_start", "")) <= end],
             feature_importance=self.feature_importance,
             market_score=series(self.market_score),
             market_prior_ic=series(self.market_prior_ic),
