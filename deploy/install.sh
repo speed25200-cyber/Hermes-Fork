@@ -27,7 +27,7 @@ if [ ! -t 0 ]; then
   TMP="$(mktemp)"
   cat > "$TMP"
   if [ -s "$TMP" ]; then
-    grep -E '^(OKX_API_KEY|OKX_API_SECRET|OKX_API_PASSPHRASE|OKX_BASE_URL|HERMES_TELEGRAM_TOKEN|HERMES_TELEGRAM_CHAT|HERMES_DASHBOARD_TOKEN)=' "$TMP" > "$ETC/hermes.env" || true
+    grep -E '^(OKX_API_KEY|OKX_API_SECRET|OKX_API_PASSPHRASE|OKX_BASE_URL|HERMES_TELEGRAM_TOKEN|HERMES_TELEGRAM_CHAT|HERMES_DASHBOARD_TOKEN|HERMES_DASHBOARD_PORT)=' "$TMP" > "$ETC/hermes.env" || true
   fi
   rm -f "$TMP"
 fi
@@ -63,8 +63,16 @@ for m in paper demo live; do
   [ "$m" = "$MODE" ] || systemctl disable --now "hermes-dashboard@$m" 2>/dev/null || true
 done
 if grep -q '^HERMES_DASHBOARD_TOKEN=.' "$ETC/hermes.env"; then
+  DPORT=$(sed -n 's/^HERMES_DASHBOARD_PORT=//p' "$ETC/hermes.env" | tail -1)
+  DPORT=${DPORT:-8900}
+  # Pare-feu actif (ufw) : ouvrir le port du tableau de bord, protégé par son jeton.
+  if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow "$DPORT/tcp" >/dev/null && echo "ufw : port $DPORT ouvert"
+  fi
   systemctl enable "hermes-dashboard@$MODE" >/dev/null && systemctl restart "hermes-dashboard@$MODE"
-  echo "tableau de bord : http://<vps>:8899/?token=<HERMES_DASHBOARD_TOKEN>"
+  echo "tableau de bord : http://<vps>:$DPORT/?token=<HERMES_DASHBOARD_TOKEN>"
+else
+  echo "tableau de bord non exposé : secret HERMES_DASHBOARD_TOKEN absent (accès local : hermes live dashboard)"
 fi
 
 if [ -f "$APP/artifacts/models/champion/bundle.json" ]; then

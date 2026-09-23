@@ -7,10 +7,12 @@ Type=simple
 User=hermes
 Group=hermes
 WorkingDirectory=/opt/hermes
+# Port 8900 : le 8899 est pris par l'ancien moteur (okxq) sur ce VPS. HERMES_DASHBOARD_PORT le remplace.
+Environment=HERMES_DASHBOARD_PORT=8900
 EnvironmentFile=/etc/hermes/hermes.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 # Écoute publique seulement si HERMES_DASHBOARD_TOKEN est défini (sinon le service refuse de démarrer).
-ExecStart=/opt/hermes/.venv/bin/hermes live dashboard --state state/%i --host 0.0.0.0 --port 8899
+ExecStart=/opt/hermes/.venv/bin/hermes live dashboard --state state/%i --host 0.0.0.0 --port ${HERMES_DASHBOARD_PORT}
 Restart=always
 RestartSec=10
 NoNewPrivileges=true
