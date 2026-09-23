@@ -219,7 +219,18 @@ Lecture :
   suffisent pas à exclure la chance ; la PBO (0,38) dépasse le seuil.
 
 **Conclusion honnête** : `research_30m_xl_lb_sres` est le meilleur candidat exécutable, cohérent et robuste
-aux stress, mais pas démontré. La prochaine preuve ne peut venir que de données jamais vues : l'incubation en
-papier sur OKX (voir `OPERATIONS.md`), sur décision de l'utilisateur ; le réel reste interdit par la porte.
+aux stress, mais pas démontré. La prochaine preuve ne peut venir que de données jamais vues ; le réel reste
+interdit par la porte.
+
+## 9. Incubation en papier (depuis le 23 septembre 2026)
+
+Sur décision de l'utilisateur, `research_30m_xl_lb_sres` tourne en **papier** sur le VPS depuis le 23 septembre
+2026 à 20 h UTC : décisions réelles toutes les 30 minutes sur le flux Binance, univers limité aux swaps
+crypto listés par OKX, exécution simulée, capital fictif de 10 000 USDT. Modèle `f2227b88c6bd`, entraîné sur
+un runner GitHub jusqu'au 29 août 2026 (le VPS, 2 Go, exécute sans entraîner), non promu. Ce qui dira si
+le résultat de recherche tient : l'IC réalisé (≈ 0,045 attendu), la courbe d'équité face au cône attendu
+(+12,6 %/an, volatilité ≈ 11 %), l'écart d'exécution face aux coûts modélisés — tous suivis par le tableau
+de bord. Il faut plusieurs mois pour conclure : à Sharpe 1, un an de papier ne sépare encore un vrai
+avantage du hasard qu'avec environ 84 % de confiance.
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.
