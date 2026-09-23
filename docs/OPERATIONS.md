@@ -26,7 +26,7 @@ arrondis, stops) → `live` avec `capital_fraction` 0,25, puis augmentation si l
    - `model_run` : à la place, installer le modèle d'un run **Research** de ce même dépôt ;
    - ni l'un ni l'autre : redéploiement du code seul, le champion en place est gardé.
 
-   Le VPS actuel a 2 Go de mémoire : il exécute le moteur, pas l'entraînement (un walk-forward complet en
+   Le VPS actuel a 7 Go de mémoire : il exécute le moteur (≈ 0,5 Go), pas l'entraînement (un walk-forward complet en
    demande bien davantage, et le manque de mémoire tuerait le moteur). Sous 12 Go, `install.sh` n'active pas
    le réentraînement hebdomadaire local et `retrain.sh` refuse de tourner : on réentraîne en relançant ce
    workflow.
