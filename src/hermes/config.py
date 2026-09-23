@@ -178,7 +178,9 @@ class PortfolioConfig(_Strict):
     weight_max: float = Field(0.20, gt=0)
     adv_participation_max: float = Field(0.02, gt=0, le=1)
     beta_neutral: bool = True
-    rebalance_every: int = Field(1, ge=1)
+    rebalance_every: int = Field(
+        1, ge=1, description="Decide every k bars, aligned on the clock (bar count since 1970), in research and live"
+    )
     cost_aversion: float = Field(1.0, ge=0, description="Multiplier on expected trading costs in the optimiser")
     holding_horizon: int = Field(4, ge=1, description="Bars over which a forecast is expected to be earned")
     cov_halflife_days: float = Field(7, gt=0, description="EWMA half-life of the sample covariance")

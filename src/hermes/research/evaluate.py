@@ -130,6 +130,11 @@ def _bt_job(args: tuple[str, int | dict[str, object]]) -> tuple[str, pd.Series, 
         c = cfg
     else:
         c = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update=param)})  # type: ignore[arg-type]
+        if kind == "nohalt":
+            # Diagnostic only (never gated): the signal's economics over the whole period, with the drawdown
+            # and daily-loss controls that would stop a losing book switched off.
+            risk = cfg.risk.model_copy(update={"drawdown_soft": 0.98, "drawdown_hard": 0.99, "daily_loss_limit": 1.0})
+            c = c.model_copy(update={"risk": risk})
         score = wf.score.shift(1) if kind == "lag1" else wf.score
         if kind == "market":
             sig = make_signal(score, ds, wf.prior_ic, c, wf.market_score, wf.market_prior_ic)
@@ -226,6 +231,8 @@ class Evaluation:
     promoted: bool
     grid: pd.DataFrame
     null_sharpes: list[float] = field(default_factory=list)
+    halted_at: str | None = None  # hard drawdown halt of the main backtest (the book stops trading)
+    nohalt: dict[str, object] = field(default_factory=dict)  # diagnostic without drawdown controls
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -237,6 +244,8 @@ class Evaluation:
             "promoted": self.promoted,
             "grid": self.grid.reset_index().to_dict(orient="records"),
             "null_sharpes": self.null_sharpes,
+            "halted_at": self.halted_at,
+            "nohalt": self.nohalt,
         }
 
 
@@ -253,7 +262,7 @@ def evaluate(
     start = wf.oof_start
     # Each worker holds a few (bar x contract) float64 arrays of the backtest window on top of the shared data.
     n_cols = int(ds.mask.iloc[ds.mask.index.searchsorted(start) :].to_numpy().any(axis=0).sum())
-    per_worker = max(1.0, 1.5 * 16 * 8 * len(ds.mask.index) * max(n_cols, 1) / 1e9)
+    per_worker = max(1.0, 1.5 * 10 * 8 * len(ds.mask.index) * max(n_cols, 1) / 1e9)  # ~10 live float64 arrays
     workers = workers or max(1, min(os.cpu_count() or 2, _workers_for_memory(per_worker)))
     log.info("evaluation: %d parallel backtests (%.1f GB each, %d contracts)", workers, per_worker, n_cols)
     n_null = n_null if n_null is not None else min(v.null_permutations, 40)
@@ -301,13 +310,14 @@ def evaluate(
     grid = grid or [{"holding_horizon": h, "cost_aversion": ca} for h in cfg.labels.horizons for ca in (0.5, 1.0, 2.0)]
     jobs: list[tuple[str, int | dict[str, object]]] = [("null", s) for s in range(n_null)]
     jobs += [("grid", g) for g in grid]
-    jobs += [("costx2", {}), ("lag1", {})]
+    jobs += [("costx2", {}), ("lag1", {}), ("nohalt", {})]
     if wf.market_score is not None:
         jobs.append(("market", {"beta_neutral": True}))
     results = _run_parallel(jobs, workers)
     null_sr = [sharpe(d.to_numpy(), 365.0) for k, d, _ in results if k.startswith("null")]
     grid_rows, grid_daily = [], {}
     stress: dict[str, float] = {}
+    nohalt: dict[str, object] = {}
     for k, d, s in results:
         if k.startswith("grid"):
             grid_rows.append(
@@ -326,6 +336,18 @@ def evaluate(
             stress["sharpe_costx2"] = sharpe(d.to_numpy(), 365.0)
         elif k.startswith("lag1"):
             stress["sharpe_lag1"] = sharpe(d.to_numpy(), 365.0)
+        elif k.startswith("nohalt"):
+            by_year = (1 + d).groupby(d.index.year).prod() - 1
+            nohalt = {
+                "sharpe": sharpe(d.to_numpy(), 365.0),
+                "cagr": float(s.get("cagr", np.nan)),
+                "max_drawdown": float(s.get("max_drawdown", np.nan)),
+                "gross_pnl_annual": float(s.get("gross_pnl_annual", np.nan)),
+                "costs_annual": float(sum(s.get(x, 0.0) for x in ("fees_annual", "spread_annual", "impact_annual"))),
+                "turnover_annual": float(s.get("turnover_annual", np.nan)),
+                "avg_gross": float(s.get("avg_gross", np.nan)),
+                "by_year": {int(y): round(float(r), 4) for y, r in by_year.items()},
+            }
     grid_df = pd.DataFrame(grid_rows).set_index("config") if grid_rows else pd.DataFrame()
 
     # --- statistics -----------------------------------------------------------------------------------------
@@ -406,6 +428,8 @@ def evaluate(
         promoted=promoted,
         grid=grid_df,
         null_sharpes=[round(x, 3) for x in null_sr],
+        halted_at=next((ts for ts, msg in bt.risk_events if msg.startswith("HALT")), None),
+        nohalt=nohalt,
     )
     return ev, bt
 

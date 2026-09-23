@@ -129,6 +129,13 @@ def _context(
     return ctx
 
 
+def is_rebalance_bar(index: pd.DatetimeIndex, bar: pd.Timedelta, every: int) -> np.ndarray:
+    """Decision bars: every ``every`` bars on a clock-aligned grid (same bars in research and live)."""
+    if every <= 1:
+        return np.ones(len(index), dtype=bool)
+    return (index.as_unit("ns").asi8 // bar.value) % every == 0  # pandas may store us: compare in ns
+
+
 def run_backtest(*args: object, **kwargs: object) -> BacktestResult:
     """Simulate (see ``_run_backtest``) with single-threaded BLAS: the matrices are tiny and parallelism
     comes from running several backtests in separate processes; threaded BLAS only adds contention."""
@@ -172,6 +179,7 @@ def _run_backtest(
     constructor = PortfolioConstructor(pc, bpy, ic_ref if ic_ref is not None else pc.ic_ref)
     overlay = RiskOverlay(cfg.risk, check_kill_file=False)
     day_keys = index.floor("D").asi8
+    rebalance_bar = is_rebalance_bar(index, panel.bar_delta, pc.rebalance_every)
     N = close.shape[1]
     cov_hl = cfg.days(pc.cov_halflife_days)
     ewma = EwmaCovariance(N, cov_hl)
@@ -230,7 +238,7 @@ def _run_backtest(
 
         # 2) rebalance at close(t)
         fees = spread = impact = turnover = 0.0
-        if (t - t0) % pc.rebalance_every == 0:
+        if rebalance_bar[t]:
             active = member[t] & np.isfinite(z[t])
             idx = np.nonzero(active | (w != 0))[0]
             if len(idx):

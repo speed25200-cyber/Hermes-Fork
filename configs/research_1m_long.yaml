@@ -1,0 +1,81 @@
+# Bougies 1 min, horizons longs 1 h / 4 h / 8 h, décision toutes les 5 minutes (alignées sur l'horloge),
+# détention visée 4 h, score lissé, amortissement des coûts plafonné. Variante de research_1m.yaml : à
+# coûts égaux, un horizon de 15 min ne peut pas payer un aller-retour de ~10 pb.
+# Historique depuis avril 2025 (≈ 17 mois ; les archives 1 min sont volumineuses) : après 60 jours de
+# préchauffage de l'univers et 60 jours d'entraînement minimal, il reste ≈ 13 mois hors échantillon, au-dessus
+# des 12 mois exigés par la porte. Fenêtres de variables ramenées à ≤ 3 jours.
+name: hermes-1m-long
+seed: 42
+data:
+  source: binance_archive
+  cache_dir: data
+  bar: 1m
+  start: "2025-04-01"
+  include_premium: true
+  intrabar: false
+  universe:
+    top_n: 15
+    liquidity_lookback_days: 30
+    min_history_days: 60
+    reselect_every_days: 7
+features:
+  return_minutes: [1, 3, 5, 15, 30, 60, 240, 1440]
+  vol_minutes: [60, 240, 1440]
+  flow_minutes: [1, 5, 15, 60]
+  funding_minutes: [480, 1440]
+  trend_pairs_minutes: [[5, 30], [30, 240], [240, 1440]]
+  range_minutes: [60, 240, 1440]
+  day_minutes: 1440
+  long_minutes: 1440
+  zscore_minutes: 4320
+  vol_halflife_minutes: 240
+  max_lookback_minutes: 4320
+labels:
+  horizons: [60, 240, 480]
+  primary_horizon: 240
+  residualize: beta
+model:
+  gbm:
+    learning_rate: 0.05
+    n_estimators: 1000
+    early_stopping_rounds: 100
+    num_leaves: 31
+    min_data_in_leaf: 3000
+    feature_fraction: 0.6
+    lambda_l2: 10.0
+    seeds: [1, 2]
+  linear:
+    alpha: 300.0
+  ensemble: ic_weighted
+  market_model: true
+validation:
+  expanding: true
+  min_train_days: 60
+  test_days: 14
+  val_days: 10
+  embargo_minutes: 480
+  train_sample_minutes: 5
+portfolio:
+  vol_target_annual: 0.20
+  gross_max: 2.5
+  net_max: 0.25
+  weight_max: 0.20
+  beta_neutral: true
+  holding_horizon: 240
+  rebalance_every: 5
+  signal_halflife: 0.5
+  cost_scale_floor: 0.5
+  cost_aversion: 1.0
+  ic_ref: 0.03
+  cov_halflife_days: 2
+costs:
+  maker_fee: 0.0002
+  taker_fee: 0.0005
+  maker_fill_ratio: 0.6
+  min_half_spread_bps: 1.0
+  impact_coef: 0.7
+risk:
+  daily_loss_limit: 0.03
+  drawdown_soft: 0.10
+  drawdown_hard: 0.25
+  es_limit_daily: 0.04

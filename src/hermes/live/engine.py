@@ -26,6 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from hermes.backtest.engine import is_rebalance_bar
 from hermes.config import HermesConfig, with_overrides
 from hermes.data.live_feed import BinanceLiveFeed, DailyHistory
 from hermes.data.panel import BAR_TO_OFFSET, Panel
@@ -542,6 +543,12 @@ class LiveEngine:
         self.maybe_reload_bundle()
         if await self.guard():
             return None
+        every = self.cfg.portfolio.rebalance_every
+        if every > 1:
+            ts = BinanceLiveFeed.last_closed_bar(self.cfg.data.bar)
+            bar = pd.Timedelta(BAR_TO_OFFSET[self.cfg.data.bar])
+            if not is_rebalance_bar(pd.DatetimeIndex([ts]), bar, every)[0]:
+                return None  # not a decision bar (portfolio.rebalance_every): the risk guard above still ran
         positions = await self.broker.positions()
         symbols = await self.refresh_candidates(list(positions))
         # Market data must arrive within the bar; otherwise the cycle fails and the guard runs again.

@@ -207,6 +207,29 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         f"Sharpe {_num(t.get('sharpe_lag1'))}.",
         "",
     ]
+    if ev.halted_at:
+        L += [
+            f"> **Arrêt au drawdown dur le {str(ev.halted_at)[:10]}** : le livre ne trade plus ensuite (comme en "
+            "réel, jusqu'à une reprise humaine). Les statistiques ci-dessus incluent ces jours sans activité.",
+            "",
+        ]
+    nh = ev.nohalt
+    if nh:
+        years = " ; ".join(f"{y} : {_pct(r)}" for y, r in nh.get("by_year", {}).items())  # type: ignore[union-attr]
+        L += [
+            "### Économie du signal sans arrêt (diagnostic, hors porte)",
+            "",
+            "Même stratégie sur toute la période, contrôles de drawdown et de perte journalière désactivés : ce "
+            "que le signal rapporte et coûte réellement, année par année.",
+            "",
+            f"- Sharpe {_num(nh.get('sharpe'))}, CAGR {_pct(nh.get('cagr'))}, drawdown max "
+            f"{_pct(nh.get('max_drawdown'))} ;",
+            f"- P&L brut {_pct(nh.get('gross_pnl_annual'))}/an contre coûts {_pct(nh.get('costs_annual'))}/an, "
+            f"rotation {_num(nh.get('turnover_annual'), 0)}×/an, "
+            f"exposition brute moyenne {_num(nh.get('avg_gross'))} ;",
+            f"- par année : {years}.",
+            "",
+        ]
     if len(ev.grid):
         L += [
             "### Grille de construction (base du PBO)",

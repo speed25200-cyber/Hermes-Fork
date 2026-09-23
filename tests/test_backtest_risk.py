@@ -100,3 +100,17 @@ def test_cost_stress_scales_what_trades_pay_only(small_panel, setup):
     assert np.isclose(stress.stats["impact"].iloc[0], 2 * base.stats["impact"].iloc[0], rtol=1e-6)
     ratio = stress.stats["fees"].iloc[: 96 * 3].sum() / base.stats["fees"].iloc[: 96 * 3].sum()
     assert 1.7 < ratio < 2.3
+
+
+def test_rebalancing_follows_the_clock_aligned_grid(small_panel, setup):
+    from hermes.backtest.engine import is_rebalance_bar
+
+    cfg, mask, feats = setup
+    cfg4 = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={"rebalance_every": 4})})
+    fwd = (small_panel["close"].shift(-4) / small_panel["close"] - 1).where(mask)
+    sig = SignalBundle(fwd, pd.Series(0.05, index=mask.index))
+    bt = run_backtest(small_panel, mask, feats.aux, sig, cfg4, start=mask.index[96 * 20 + 1], end=mask.index[-10])
+    grid = is_rebalance_bar(bt.stats.index, small_panel.bar_delta, 4)
+    assert bt.stats["turnover"][~grid].eq(0).all() and bt.stats["turnover"][grid].gt(0).any()
+    # Same grid whatever the backtest's first bar (research and live decide on the same bars).
+    assert (bt.stats.index[grid].minute % 60).isin([0]).all()

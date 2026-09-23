@@ -5,14 +5,17 @@ de zéro en septembre 2026 : données sans biais de survie, apprentissage automa
 échantillon, portefeuille sensible aux coûts, gestion du risque en couches, exécution maker d'abord sur OKX.
 
 > **Aucune rentabilité n'est promise.** Le système mesure, avec des statistiques qui savent dire « non »,
-> et refuse de trader de l'argent réel avec un modèle qui n'a pas franchi sa porte de promotion. Les
-> résultats mesurés sur données réelles sont dans [`docs/RESULTS.md`](docs/RESULTS.md).
+> et refuse de trader de l'argent réel avec un modèle qui n'a pas franchi sa porte de promotion. État
+> actuel, mesuré sur données réelles : la prédiction est solide, mais aucune configuration n'est encore
+> rentable après coûts ni promue — détails et travaux en cours dans [`docs/RESULTS.md`](docs/RESULTS.md).
 
 ## Ce qu'il fait
 
-1. **Prédit le rendement relatif** de chaque contrat liquide sur 4 à 24 heures (net du funding, résiduel du
-   marché), avec un ensemble LightGBM + Ridge (+ Transformer à attention transversale en option) entraîné
-   en walk-forward purgé sur des archives Binance depuis 2020, contrats délistés compris.
+1. **Prédit le rendement relatif** de chaque contrat liquide (net du funding, résiduel du marché), en
+   décidant toutes les 1, 15 ou 30 minutes pour des horizons de 15 minutes à 24 heures, avec un ensemble
+   LightGBM + Ridge (+ Transformer à attention transversale en option) entraîné en walk-forward purgé sur
+   des archives Binance, contrats délistés compris. Hors échantillon, l'IC transversal est de ≈ 0,05
+   (t > 25) à 15 et 30 min, positif chaque année depuis 2023.
 2. **Construit un portefeuille bêta-neutre** : acheteur de ce qui devrait surperformer, vendeur à découvert
    de ce qui devrait sous-performer — il surfe sur les montées *et* les descentes sans parier sur la
    direction du marché. Optimiseur moyenne-variance avec coûts de transaction (zone de non-trading),
@@ -32,7 +35,8 @@ pip install -e ".[dev]"            # ".[dev,deep]" pour le réseau profond
 python -m pytest -q                 # tests hermétiques (marché synthétique, faux serveur OKX)
 
 hermes data download -c configs/research_15m.yaml      # archives Binance 15 min (contrats délistés compris)
-hermes research run  -c configs/research_15m.yaml --out reports/essai   # ou research_30m / research_1m
+hermes research run  -c configs/research_15m.yaml --out reports/essai   # ou research_30m / research_1m / *_long
+hermes research compare reports/essai reports/autre-essai                 # tableau comparatif, porte comprise
 hermes model install reports/essai/model                # devient le champion
 hermes live run -c configs/paper.yaml --mode paper      # papier sur flux live
 ```
@@ -47,7 +51,7 @@ Déploiement sur le VPS et exploitation : [`docs/OPERATIONS.md`](docs/OPERATIONS
 | [`docs/RESEARCH.md`](docs/RESEARCH.md) | État de l'art (2013-2026) qui a guidé chaque choix, avec références |
 | [`docs/RESULTS.md`](docs/RESULTS.md) | Résultats mesurés sur données réelles, hors échantillon, nets de coûts |
 | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | Modes paper/démo/réel, déploiement, arrêt d'urgence, paramètres |
-| `reports/` | Rapports de recherche générés et registre des essais (`trials.jsonl`) |
+| `reports/` | Rapports de recherche générés et registre des essais (`reports/trials/`) |
 
 ## Arborescence
 

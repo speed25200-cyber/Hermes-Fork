@@ -68,6 +68,9 @@ def test_research_run_end_to_end_report_resume_and_compare(cfg_small, tmp_path, 
     assert 1 / 5 <= tests["null_pvalue"] <= 1.0  # exact permutation p-value with 4 nulls
     assert set(ev.gate) >= {"dsr", "null_pvalue", "pbo", "cost_stress", "latency_stress", "oos_months"}
     assert (out / "REPORT.md").exists() and (out / "model" / "bundle.json").exists()
+    nh = rep["evaluation"]["nohalt"]  # diagnostic without drawdown controls, over the whole period
+    assert np.isfinite(nh["sharpe"]) and nh["by_year"] and "halted_at" in rep["evaluation"]
+    assert "sans arrêt" in (out / "REPORT.md").read_text()
     assert len(list(ledger.glob("*.json"))) == 1
     table = comparison_table([out])
     assert table.count("\n") == 2 and "15m" in table
