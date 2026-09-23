@@ -366,6 +366,7 @@ def evaluate(
         pnl_short=("pnl_short", "sum"),
         funding=("funding", "sum"),
         turnover=("turnover", "sum"),
+        stops=("stops", "sum"),
     )
     econ["costs"] = st[["fees", "spread", "impact"]].sum(axis=1).groupby(st.index.year).sum()
     if len(yearly):

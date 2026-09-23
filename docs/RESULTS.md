@@ -10,9 +10,10 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 
 > **Aucune configuration n'a franchi la porte de promotion à ce jour ; le système refuse donc de trader de
 > l'argent réel.** Les meilleures (horizons 4-48 h) sont rentables sur l'ensemble de la période (+11 à
-> +15 %/an nets, Sharpe jusqu'à 0,93) et, à détention 24 h, résistent à des coûts doublés ; mais le gain
-> dépend du régime (2024) et la significativité après correction des essais multiples n'est pas atteinte :
-> la porte les rejette, à juste titre.
+> +15 %/an nets, Sharpe jusqu'à 0,91 avec stops simulés) et, à détention 24 h, résistent à des coûts
+> doublés ; mais le gain dépend du régime (2024) et vient pour plus de la moitié de paris de style
+> (petites capitalisations, faible volatilité) : neutralisés, il ne reste que +3 %/an. La significativité
+> après correction des essais multiples n'est pas atteinte : la porte les rejette, à juste titre.
 
 ## Tous les essais
 
@@ -28,7 +29,9 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 | `research_1m_long` | 1 min | 1 h-8 h | 2025-07 → 2026-08 | 0,050 (9,1) | 5,3 % | 15,8 % | −9,1 % | −0,79 | −19 % | 0,01 | 0,72 | 0,79 | −1,66 | −0,84 | ❌ |
 | `research_30m_xl` | 30 min | 8 h-48 h (détention 24 h, aversion 2) | 2023-07 → 2026-08 | 0,074 (9,3) | 22,7 % | 8,5 % | **+11,9 %** | 0,77 | −20 % | 0,58 | **0,04** | 0,48 | **0,45** | **0,71** | ❌ |
 | `research_15m_xl` | 15 min | 8 h-48 h (détention 24 h, aversion 2) | 2023-07 → 2026-08 | 0,074 (9,4) | 23,5 % | 9,2 % | **+11,0 %** | 0,74 | −20 % | 0,53 | **0,04** | 0,60 | **0,33** | **0,65** | ❌ |
-| `research_30m_xl_lb` (fenêtres 14-30 j) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 24,8 % | ~7 % | **+15,1 %** | **0,93** | −18 % | 0,55 | **0,04** | 0,86 | **0,62** | **0,89** | ❌ |
+| `research_30m_xl_lb` (fenêtres 14-30 j), avant stops simulés | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 24,8 % | 7,8 % | **+15,1 %** | **0,93** | −18 % | 0,55 | **0,04** | 0,86 | **0,62** | **0,89** | ❌ |
+| `research_30m_xl_lb`, stops catastrophe simulés | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 24,8 % | 8,4 % | **+14,6 %** | **0,91** | −18 % | 0,49 | **0,04** | 0,65 | **0,59** | **0,88** | ❌ |
+| `research_30m_xl_lb_style` (livre neutre aux styles) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,072 (9,0) | 10,7 % | 8,2 % | +3,2 % | 0,34 | −21 % | 0,11 | 0,08 | **0,11** | −0,35 | **0,31** | ❌ |
 
 IC : Spearman transversal à l'horizon de détention, t de Newey-West sur les IC journaliers. En gras : ce
 qui franchit son seuil.
@@ -93,11 +96,32 @@ jambe le confirme indirectement : chaque jambe suit surtout le marché (2024 hau
 −8 % ; 2025 : l'inverse) et le livre garde un biais net acheteur de 0,1-0,2 qui paie le funding en 2026.
 L'hypothèse « ventes à découvert squeezées » est réfutée pour 2026 (la jambe vendeuse y gagne).
 
-## 4. En cours
+Stops catastrophe simulés (`research_30m_xl_lb`, même code que le réel : stop à k σ journaliers posé à
+l'ouverture, exécuté au stop ou à l'ouverture en cas de gap, frais taker) : Sharpe 0,91 au lieu de 0,93, CAGR
++14,6 %, coûts +0,6 %/an ; PBO 0,65 au lieu de 0,86 (la grille se classe plus régulièrement). Par année :
+2023 −4,5 %, 2024 +65 %, 2025 +9,5 %, 2026 −11,9 %. Toujours refusé (DSR 0,49 avec 16 essais, années
+positives 2/4).
 
-- `research_30m_xl_lb_style` : même modèle, livre **neutre aux styles** (taille/liquidité et volatilité
-  traitées comme un risque aussi cher que le marché) — pour ne garder que la prédiction idiosyncratique ;
-- `research_30m_xl_lb` réévalué avec les **stops catastrophe désormais simulés** (comme placés sur OKX en
-  live), pour comparer à code égal.
+## 4. Les paris de style expliquent l'essentiel du P&L
+
+`research_30m_xl_lb_style` garde le même modèle mais rend le livre **neutre aux styles** (taille/liquidité
+et volatilité traitées comme un risque aussi cher que le marché). Le P&L brut tombe de 24,8 % à 10,7 %/an
+pour des coûts inchangés (8,2 %/an) : Sharpe 0,34, CAGR +3,2 %, coûts doublés négatifs. Par différence, la
+part « style » du livre non neutre a rapporté environ −6 % en 2023, +40 % en 2024, +23 % en 2025 et −13 % en
+2026 ; la part idiosyncratique +1,5 %, +25 %, −14 % et +1 %. Les deux dépendent du régime ; aucune ne
+passe seule la porte. Le style n'est pas illégitime (taille et momentum sont des facteurs documentés des
+cryptomonnaies, Liu, Tsyvinski & Wu 2022), mais c'est une prime de risque cyclique, pas une prédiction.
+
+Point notable : en 2025, l'IC est au plus haut (0,073) alors que le livre neutre perd −13,7 % (rotation 286,
+coûts 14 %). L'IC mesure surtout un classement lent, dominé par les caractéristiques de style ; une fois
+celles-ci retirées du livre, ce qui reste à trader est faible et coûteux.
+
+## 5. En cours
+
+- `research_30m_xl_lb_sres` : la **cible** elle-même est nette des styles (résidu projeté à chaque barre hors
+  de la taille/liquidité et de la volatilité), avec le livre neutre : le modèle ne consacre plus sa capacité
+  à des primes qu'il n'a pas le droit de jouer ;
+- `research_30m_xl_lb_sres_u50` : la même chose sur 50 contrats (loi fondamentale : ratio d'information ∝
+  IC × √largeur).
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.

@@ -61,6 +61,7 @@ def write_report(
             "pnl_long": "sum",
             "pnl_short": "sum",
             "n_positions": "mean",
+            "stops": "sum",
             "ic_est": "mean",
         }
     )
@@ -182,12 +183,13 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         f"| Exposition brute / nette / bêta moyennes | {_num(s.get('avg_gross'))} / {_num(s.get('avg_net'))} / "
         f"{_num(s.get('avg_abs_beta'))} |",
         f"| Positions moyennes | {_num(s.get('avg_positions'), 1)} |",
+        f"| Stops catastrophe déclenchés par an | {_num(s.get('stops_annual'), 0)} |",
         "",
         "### Par année",
         "",
         "| Année | Rendement | Sharpe | Drawdown max | P&L jambe acheteuse | P&L jambe vendeuse | Funding | Coûts "
-        "| Rotation |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Rotation | Stops |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for _, row in ev.yearly.reset_index().iterrows():
         g = row.get
@@ -195,7 +197,7 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
             f"| {int(row['year'])} | {_pct(row['return'])} | {_num(row['sharpe'])} | {_pct(row['max_drawdown'])} | "
             f"{_pct(g('pnl_long', float('nan')))} | {_pct(g('pnl_short', float('nan')))} | "
             f"{_pct(g('funding', float('nan')))} | {_pct(g('costs', float('nan')))} | "
-            f"{_num(g('turnover', float('nan')), 0)} |"
+            f"{_num(g('turnover', float('nan')), 0)} | {_num(g('stops', float('nan')), 0)} |"
         )
     L += [
         "",

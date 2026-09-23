@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from hermes.config import with_overrides
 from hermes.data.synthetic import make_synthetic_panel
 from hermes.models.bundle import ModelBundle
 from hermes.research.dataset import build_dataset
@@ -18,6 +19,18 @@ def test_planted_signal_is_found_out_of_sample(cfg_small):
     wf = walk_forward_train(ds, cfg_small)
     s = ic_summary(cross_sectional_ic(wf.score.stack(), ds.targets.residual[4].stack()), horizon=4)
     assert s["ic_mean"] > 0.03 and s["ic_t"] > 3
+
+
+@pytest.mark.slow
+def test_planted_signal_survives_style_residual_targets(cfg_small):
+    # The planted signal is idiosyncratic: projecting the target off size and volatility must keep it. The
+    # projection spends three degrees of freedom per bar, so the cross-section must be realistic (~24 members).
+    cfg = with_overrides(cfg_small, {"labels.residualize": "style", "data.universe.top_n": 24})
+    panel = make_synthetic_panel(n_assets=30, n_bars=96 * 75, bar="15m", seed=11, signal_strength=1.0)
+    ds = build_dataset(panel, cfg)
+    wf = walk_forward_train(ds, cfg)
+    s = ic_summary(cross_sectional_ic(wf.score.stack(), ds.targets.residual[4].stack()), horizon=4)
+    assert s["ic_mean"] > 0.02 and s["ic_t"] > 3
 
 
 @pytest.mark.slow

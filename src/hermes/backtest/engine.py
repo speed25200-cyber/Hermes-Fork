@@ -61,6 +61,7 @@ class BacktestResult:
                 "funding_annual": float(st["funding"].sum() / max(years, 1e-9)),
                 "gross_pnl_annual": float(st["gross_pnl"].sum() / max(years, 1e-9)),
                 "avg_positions": float(st["n_positions"].mean()),
+                "stops_annual": float(st["stops"].sum() / max(years, 1e-9)),
                 "avg_ic_est": float(st["ic_est"].mean()),
             }
         )

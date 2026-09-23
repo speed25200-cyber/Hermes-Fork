@@ -37,7 +37,10 @@ perd de l'argent. D'où l'optimiseur à coûts et l'amortissement par la persist
 
 Rendement futur total (prix **et** funding), résiduel d'un bêta glissant, divisé par la volatilité ex ante,
 rangé en scores normaux à chaque instant ; mélange des horizons 4, 8 et 24 h (un ensemble d'horizons en une
-seule cible). Sélection sur la performance **nette** et non sur l'erreur quadratique.
+seule cible). Sélection sur la performance **nette** et non sur l'erreur quadratique. Option
+`residualize: style` : le résidu est en plus projeté, à chaque barre, hors de la taille/liquidité et de la
+volatilité (les expositions qu'un livre neutre aux styles retire), comme les cibles « résiduelles de Barra »
+des actions : le modèle apprend alors ce qu'un tel livre peut réellement détenir.
 
 ## 4. Validation
 

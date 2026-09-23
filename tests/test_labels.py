@@ -4,7 +4,7 @@ import pandas as pd
 from hermes.config import FeatureConfig, LabelConfig, UniverseConfig
 from hermes.data.universe import universe_mask
 from hermes.features.library import build_features
-from hermes.labels.targets import build_targets, forward_sum
+from hermes.labels.targets import build_targets, forward_sum, project_out, style_frames
 from hermes.labels.triple_barrier import triple_barrier, uniqueness_weights
 
 
@@ -50,3 +50,41 @@ def test_uniqueness_weights_overlap():
     w = uniqueness_weights(bars)
     assert 0 < w.iloc[1] < 1
     assert w.iloc[0] >= w.iloc[1]
+
+
+def test_project_out_is_orthogonal_to_intercept_and_exposures():
+    rng = np.random.default_rng(0)
+    idx = pd.date_range("2024-01-01", periods=5, freq="30min", tz="UTC")
+    cols = [f"S{i}" for i in range(12)]
+    a = pd.DataFrame(rng.normal(size=(5, 12)), idx, cols)
+    b = pd.DataFrame(rng.normal(size=(5, 12)), idx, cols)
+    y = 0.3 + 2.0 * a - 1.0 * b + pd.DataFrame(rng.normal(scale=0.1, size=(5, 12)), idx, cols)
+    y.iloc[1, 3] = np.nan
+    b.iloc[2, 5] = np.nan
+    y.iloc[4, :6] = np.nan  # too few members left: the row is dropped
+    res = project_out(y, [a, b], min_members=8)
+    assert res.iloc[4].isna().all()
+    assert np.isnan(res.iloc[1, 3]) and np.isnan(res.iloc[2, 5])
+    for t in range(4):
+        r = res.iloc[t]
+        ok = r.notna()
+        assert abs(r[ok].sum()) < 1e-7
+        assert abs((r[ok] * a.iloc[t][ok]).sum()) < 1e-7
+        assert abs((r[ok] * b.iloc[t][ok]).sum()) < 1e-7
+        assert r[ok].std() < 0.2  # the planted style loadings are gone
+
+
+def test_style_residual_targets_have_no_style_loading(small_panel):
+    mask = universe_mask(small_panel, UniverseConfig(top_n=10, min_history_days=3))
+    feats = build_features(small_panel, mask, FeatureConfig())
+    tg = build_targets(small_panel, feats, mask, LabelConfig(residualize="style", clip_sigma=1e6))
+    size, vol = (x.where(mask) for x in style_frames(small_panel, feats.aux["ivol"]))
+    res = tg.residual[8]
+    rows = res.dropna(how="all").index[:50]
+    assert len(rows) > 10
+    for t in rows:
+        r = res.loc[t]
+        ok = r.notna()
+        assert abs(r[ok].mean()) < 1e-8
+        assert abs(np.corrcoef(r[ok], size.loc[t][ok])[0, 1]) < 1e-6
+        assert abs(np.corrcoef(r[ok], vol.loc[t][ok])[0, 1]) < 1e-6

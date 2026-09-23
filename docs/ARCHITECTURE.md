@@ -59,7 +59,7 @@ Le même code sert à la recherche, au backtest, au papier et au réel : ce qui 
 | `hermes.data.intrabar` | Agrégats 1 min par bougie de base, strictement causaux. |
 | `hermes.data.synthetic` | Marché synthétique à signal planté connu (tests : le pipeline doit le retrouver, et ne rien trouver dans le bruit). |
 | `hermes.features.library` | ~130 variables causales, sans échelle (retours / volatilité ex ante, z-scores, rangs). |
-| `hermes.labels` | Cibles résiduelles (bêta) nettes du funding, normalisées ; triple barrière et poids d'unicité. |
+| `hermes.labels` | Cibles résiduelles (bêta, ou bêta + styles) nettes du funding, normalisées ; triple barrière et poids d'unicité. |
 | `hermes.models` | LightGBM (arrêt précoce sur l'IC transversal), Ridge, réseau à attention transversale (optionnel), bundle sérialisé sans pickle avec empreintes SHA-256. |
 | `hermes.validation` | Splits purgés (walk-forward, CPCV), IC Newey-West, Sharpe de Lo, PSR, DSR, MinTRL, bootstrap stationnaire, SPA de Hansen, PBO. |
 | `hermes.research` | Jeu de données (construction par tranches bornée en mémoire), walk-forward, évaluation, porte de promotion, rapport, modèle final. |

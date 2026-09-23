@@ -10,6 +10,11 @@ funding paid** over that period (for a perp, funding is part of the return, not 
 far more predictable and diversifiable than direction; dividing by ex-ante volatility makes it
 homoscedastic so that high-volatility coins do not dominate the loss.
 
+With ``residualize: style`` the vol-normalised beta residual is further projected, bar by bar and across the
+members, off an intercept and the two style exposures the style-neutral book removes (log 14-day dollar volume
+and log residual volatility, both known at ``t``): the model then learns only the part of the cross-section a
+style-neutral book can hold, instead of spending its capacity on style premia it will not be allowed to bet on.
+
 The market is modelled separately (``market`` targets) and only allowed to drive net exposure if that
 model independently passes validation.
 """
@@ -24,6 +29,43 @@ import pandas as pd
 from hermes.config import LabelConfig
 from hermes.data.panel import Panel
 from hermes.features.library import FeatureSet
+
+
+def project_out(y: pd.DataFrame, exposures: list[pd.DataFrame], min_members: int = 8) -> pd.DataFrame:
+    """Per-row OLS residual of ``y`` on ``[1, *exposures]`` over the cells where everything is finite.
+
+    Rows with fewer than ``min_members`` usable cells become NaN (no reliable cross-sectional fit)."""
+    Y = y.to_numpy(dtype=np.float64)
+    Xs = [e.reindex(index=y.index, columns=y.columns).to_numpy(dtype=np.float64) for e in exposures]
+    ok = np.isfinite(Y)
+    for x in Xs:
+        ok &= np.isfinite(x)
+    n = ok.sum(axis=1)
+    cols = [np.ones_like(Y)]
+    for x in Xs:
+        xz = np.where(ok, x, 0.0)
+        mean = xz.sum(axis=1, keepdims=True) / np.maximum(n, 1)[:, None]
+        cols.append(np.where(ok, x - mean, 0.0))  # demeaned: well conditioned, same residual
+    X = np.stack(cols, axis=-1) * ok[..., None]
+    Yz = np.where(ok, Y, 0.0)
+    M = np.einsum("tni,tnj->tij", X, X)
+    b = np.einsum("tni,tn->ti", X, Yz)
+    good = n >= max(min_members, X.shape[-1] + 2)
+    out = np.full_like(Y, np.nan)
+    if good.any():
+        k = X.shape[-1]
+        ridge = 1e-12 * np.maximum(np.trace(M[good], axis1=1, axis2=2), 1e-12)[:, None, None] * np.eye(k)
+        coef = np.linalg.solve(M[good] + ridge, b[good][..., None])[..., 0]
+        fit = np.einsum("tnk,tk->tn", X[good], coef)
+        out[good] = np.where(ok[good], Y[good] - fit, np.nan)
+    return pd.DataFrame(out, index=y.index, columns=y.columns)
+
+
+def style_frames(panel: Panel, ivol: pd.DataFrame) -> list[pd.DataFrame]:
+    """Log 14-day average dollar volume and log residual volatility, as the style-neutral book sees them."""
+    bpd = max(1, round(pd.Timedelta("1D") / panel.bar_delta))
+    adv = panel["quote_volume"].astype("float64").rolling(bpd * 14, min_periods=bpd).mean()
+    return [np.log(adv.where(adv > 0)), np.log(ivol.where(ivol > 0))]
 
 
 def forward_sum(x: pd.DataFrame | pd.Series, h: int) -> pd.DataFrame | pd.Series:
@@ -57,11 +99,12 @@ def build_targets(panel: Panel, feats: FeatureSet, mask: pd.DataFrame, cfg: Labe
         else np.sqrt((mkt**2).ewm(halflife=72, min_periods=24, adjust=False).mean())
     )
 
+    styles = [x.where(mask) for x in style_frames(panel, ivol)] if cfg.residualize == "style" else []
     residual, total, market = {}, {}, {}
     for h in cfg.horizons:
         fwd = forward_sum(net_r1, h)
         fwd_m = forward_sum(mkt, h)
-        if cfg.residualize == "beta":
+        if cfg.residualize in ("beta", "style"):
             res = fwd - beta.mul(fwd_m, axis=0)
             scale = ivol
         elif cfg.residualize == "mean":
@@ -72,6 +115,8 @@ def build_targets(panel: Panel, feats: FeatureSet, mask: pd.DataFrame, cfg: Labe
             scale = vol
         if cfg.vol_normalize:
             res = res / (scale * np.sqrt(h))
+        if styles:
+            res = project_out(res.where(mask), styles)
         residual[h] = res.clip(-cfg.clip_sigma, cfg.clip_sigma).where(mask)
         total[h] = fwd.where(mask)
         market[h] = (fwd_m / (mkt_vol * np.sqrt(h))).clip(-cfg.clip_sigma, cfg.clip_sigma)

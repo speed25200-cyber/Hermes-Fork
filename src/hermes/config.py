@@ -81,7 +81,7 @@ class LabelConfig(_Strict):
 
     horizons: tuple[int, ...] = (2, 4, 8)
     primary_horizon: int = 4
-    residualize: Literal["none", "mean", "beta"] = "beta"
+    residualize: Literal["none", "mean", "beta", "style"] = "beta"
     vol_normalize: bool = True
     clip_sigma: float = Field(5.0, gt=0)
 
