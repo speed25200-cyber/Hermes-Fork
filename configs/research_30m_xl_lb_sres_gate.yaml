@@ -1,7 +1,10 @@
-# research_30m_xl_lb_sres entraîné sur une fenêtre glissante de 18 mois au lieu de tout l'historique. Même
-# motivation que _rec (IC nul en 2026, non-stationnarité) par l'autre voie classique : oublier franchement le
-# passé lointain plutôt que le pondérer. Un essai de plus au registre (DSR).
-name: hermes-30m-xl-lb-sres-roll
+# research_30m_xl_lb_sres avec une garde de régime : l'estimation d'IC (donc la taille du livre) est divisée par
+# deux les jours où BTC a clôturé la veille à plus de 15 % sous son plus haut de 90 jours. Motivation mesurée
+# (docs/RESULTS.md, § 10) : avant 2026, l'IC transversal a été plus faible dans 4 des 5 baisses de ce type.
+# La variable a été choisie parmi ~30 examinées sur les mêmes données hors échantillon : le résultat est une
+# borne haute, et les 15 %, 90 jours et 0,5 sont fixés une fois pour toutes (jamais réajustés). Un essai de
+# plus au registre (DSR).
+name: hermes-30m-xl-lb-sres-gate
 seed: 42
 data:
   source: binance_archive
@@ -47,8 +50,7 @@ model:
   ensemble: ic_weighted
   market_model: true
 validation:
-  expanding: false
-  train_days: 540
+  expanding: true
   min_train_days: 365
   test_days: 60
   val_days: 45
@@ -68,6 +70,10 @@ portfolio:
   cost_aversion: 2.0
   ic_ref: 0.03
   cov_halflife_days: 7
+  regime_gate_symbol: BTCUSDT
+  regime_gate_lookback_days: 90
+  regime_gate_drawdown: 0.15
+  regime_gate_scale: 0.5
 costs:
   maker_fee: 0.0002
   taker_fee: 0.0005

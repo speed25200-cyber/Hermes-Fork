@@ -15,6 +15,20 @@ import numpy as np
 import pandas as pd
 
 
+def regime_scale(daily_close: pd.Series, drawdown: float, lookback_days: int, scale: float) -> pd.Series:
+    """Per UTC day ``D``: ``scale`` if the reference contract's close of ``D-1`` was more than ``drawdown`` below
+    its highest close over the ``lookback_days`` ending ``D-1``, else 1. Only closed days are read, so research
+    and the live engine (which holds closed daily bars up to yesterday) gate the same days."""
+    c = daily_close.astype(float).sort_index()
+    if len(c):  # one more day: the live engine, which holds closes up to yesterday, reads today's value
+        c = c.reindex(c.index.append(pd.DatetimeIndex([c.index[-1] + pd.Timedelta(days=1)])))
+    if drawdown <= 0 or c.dropna().empty:
+        return pd.Series(1.0, index=c.index, dtype=float)
+    dd = c / c.rolling(lookback_days, min_periods=min(lookback_days, 20)).max() - 1.0
+    on = (dd < -drawdown).shift(1, fill_value=False)  # day D is decided from the close of D-1
+    return pd.Series(np.where(on, scale, 1.0), index=c.index, dtype=float)
+
+
 def rowwise_corr(a: pd.DataFrame, b: pd.DataFrame, min_names: int = 5) -> pd.Series:
     """Per-row Pearson correlation over the columns where both frames are finite (few temporaries)."""
     b = b.reindex(index=a.index, columns=a.columns)

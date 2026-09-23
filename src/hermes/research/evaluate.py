@@ -23,6 +23,7 @@ from hermes.portfolio.alpha import (
     cs_zscore,
     estimate_ic,
     market_alpha_series,
+    regime_scale,
     rowwise_corr,
     signal_persistence,
     smooth_scores,
@@ -62,6 +63,11 @@ def make_signal(
     score = traded_score(score, cfg, H)
     ric = rowwise_corr(score, target)
     ic_est = estimate_ic(ric, H, prior_ic, halflife_bars=cfg.bars_per_day * 30)
+    pc = cfg.portfolio
+    if pc.regime_gate_drawdown > 0 and pc.regime_gate_symbol in ds.panel.symbols:
+        daily_close = ds.panel["close"][pc.regime_gate_symbol].resample("1D").last()
+        gate = regime_scale(daily_close, pc.regime_gate_drawdown, pc.regime_gate_lookback_days, pc.regime_gate_scale)
+        ic_est = ic_est * gate.reindex(ic_est.index.floor("D")).fillna(1.0).to_numpy()
     malpha = None
     if market_score is not None and market_prior is not None:
         malpha = market_alpha(market_score, market_prior, ds, cfg)

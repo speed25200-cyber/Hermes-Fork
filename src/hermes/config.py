@@ -204,6 +204,16 @@ class PortfolioConfig(_Strict):
     style_risk: float = Field(
         1.0, gt=0, description="Variance of one unit of style exposure, in units of the market variance"
     )
+    regime_gate_drawdown: float = Field(
+        0.0,
+        ge=0,
+        lt=1,
+        description="Scale the book down while BTC closes this far below its high (0 = off): cross-sectional "
+        "ICs were lower in past BTC drawdowns",
+    )
+    regime_gate_lookback_days: int = Field(90, ge=5, description="Window of the high the drawdown is taken from")
+    regime_gate_scale: float = Field(0.5, ge=0, le=1, description="Multiplier of the IC estimate in the regime")
+    regime_gate_symbol: str = "BTCUSDT"
 
 
 class RiskConfig(_Strict):

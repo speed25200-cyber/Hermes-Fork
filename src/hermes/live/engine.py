@@ -44,6 +44,7 @@ from hermes.portfolio.alpha import (
     cs_zscore,
     estimate_ic,
     market_alpha_series,
+    regime_scale,
     rowwise_corr,
     signal_persistence,
     smooth_scores,
@@ -477,6 +478,17 @@ class LiveEngine:
         ric = self._series("ic", ts).reindex(grid)
         est = estimate_ic(ric, H, self.bundle.prior_ic, halflife_bars=self.bpd * 30)
         ic_est = float(est.iloc[-1]) if np.isfinite(est.iloc[-1]) else self.bundle.prior_ic
+        pc = cfg.portfolio
+        if pc.regime_gate_drawdown > 0 and daily is not None and pc.regime_gate_symbol in daily.close:
+            gate = regime_scale(
+                daily.close[pc.regime_gate_symbol],
+                pc.regime_gate_drawdown,
+                pc.regime_gate_lookback_days,
+                pc.regime_gate_scale,
+            )
+            g = float(gate.get(ts.floor("D"), 1.0))
+            ic_est *= g
+            d.risk["regime_scale"] = g
         cost_scale = float(self.bundle.meta.get("cost_scale", 1.0) or 1.0)  # type: ignore[arg-type]
         window = self.bpd * 30
         recent = names.reindex(pd.date_range(end=ts, periods=window + H, freq=freq))

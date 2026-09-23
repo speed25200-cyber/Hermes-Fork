@@ -159,3 +159,21 @@ def test_smoothed_scores_are_time_decayed_and_masked():
     assert np.isnan(out.iloc[2, 0])  # not a member: no score
     assert 0 > out.iloc[3, 0] > -1 and out.iloc[5, 0] < out.iloc[3, 0]  # moves toward the new sign
     assert smooth_scores(s, 0.0).equals(s)
+
+
+def test_regime_scale_gates_the_day_after_a_close_below_the_threshold():
+    import pandas as pd
+
+    from hermes.portfolio.alpha import regime_scale
+
+    days = pd.date_range("2025-01-01", periods=120, freq="1D", tz="UTC")
+    close = pd.Series(100.0, index=days)
+    close.iloc[100:] = 80.0  # -20 % from the 90-day high from day 100
+    g = regime_scale(close, 0.15, 90, 0.5)
+    assert g.iloc[100] == 1.0 and g.iloc[101] == 0.5  # decided from the previous close only
+    assert g.index[-1] == days[-1] + pd.Timedelta(days=1) and g.iloc[-1] == 0.5  # "today" for the live engine
+    assert (regime_scale(close, 0.0, 90, 0.5) == 1.0).all()
+    # Causal: the gate of day D does not change when later closes do.
+    later = close.copy()
+    later.iloc[105:] = 100.0
+    assert regime_scale(later, 0.15, 90, 0.5).iloc[:106].equals(g.iloc[:106])

@@ -241,4 +241,61 @@ de ses scores une fois l'horizon de 24 h écoulé, et ne prendra des positions q
 L'incubation mesure dès maintenant la question qui compte : **le classement du modèle tient-il sur des
 données jamais vues ?** Un IC réalisé durablement nul signerait la fin de cet avantage.
 
+## 10. Pourquoi 2026 perd, et ce que l'incubation doit trancher
+
+Diagnostic des scores walk-forward (jumeau à 30 contrats, cible nette des styles, erreurs types Newey-West) :
+
+| Période | IC de rang, score brut | IC de rang, score lissé | IC de Pearson du livre (ce qui dimensionne) |
+|---|---:|---:|---:|
+| 2023 S2 – 2024 | 0,039 ± 0,009 | 0,036 | 0,020 |
+| 2025 | 0,058 ± 0,010 | 0,042 | 0,035 |
+| 2026, janvier → 15 mai | **0,049 ± 0,011** | **0,009** | −0,007 |
+| 2026, 16 mai → août | 0,023 ± 0,010 | 0,016 | −0,004 |
+
+**Le classement brut a presque tenu** (2026 : 0,036 ± 0,008 contre 0,047 ± 0,007 avant, un écart d'environ une
+erreur type) ; **ce qui a cassé, c'est la partie lente du score**, celle que le livre trade (score lissé sur
+24 barres, détenu 24 h). Un pli de 60 jours a une erreur type de 0,02-0,03 : un chiffre isolé comme −0,054 ne
+se sur-interprète pas. Explications, de la plus à la moins probable :
+
+- **E1 — janvier à mi-mai : la partie lente a cassé, pas le classement.** L'IC du score vieux de 48 barres
+  passe de +0,029 à −0,010 ; le momentum 14-30 jours et les sommes de funding sur 30 jours (≈ 50 % du gain du
+  GBM) changent de signe ; les variables rapides tiennent. Contre : la frontière de mi-mai a été choisie après
+  avoir vu les données, et le retournement du momentum 30 jours n'est qu'à t ≈ −2.
+- **E2 — mi-mai à août : le bloc rapide s'est retourné.** Le retour à la moyenne 8 h-3 j devient continuation
+  (t −6,1), le flux aussi (t −4,0), dans les deux univers, en même temps que l'autocorrélation transversale
+  des rendements journaliers devient positive. Contre : un seul épisode de 3,5 mois, sans indicateur avancé
+  validé.
+- **E3 — régime de baisse, cause commune possible de E1.** Avant 2026, l'IC était plus faible quand BTC
+  clôturait à plus de 15 % sous son plus haut de 90 jours (4 épisodes sur 5) ou quand le marché alt baissait
+  sur 30 jours (7 sur 8), même à IC récent égal ; 2026 est le plus long épisode de ce type. Contre : variable
+  retenue parmi ~30 examinées sur les mêmes données, et 2026 ne peut pas la valider (80-96 % des jours dans
+  cet état).
+- **E4 — déclin structurel / encombrement.** A priori fort (carry crypto négatif en 2025, anomalies publiées
+  qui perdent ~58 %), mais l'IC brut de 2026 n'est pas significativement plus bas : indiscernable de E2/E3 sur
+  8 mois.
+
+Écartés par mesure : **ré-entraîner plus souvent ou sur une fenêtre plus courte ne sauve pas 2026** (test
+causal : fenêtre croissante 0,016, demi-vie 365 j 0,015, glissante 365 j 0,007, 180 j 0,002 ; tous t < 1,7) —
+les configurations `sres_rec` et `sres_roll` ont donc été retirées sans être lancées. Interdits, car décidés sur
+2026 : retirer ou inverser des variables selon leur IC de 2026, raccourcir l'horizon ou le lissage (le livre
+à 8 h perd aussi −6,2 % en 2026), filtrer sur la dispersion ou la corrélation (signe historique faux en 2026).
+
+**Contrôles pré-enregistrés de l'incubation** (fixés le 23 septembre 2026, avant toute donnée en direct ;
+journalisés par le moteur, jamais utilisés pour dimensionner, affichés par le tableau de bord) : IC de rang du
+score brut (`ic_raw`), du score vieux d'un horizon (`ic_lag`), et l'état du marché (`btc_dd90`, `mkt_ret30`,
+`xs_ac1`). Chaque explication prédit un profil différent :
+
+| Si… | alors… |
+|---|---|
+| l'IC remonte maintenant que BTC est sorti de sa baisse (depuis le 21 août 2026) | E3 : le creux de 2026 était un régime |
+| l'IC brut reste positif mais `ic_lag` reste ≤ 0 | E1 : seule la partie lente est perdue |
+| tout reste près de zéro | E4 : l'avantage est perdu |
+
+**Variantes de recherche retenues (une par essai, dans l'ordre)** : V1, une garde de régime (taille divisée
+par deux quand BTC a clôturé la veille à plus de 15 % sous son plus haut de 90 jours ; paramètres figés, jamais
+réajustés ; `research_30m_xl_lb_sres_gate`) — une estimation linéaire sur le livre officiel annonçait Sharpe
+1,14 → 1,31 et 2026 −6,8 % → −3,5 %, à lire comme une borne haute puisque la variable a été choisie après
+coup ; V2, de l'hygiène d'ajustement (ensemble à poids égaux, nombre d'arbres fixé d'avance, correction des
+contrats à funding toutes les 4 h) ; V3, un membre « momentum de facteurs » causal, a priori faible.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.

@@ -309,3 +309,21 @@ def test_paper_trades_only_what_okx_lists(cfg_small, tmp_path):
     cfg_any = with_overrides(cfg_small, {"data.universe.venue": "any"})
     eng_any = LiveEngine(cfg_any, type("B", (), {"meta": {}})(), None, broker, StateStore(tmp_path / "t"), "paper")
     assert eng_any.tradable(["BTCUSDT", "MYXUSDT"]) == ["BTCUSDT", "MYXUSDT"]
+
+
+@pytest.mark.slow
+def test_regime_gate_is_the_same_in_research_and_live(cfg_small, tmp_path):
+    from hermes.portfolio.alpha import regime_scale
+
+    cfg = with_overrides(cfg_small, {"portfolio.regime_gate_drawdown": 0.01, "portfolio.regime_gate_lookback_days": 20})
+    panel, bundle, broker, store, cfg = _engine(cfg, tmp_path)
+    t = 96 * 45 + 40
+    feed = FakeFeed(panel, t, 96 * 30)  # the feed moves the history to the present
+    eng = LiveEngine(cfg, bundle, feed, broker, store, mode="paper")
+    d = asyncio.run(eng.step())
+    day = pd.Timestamp(d.ts).floor("D")
+    # Research reads the whole panel (today's partial close included); the gate of a day only uses the day before.
+    research = regime_scale(feed.panel["close"]["BTCUSDT"].iloc[:t].resample("1D").last(), 0.01, 20, 0.5)
+    assert d.risk["regime_scale"] == research[day]
+    gated = research[research < 1].index
+    assert len(gated) and (research.loc[gated] == 0.5).all()  # the synthetic BTC does cross the threshold
