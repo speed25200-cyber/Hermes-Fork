@@ -306,17 +306,28 @@ def build_features(panel: Panel, mask: pd.DataFrame, cfg: FeatureConfig) -> Feat
         )
         F["premium_chg_8h"] = ((pr - pr.shift(B(480))) * 1e4).clip(-200, 200)
         F["premium_z"] = rolling_z(pr, zw, min_periods=max(10, zw // 10)).clip(-5, 5)
-    if "oi_value" in panel and panel["oi_value"].notna().any().any():
-        oi = np.log(panel["oi_value"].where(panel["oi_value"] > 0))
+
+    # Positioning (Binance "metrics": open interest, long/short ratios). Read one bar late: the live API publishes
+    # a snapshot some time after it is taken. Z-scores over at most 28 days: the live API serves 30.
+    def positioning(name: str) -> pd.DataFrame | None:
+        if name not in panel or not panel[name].notna().any().any():
+            return None
+        x = panel[name].astype("float64")
+        return x.where(x > 0).ffill(limit=4).shift(1)
+
+    pos_zw = min(B(cfg.zscore_minutes), 28 * bars_per_day)
+    oi_value = positioning("oi_value") if "oi" in cfg.positioning else None
+    if oi_value is not None:
+        oi = np.log(oi_value)
         for m in (480, 1440, 4320):
             F[f"oi_chg_{m}m"] = (oi - oi.shift(B(m))).clip(-2, 2)
-        F["oi_turnover"] = np.log((qv.rolling(day, min_periods=mpd).sum() + 1) / (panel["oi_value"] + 1)).clip(-10, 10)
+        F["oi_turnover"] = np.log((qv.rolling(day, min_periods=mpd).sum() + 1) / (oi_value + 1)).clip(-10, 10)
         F["oi_price_day"] = F["oi_chg_1440m"] * np.sign(F[ret_names[max(m for m in ret_names if B(m) <= day)]])
     for name in ("ls_top", "ls_account"):
-        if name in panel and panel[name].notna().any().any():
-            x = np.log(panel[name].where(panel[name] > 0))
-            zw = B(cfg.zscore_minutes)
-            F[f"{name}_z"] = rolling_z(x, zw, min_periods=max(10, zw // 10)).clip(-5, 5)
+        ratio = positioning(name) if name in cfg.positioning else None
+        if ratio is not None:
+            x = np.log(ratio)
+            F[f"{name}_z"] = rolling_z(x, pos_zw, min_periods=max(10, pos_zw // 10)).clip(-5, 5)
             F[f"{name}_chg_day"] = (x - x.shift(day)).clip(-2, 2)
 
     # ---------------- cross-sectional transforms ----------------
@@ -335,6 +346,7 @@ def build_features(panel: Panel, mask: pd.DataFrame, cfg: FeatureConfig) -> Feat
             "ib_rv_ratio",
             "ib_flow_last",
             "ib_vwap_dev",
+            "ls_top_z",
         ]
         for name in dict.fromkeys(cs_sources):
             if name in F and not name.startswith("flow_ret"):

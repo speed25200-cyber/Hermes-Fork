@@ -79,6 +79,11 @@ class FeatureConfig(_Strict):
     market_features: bool = True
     time_features: bool = True
     intrabar: bool = Field(True, description="Use 1-minute aggregates when the panel carries them")
+    positioning: tuple[Literal["oi", "ls_top", "ls_account"], ...] = Field(
+        ("oi", "ls_top", "ls_account"),
+        description="Positioning families computed when the panel carries Binance metrics (data.include_metrics): "
+        "open interest, top traders' long/short position ratio, all accounts' long/short ratio",
+    )
     funding_per_8h: bool = Field(
         False,
         description="Put the last settled funding rate on an 8-hour basis (contracts settling every 1-4 h), flag "

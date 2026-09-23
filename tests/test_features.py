@@ -154,3 +154,33 @@ def test_funding_per_8h_features_are_causal_and_live_consistent(small_panel):
             equal_nan=True,
             err_msg=name,
         )
+
+
+def test_positioning_families_are_selected_and_read_one_bar_late(small_panel):
+    rng = np.random.default_rng(3)
+    ls = pd.DataFrame(
+        np.exp(rng.normal(0, 0.2, size=small_panel["close"].shape)).cumprod(axis=0) ** 0.01,
+        index=small_panel.index,
+        columns=small_panel.symbols,
+    )
+    panel = small_panel.with_fields({"ls_top": ls})
+    mask = universe_mask(panel, UniverseConfig(top_n=10, min_history_days=3))
+    f = build_features(panel, mask, FeatureConfig(positioning=("ls_top",)))
+    assert {"ls_top_z", "ls_top_chg_day", "cs_ls_top_z"} <= set(f.frames)
+    assert not any(n.startswith("oi_") for n in f.frames)  # the synthetic panel carries OI: not selected
+    assert any(n.startswith("oi_") for n in build_features(panel, mask, FeatureConfig()).frames)
+    # The last bar's ratio is not read at that bar (published late): changing it changes nothing there.
+    bumped = ls.copy()
+    bumped.iloc[-1] *= 3.0
+    g = build_features(panel.with_fields({"ls_top": bumped}), mask, FeatureConfig(positioning=("ls_top",)))
+    for name in ("ls_top_z", "ls_top_chg_day"):
+        np.testing.assert_allclose(f.frames[name].to_numpy(), g.frames[name].to_numpy(), equal_nan=True)
+    # 28-day z-score window at most: 30 days of live history reproduce it.
+    t = len(panel.index) - 1
+    w = 30 * 96
+    live = build_features(
+        panel.iloc(slice(t + 1 - w, t + 1)), mask.iloc[t + 1 - w :], FeatureConfig(positioning=("ls_top",))
+    )
+    np.testing.assert_allclose(
+        f.frames["ls_top_z"].iloc[t].to_numpy(), live.frames["ls_top_z"].iloc[-1].to_numpy(), rtol=1e-6, atol=1e-6
+    )

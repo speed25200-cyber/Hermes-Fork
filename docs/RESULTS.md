@@ -298,4 +298,29 @@ réajustés ; `research_30m_xl_lb_sres_gate`) — une estimation linéaire sur l
 coup ; V2, de l'hygiène d'ajustement (ensemble à poids égaux, nombre d'arbres fixé d'avance, correction des
 contrats à funding toutes les 4 h) ; V3, un membre « momentum de facteurs » causal, a priori faible.
 
+## 11. Une information nouvelle : le positionnement des gros comptes
+
+Les variantes V1-V3 réutilisent la même information. Test local d'une source jamais utilisée : les archives
+Binance « metrics » (intérêt ouvert, ratios long/short des gros comptes et de tous les comptes, instantanés de
+5 minutes) sur les jours de présence dans l'univers à 30 contrats (61 473 fichiers). **Règle fixée avant tout
+résultat** : IC de rang *partiel* contre la cible nette des styles à 24 h, c'est-à-dire en plus du score
+walk-forward du modèle ; sélection sur 2023-08 → 2025-12 seulement (|t| ≥ 3 et même signe en 2024 et en 2025) ;
+2026 gardé comme contrôle (même signe et au moins la moitié de l'effet) ; un essai n'est dépensé que si une
+variable franchit les deux.
+
+| Variable (17 testées) | IC partiel 2023-25 (t) | 2024 | 2025 | 2026 (t) | Sélection | Contrôle 2026 |
+|---|---:|---:|---:|---:|:-:|:-:|
+| Ratio des positions des gros comptes, écart à 30 j | **−0,021 (−3,5)** | −0,029 | −0,017 | **−0,023 (−2,3)** | ✅ | ✅ |
+| Même ratio, variation sur 1 j | −0,017 (−3,6) | −0,006 | −0,031 | +0,001 (0,1) | ✅ | ❌ |
+| Intérêt ouvert, variation 1 j / 3 j | −0,011 (−2,4) / −0,011 (−1,9) | −0,014 / −0,013 | −0,008 / −0,004 | +0,017 / +0,024 | ❌ | — |
+| Rotation (volume / intérêt ouvert), écart à 30 j | +0,011 (1,9) | +0,017 | +0,011 | +0,019 | ❌ | — |
+| Ratio de tous les comptes, écart à 30 j | −0,004 (−0,8) | −0,002 | −0,005 | +0,007 | ❌ | — |
+
+Lecture : quand les gros comptes d'un contrat sont inhabituellement acheteurs, il fait moins bien ensuite (hors
+bêta et styles), **et cela a tenu en 2026**, là où les variations d'intérêt ouvert se sont retournées comme la
+partie lente du modèle. Avec 17 variables testées, un t de −3,5 garde une p corrigée (Bonferroni) d'environ 0,01.
+Les deux variables sélectionnées sur 2023-2025 entrent dans le modèle (lues une bougie en retard, z-score sur
+28 jours pour être reproductibles avec les 30 jours que sert l'API en direct) : essai
+`research_30m_xl_lb_sres_pos`.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.

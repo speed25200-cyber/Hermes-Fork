@@ -27,6 +27,15 @@ log = logging.getLogger(__name__)
 
 FAPI = "https://fapi.binance.com"
 WEIGHT_BUDGET = 1800  # of Binance's 2400 per minute and IP: headroom for the other processes on the host
+# Positioning snapshots (the live side of the archives' "metrics"): endpoint and value per panel field. Binance
+# serves the last 30 days of 5-minute snapshots, the archives' own granularity.
+POSITIONING = {
+    "ls_top": ("/futures/data/topLongShortPositionRatio", "longShortRatio"),
+    "ls_account": ("/futures/data/globalLongShortAccountRatio", "longShortRatio"),
+    "oi_value": ("/futures/data/openInterestHist", "sumOpenInterestValue"),
+}
+POSITIONING_FIELDS = {"ls_top": "ls_top", "ls_account": "ls_account", "oi": "oi_value"}
+POSITIONING_DAYS = 29.5  # within the 30 days served
 
 
 def kline_weight(limit: int) -> int:
@@ -55,9 +64,13 @@ class BinanceLiveFeed:
         client: httpx.AsyncClient | None = None,
         concurrency: int = 6,
         intrabar_minutes: int = 0,
+        positioning: tuple[str, ...] = (),
     ):
-        """``intrabar_minutes`` > 0 also keeps that much 1-minute history to compute the intrabar fields."""
+        """``intrabar_minutes`` > 0 also keeps that much 1-minute history to compute the intrabar fields;
+        ``positioning`` names the families (``features.positioning``) whose snapshots are fetched."""
         self.bar = bar
+        self.positioning = [POSITIONING_FIELDS[p] for p in positioning]
+        self.pos: dict[str, pd.DataFrame] = {}
         self.history_bars = history_bars
         self.intrabar_minutes = intrabar_minutes if BAR_MINUTES[bar] > 1 else 0
         self.http = client or httpx.AsyncClient(base_url=FAPI, timeout=15.0)
@@ -264,6 +277,54 @@ class BinanceLiveFeed:
             )
         self.frames[symbol] = merged.iloc[-self.history_bars :]
 
+    async def _snapshots(self, field: str, symbol: str, start_ms: int) -> pd.Series:
+        """5-minute positioning snapshots from ``start_ms`` (pages of 500)."""
+        path, key = POSITIONING[field]
+        now_ms = int(time.time() * 1000)
+        values: dict[int, float] = {}
+        s = start_ms
+        while s < now_ms - 300_000:
+            rows = await self._get(path, {"symbol": symbol, "period": "5m", "limit": 500, "startTime": s})
+            if not rows:
+                break
+            for r in rows:
+                values[int(r["timestamp"])] = float(r[key])
+            last = max(int(r["timestamp"]) for r in rows)
+            if len(rows) < 500 or last < s:
+                break
+            s = last + 300_000
+        if not values:
+            return pd.Series(dtype=float)
+        idx = pd.to_datetime(list(values), unit="ms", utc=True)
+        return pd.Series(list(values.values()), index=idx).sort_index()
+
+    async def _refresh_positioning(self, symbol: str) -> None:
+        now_ms = int(time.time() * 1000)
+        have = self.pos.get(symbol)
+        cols = {}
+        for field in self.positioning:
+            old = have[field].dropna() if have is not None and field in have else pd.Series(dtype=float)
+            start = (
+                int(old.index[-1].value // 1_000_000) - 600_000
+                if len(old)
+                else now_ms - int(POSITIONING_DAYS * 86_400_000)
+            )
+            new = await self._snapshots(field, symbol, start)
+            both = pd.concat([old, new])
+            cols[field] = both[~both.index.duplicated(keep="last")].sort_index()
+        df = pd.DataFrame(cols)
+        self.pos[symbol] = df[df.index >= pd.Timestamp(now_ms - 30 * 86_400_000, unit="ms", tz="UTC")]
+
+    def _positioning_bars(self, symbol: str) -> pd.DataFrame | None:
+        """Snapshots on the bar grid exactly as the archives are: the last one in each bar's (open, close]."""
+        df = self.pos.get(symbol)
+        if df is None or df.empty:
+            return None
+        off = pd.Timedelta(BAR_TO_OFFSET[self.bar])
+        out = df.copy()
+        out.index = out.index.round("1min").ceil(off) - off
+        return out.groupby(level=0).last()
+
     async def update(self, symbols: list[str]) -> Panel:
         results = await asyncio.gather(*(self._refresh_symbol(s) for s in symbols), return_exceptions=True)
         for s, r in zip(symbols, results):
@@ -272,6 +333,15 @@ class BinanceLiveFeed:
         frames = {s: self.frames[s] for s in symbols if s in self.frames and len(self.frames[s])}
         if not frames:
             raise RuntimeError("live feed returned no data")
+        if self.positioning:
+            res = await asyncio.gather(*(self._refresh_positioning(s) for s in frames), return_exceptions=True)
+            for s, r in zip(list(frames), res):
+                if isinstance(r, BaseException):
+                    log.warning("positioning feed %s failed: %s", s, r)
+                bars = self._positioning_bars(s)
+                frames[s] = frames[s].drop(columns=self.positioning, errors="ignore")
+                for field in self.positioning:
+                    frames[s][field] = bars[field].reindex(frames[s].index) if bars is not None else np.nan
         if self.intrabar_minutes:
             res = await asyncio.gather(*(self._refresh_m1(s) for s in frames), return_exceptions=True)
             for s, r in zip(list(frames), res):

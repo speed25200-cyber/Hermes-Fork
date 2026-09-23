@@ -354,8 +354,8 @@ class BinanceArchive:
         k["funding_rate"] = self.funding(symbol, bar, start, end).reindex(k.index)
         if include_premium:
             k["premium"] = self.premium(symbol, bar, start, end).reindex(k.index)
-        if include_metrics:
-            m = self.metrics(symbol, bar, start, end)
+        if include_metrics:  # daily files: only over the contract's trading life (no storm of missing days)
+            m = self.metrics(symbol, bar, max(start, k.index[0].date()), min(end, k.index[-1].date()))
             for c in m.columns:
                 k[c] = m[c].reindex(k.index)
         cache.parent.mkdir(parents=True, exist_ok=True)

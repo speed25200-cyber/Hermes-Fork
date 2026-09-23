@@ -152,7 +152,12 @@ def live_run(
         typer.echo("REFUS : ce modèle n'a pas franchi la porte de promotion. Mode réel interdit.", err=True)
         raise typer.Exit(2)
     store = StateStore(cfg.live.state_dir / mode)
-    feed = BinanceLiveFeed(cfg.data.bar, live_history_bars(cfg), intrabar_minutes=intrabar_history_minutes(cfg))
+    feed = BinanceLiveFeed(
+        cfg.data.bar,
+        live_history_bars(cfg),
+        intrabar_minutes=intrabar_history_minutes(cfg),
+        positioning=cfg.features.positioning if cfg.data.include_metrics else (),
+    )
     if mode == "paper":
         broker = PaperBroker(
             cfg.live.state_dir / mode / "paper_account.json",
