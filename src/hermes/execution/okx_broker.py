@@ -28,6 +28,7 @@ import contextlib
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from hermes.config import ExecutionConfig
 from hermes.execution.broker import ExecutionReport, Fill, Position, new_client_id
@@ -93,11 +94,7 @@ class OKXBroker:
     # -- lifecycle ------------------------------------------------------------------------------------------
     async def start(self) -> None:
         await self.c.sync_clock()
-        self.catalog = {}
-        for d in await self.c.instruments():
-            inst = Instrument.from_okx(d)
-            if inst.inst_id.endswith("-USDT-SWAP") and inst.state == "live" and inst.ct_val > 0:
-                self.catalog[inst.inst_id] = inst
+        self.load_catalog(await self.c.instruments())
         if self.symbols is not None:
             self.register(self.symbols)
         conf = await self.c.account_config()
@@ -113,6 +110,17 @@ class OKXBroker:
         await self.positions()  # maps every instrument that already carries a position
         self._dms_task = asyncio.create_task(self._dead_man_loop())
         log.info("OKX broker ready: %d USDT perpetuals, leverage %dx", len(self.catalog), self.leverage)
+
+    def load_catalog(self, instruments: list[dict[str, Any]]) -> None:
+        """Every live crypto USDT swap. Equity/commodity swaps are excluded: BB-USDT-SWAP or ON-USDT-SWAP are
+        BlackBerry and ON Semiconductor, not the Binance contracts BBUSDT / ONUSDT the model scored -- the
+        research universe (``hermes.data.venue``) applies the same rule."""
+        self.catalog = {}
+        for d in instruments:
+            inst = Instrument.from_okx(d)
+            live = inst.state == "live" and inst.ct_val > 0 and inst.category == "1"
+            if inst.inst_id.endswith("-USDT-SWAP") and live:
+                self.catalog[inst.inst_id] = inst
 
     def register(self, symbols: list[str]) -> list[str]:
         """Map model (Binance) symbols to OKX instruments; returns those that exist on OKX."""

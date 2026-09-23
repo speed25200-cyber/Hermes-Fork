@@ -108,16 +108,23 @@ def is_excluded(symbol: str, cfg: UniverseConfig) -> bool:
 EPOCH = pd.Timestamp("2020-01-06", tz="UTC")  # a Monday: reselection days are calendar-anchored
 
 
-def daily_membership(daily_qv: pd.DataFrame, daily_alive: pd.DataFrame, cfg: UniverseConfig) -> pd.DataFrame:
+def daily_membership(
+    daily_qv: pd.DataFrame, daily_alive: pd.DataFrame, cfg: UniverseConfig, listed: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """Daily (day x symbol) membership. Day ``D`` uses data up to the end of ``D-1`` only.
 
     Reselection happens on calendar days (every ``reselect_every_days`` from a fixed Monday), so research
-    and live select on the same dates whatever history each happens to hold.
+    and live select on the same dates whatever history each happens to hold. ``listed`` (day x symbol) marks
+    the contracts the execution venue listed: only those listed on ``D-1`` may be selected on ``D``, as the
+    live engine only ranks contracts its broker can trade.
     """
     lb = cfg.liquidity_lookback_days
     adv = daily_qv.rolling(lb, min_periods=max(1, lb // 2)).mean().shift(1)
     age = daily_alive.cumsum().shift(1).fillna(0)
     eligible = (age >= cfg.min_history_days) & daily_alive.shift(1, fill_value=False)
+    if listed is not None:
+        on_venue = listed.reindex(index=daily_qv.index, columns=daily_qv.columns).fillna(False).astype(bool)
+        eligible &= on_venue.shift(1, fill_value=False)
     excluded = np.array([is_excluded(s, cfg) for s in daily_qv.columns])
     score = adv.where(eligible).to_numpy(dtype=np.float64, copy=True)
     score[:, excluded] = np.nan
@@ -137,6 +144,13 @@ def daily_membership(daily_qv: pd.DataFrame, daily_alive: pd.DataFrame, cfg: Uni
                 started = True
         out[t] = current
     return pd.DataFrame(out, index=days, columns=daily_qv.columns)
+
+
+def venue_listing(panel: Panel) -> pd.DataFrame | None:
+    """Daily venue listing carried by a research panel (field ``venue_listed``), if any."""
+    if "venue_listed" not in panel:
+        return None
+    return panel["venue_listed"].resample("1D").max().fillna(0) > 0
 
 
 def daily_activity(panel: Panel) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -171,25 +185,31 @@ def universe_mask(
         days = pd.date_range(first, day_of_bar[-1], freq="1D")
     daily_qv = daily_qv.reindex(index=days, columns=close.columns)
     daily_alive = daily_alive.reindex(index=days, columns=close.columns).fillna(False).astype(bool)
-    mem = daily_membership(daily_qv, daily_alive, cfg)
+    mem = daily_membership(daily_qv, daily_alive, cfg, venue_listing(panel))
     m = mem.reindex(day_of_bar).fillna(False).to_numpy(dtype=bool)
     mask = pd.DataFrame(m, index=close.index, columns=close.columns)
     # A member that stops trading (delisting, halt) leaves immediately.
     return mask & close.notna()
 
 
-def candidates_from_daily(daily_quote_volume: pd.DataFrame, cfg: UniverseConfig) -> list[str]:
+def candidates_from_daily(
+    daily_quote_volume: pd.DataFrame, cfg: UniverseConfig, listed: pd.DataFrame | None = None, top_n: int | None = None
+) -> list[str]:
     """Symbols that were ever in the point-in-time top-N, from a cheap daily-volume panel.
 
     Used to decide which contracts deserve an intraday download: everything that could have been selected
-    at some date, which includes contracts delisted later (no survivorship bias).
+    at some date, which includes contracts delisted later (no survivorship bias). With ``listed`` the ranking
+    is among the contracts the execution venue listed the day before, as in ``daily_membership``.
     """
     lookback = cfg.liquidity_lookback_days
     adv = daily_quote_volume.rolling(lookback, min_periods=max(1, lookback // 2)).mean().shift(1)
     age = daily_quote_volume.notna().cumsum().shift(1).fillna(0)
     adv = adv.where(age >= cfg.min_history_days)
+    if listed is not None:
+        on_venue = listed.reindex(index=adv.index, columns=adv.columns).fillna(False).astype(bool)
+        adv = adv.where(on_venue.shift(1, fill_value=False))
     keep = [c for c in adv.columns if not is_excluded(c, cfg)]
     adv = adv[keep]
     ranks = adv.rank(axis=1, ascending=False)
-    ever = (ranks <= cfg.top_n).any(axis=0)
+    ever = (ranks <= (top_n or cfg.top_n)).any(axis=0)
     return sorted(ever[ever].index.tolist())

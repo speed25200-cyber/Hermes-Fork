@@ -15,6 +15,7 @@ engine uses for its decision (``PortfolioConstructor`` + ``RiskOverlay``), only 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -60,6 +61,7 @@ class BacktestResult:
                 "impact_annual": float(st["impact"].sum() / max(years, 1e-9)),
                 "funding_annual": float(st["funding"].sum() / max(years, 1e-9)),
                 "gross_pnl_annual": float(st["gross_pnl"].sum() / max(years, 1e-9)),
+                "slippage_annual": float(st["slippage"].sum() / max(years, 1e-9)),
                 "avg_positions": float(st["n_positions"].mean()),
                 "stops_annual": float(st["stops"].sum() / max(years, 1e-9)),
                 "avg_ic_est": float(st["ic_est"].mean()),
@@ -86,6 +88,7 @@ class _Context:
     low: np.ndarray
     day_pos: np.ndarray
     daily_np: np.ndarray
+    fill_premium: np.ndarray  # fill price of a decision taken at close(t) / close(t) - 1 (0 when unknown)
     refs: tuple[object, ...] = ()  # keeps the keyed objects alive so their ids cannot be reused
 
 
@@ -128,12 +131,25 @@ def _context(
         low=panel["low"][cols].to_numpy(),
         day_pos=daily_ret.index.searchsorted(panel.index.floor("D")),
         daily_np=daily_ret.to_numpy(),
+        fill_premium=_fill_premium(panel, close),
         refs=(panel, mask, aux),
     )
     if len(_CONTEXTS) > 4:
         _CONTEXTS.clear()
     _CONTEXTS[key] = ctx
     return ctx
+
+
+def _fill_premium(panel: Panel, close: pd.DataFrame) -> np.ndarray:
+    """A decision at close(t) is filled at the next bar's first-sub-bar VWAP (``vwap_first[t+1]``), as the
+    live broker trades in the minutes after the close. Without that field (synthetic data, old panels) the
+    fill is the close itself."""
+    if "vwap_first" not in panel:
+        return np.zeros(close.shape)
+    fill = panel["vwap_first"][close.columns].shift(-1).to_numpy(dtype=np.float64)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        prem = fill / close.to_numpy(dtype=np.float64) - 1.0
+    return np.where(np.isfinite(prem), prem, 0.0)
 
 
 def is_rebalance_bar(index: pd.DatetimeIndex, bar: pd.Timedelta, every: int) -> np.ndarray:
@@ -164,8 +180,11 @@ def _run_backtest(
     ic_ref: float | None = None,
     record_weights: bool = False,
     cost_multiplier: float = 1.0,
+    stop_fill: Literal["stop", "extreme"] = "stop",
 ) -> BacktestResult:
-    """``cost_multiplier`` scales what trades actually pay, not what the optimiser expects (cost stress)."""
+    """``cost_multiplier`` scales what trades actually pay, not what the optimiser expects (cost stress).
+    ``stop_fill="extreme"`` fills every triggered stop at the bar's low (long) or high (short) instead of the stop
+    price: the worst case of a stop-market order in a flash crash, where the book is empty below the trigger."""
     bpd = cfg.bars_per_day
     bpy = cfg.bars_per_year
     pc = cfg.portfolio
@@ -199,6 +218,8 @@ def _run_backtest(
         ewma.update(np.where(member[t], r[t], np.nan))
 
     w = np.zeros(N)
+    pend = np.zeros(N)  # trades of the last decision times their fill premium over the decision close
+    fill_premium = ctx.fill_premium
     equity = capital
     n_out = t1 - t0
     out = {
@@ -209,6 +230,7 @@ def _run_backtest(
             "pnl_long",
             "pnl_short",
             "stops",
+            "slippage",
             "funding",
             "fees",
             "spread",
@@ -246,9 +268,16 @@ def _run_backtest(
                     np.minimum(stop_px, np.nan_to_num(open_[t], nan=np.inf)),
                     np.maximum(stop_px, np.nan_to_num(open_[t], nan=-np.inf)),
                 )
+                if stop_fill == "extreme":
+                    worst = np.where(hit_long, low[t], high[t])
+                    exit_px = np.where(np.isfinite(worst), worst, exit_px)
                 rt = np.where(hit, exit_px / close_np[t - 1] - 1.0, rt)
         valid = np.isfinite(rt)
-        contrib = np.where(valid & held, w * np.nan_to_num(rt), 0.0)
+        # Trades decided at close(t-1) were filled at the next VWAP: the broker sizes contracts at the decision
+        # price, so the positions are as modelled and only the cash differs, by -trade * (fill / close - 1).
+        adj = -pend
+        pend = np.zeros(N)
+        contrib = np.where(valid & held, w * np.nan_to_num(rt), 0.0) + adj
         gross_pnl = float(contrib.sum())
         pnl_long, pnl_short = float(contrib[w > 0].sum()), float(contrib[w < 0].sum())
         # A position stopped out during the bar is gone before the settlement at its end: no funding.
@@ -281,6 +310,7 @@ def _run_backtest(
         out["pnl_long"][k] = pnl_long  # price P&L of each leg (before costs and funding)
         out["pnl_short"][k] = pnl_short
         out["funding"][k] = -fpay
+        out["slippage"][k] = -float(adj.sum())
 
         # 2) rebalance at close(t)
         fees = spread = impact = turnover = 0.0
@@ -317,6 +347,7 @@ def _run_backtest(
                     fees, spread, impact = (cost_multiplier * x for x in costs.trade_cost(t, dollars))
                     turnover = float(np.abs(trade).sum())
                     w[idx] = target
+                    pend[idx] = trade * fill_premium[t, idx]
                     equity -= fees + spread + impact
                 out["vol_ex_ante"][k] = book.ex_ante_vol_annual
                 out["budget"][k] = info.get("budget", 1.0)

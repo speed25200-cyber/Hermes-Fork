@@ -20,5 +20,5 @@ risk:
   drawdown_soft: 0.08
   drawdown_hard: 0.20
   es_limit_daily: 0.035
-  stop_loss_daily_sigmas: 4.0
+  stop_loss_daily_sigmas: 8.0
   kill_switch_file: state/KILL

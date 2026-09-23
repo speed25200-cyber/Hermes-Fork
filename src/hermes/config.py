@@ -28,6 +28,11 @@ class UniverseConfig(_Strict):
     quote: str = "USDT"
     exclude: tuple[str, ...] = ("USDCUSDT", "BTCDOMUSDT", "DEFIUSDT", "FDUSDUSDT", "TUSDUSDT")
     symbols: tuple[str, ...] = Field((), description="Explicit symbol list; empty = discover from archive")
+    venue: Literal["any", "okx"] = Field(
+        "okx",
+        description="Execution venue: only contracts it listed at the time may enter (the live engine can trade "
+        "nothing else); 'any' ranks every Binance contract",
+    )
 
 
 BAR_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240}
@@ -208,7 +213,13 @@ class RiskConfig(_Strict):
     es_limit_daily: float = Field(0.04, gt=0, description="Max 1-day 97.5% expected shortfall")
     max_positions: int = Field(40, ge=1)
     exchange_leverage: int = Field(5, ge=1, le=50)
-    stop_loss_daily_sigmas: float = Field(4.0, gt=0, description="Server-side catastrophe stop distance")
+    stop_loss_daily_sigmas: float = Field(
+        8.0,
+        gt=0,
+        description="Server-side catastrophe stop distance from the entry price, in daily sigmas (3 %-50 %): "
+        "a protection for when the engine is down, not a trading rule -- at 4 sigmas it fired on a third of "
+        "all days and its simulated fills drove the P&L",
+    )
     max_data_staleness_s: int = Field(900, ge=30)
     kill_switch_file: Path = Path("state/KILL")
 

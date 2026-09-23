@@ -180,6 +180,8 @@ def resample_panel(panel: Panel, bar: str) -> Panel:
         "ls_top": "last",
         "ls_account": "last",
         "taker_ls_ratio": "last",
+        "vwap_first": "first",
+        "venue_listed": "max",
     }
     out = {}
     for name, df in panel.fields.items():

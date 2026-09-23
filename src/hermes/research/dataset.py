@@ -50,7 +50,7 @@ class Dataset:
         self.X = np.empty((0, self.X.shape[1]), dtype=np.float16)
         self.targets.total.clear()
         self.feats.aux.pop("r1", None)
-        keep = ("open", "high", "low", "close", "quote_volume", "funding_rate")
+        keep = ("open", "high", "low", "close", "quote_volume", "funding_rate", "vwap_first")
         fields = {k: v for k, v in self.panel.fields.items() if k in keep}
         # Fields the backtest never reads are aliased (no copy) to satisfy the panel's core-field contract.
         for k in ("volume", "trades", "taker_buy_quote"):

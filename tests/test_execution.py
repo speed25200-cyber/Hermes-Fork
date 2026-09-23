@@ -371,3 +371,13 @@ def test_paper_stops_trigger_like_the_exchange(tmp_path):
     px = {f.symbol: f.price for f in fills}
     assert px["AUSDT"] == pytest.approx(90.0) and px["BUSDT"] == pytest.approx(58.0)
     assert not pb.qty and not pb.stops and all(not f.maker for f in fills)
+
+
+def test_catalog_keeps_crypto_swaps_only():
+    b = _broker(FakeOKX())
+    b.instruments, b.inst_to_symbol = {}, {}
+    equity = {**INST, "instId": "BB-USDT-SWAP", "instCategory": "3"}
+    crypto = {**INST, "instId": "ETH-USDT-SWAP", "instCategory": "1"}
+    b.load_catalog([INST, equity, crypto])
+    assert set(b.catalog) == {"BTC-USDT-SWAP", "ETH-USDT-SWAP"}
+    assert b.register(["BBUSDT", "ETHUSDT"]) == ["ETHUSDT"]

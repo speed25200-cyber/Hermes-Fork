@@ -66,6 +66,11 @@ Détails qui décident si la porte sait dire « non » (corrigés après revue a
 - **Années positives** : les années de moins de 90 jours hors échantillon ne votent pas.
 - **Latence** : la simulation exécute à la clôture de la bougie ; la porte exige en plus un Sharpe positif
   avec **une bougie entière** de retard, plus sévère que le retard réel (quelques secondes).
+- **Stops au pire** : les stops catastrophe sont simulés comme posés sur l'exchange (exécutés au prix du stop,
+  ou à l'ouverture en cas de gap) ; la porte exige aussi un Sharpe positif quand chaque stop déclenché est
+  exécuté au **plus bas (long) ou au plus haut (short) de la bougie** — un stop-marché dans un krach éclair,
+  carnet vide sous le déclencheur (10 octobre 2025).
+- **Concentration** (diagnostic) : Sharpe et rendement sans les 5 meilleurs jours.
 
 ## 5. Portefeuille
 

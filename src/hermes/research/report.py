@@ -33,6 +33,7 @@ GATE_LABELS = {
     "oos_months": "Mois hors échantillon",
     "cost_stress": "Sharpe avec coûts doublés",
     "latency_stress": "Sharpe avec une barre de latence en plus",
+    "stop_stress": "Sharpe avec stops exécutés au pire (plus bas / plus haut de la bougie)",
 }
 
 
@@ -213,7 +214,11 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
         f"- **PBO** sur la grille : {_num(t.get('pbo'), 3)}.",
         f"- **Historique minimal** pour conclure à 95 % : {_num(t.get('min_track_record_days'), 0)} jours.",
         f"- **Stress** : coûts ×2 → Sharpe {_num(t.get('sharpe_costx2'))} ; une barre de latence → "
-        f"Sharpe {_num(t.get('sharpe_lag1'))}.",
+        f"Sharpe {_num(t.get('sharpe_lag1'))} ; stops exécutés au pire → Sharpe {_num(t.get('sharpe_stop_worst'))}.",
+        f"- **Concentration** : sans ses 5 meilleurs jours, Sharpe {_num(t.get('sharpe_ex_top5'))} et rendement "
+        f"annualisé {_pct(t.get('cagr_ex_top5'))}.",
+        f"- **Sans stops catastrophe** (diagnostic) : Sharpe {_num(t.get('sharpe_nostop'))}, rendement annualisé "
+        f"{_pct(t.get('cagr_nostop'))}, drawdown max {_pct(t.get('max_drawdown_nostop'))}.",
         "",
     ]
     if ev.halted_at:

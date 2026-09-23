@@ -72,12 +72,18 @@ Le même code sert à la recherche, au backtest, au papier et au réel : ce qui 
 ## Conventions qui empêchent de se mentir
 
 1. **Temps.** Une barre est indexée par son ouverture et connue à sa clôture. Une décision prise à la
-   clôture de `t` est exécutée pendant `t+1`. Le funding réglé dans la barre `t` est payé par la position
-   tenue pendant `t`.
+   clôture de `t` est exécutée pendant `t+1`, au **VWAP du premier quart d'heure de `t+1`** (champ
+   `vwap_first`) et non au dernier prix qui a servi à la calculer ; les contrats sont dimensionnés au prix de
+   décision, comme le fait le broker. Le funding réglé dans la barre `t` est payé par la position tenue
+   pendant `t`.
 2. **Causalité testée.** `tests/test_features.py` tronque le futur et vérifie qu'aucune valeur passée ne
    change ; un second test vérifie que les variables calculées sur la fenêtre live égalent celles de la
    recherche.
-3. **Univers sans regard vers l'avant.** Pas de « coins qui ont monté » choisis après coup.
+3. **Univers sans regard vers l'avant, sur la plateforme d'exécution.** Pas de « coins qui ont monté »
+   choisis après coup ; et seuls les contrats qu'**OKX listait la veille** peuvent entrer (calendrier
+   reconstruit jour par jour depuis les archives d'OKX, `hermes.data.venue`) : le moteur réel ne peut
+   trader rien d'autre. Une revue a montré qu'un univers pris sur tout Binance attribuait un tiers du P&L
+   à des contrats inexistants sur OKX.
 4. **Coûts partout.** Le backtest paie frais maker/taker, demi-spread (estimateur d'Abdi-Ranaldo), impact
    en racine carrée et funding ; l'optimiseur les anticipe.
 5. **Hors échantillon uniquement.** Toute mesure de performance utilise les prédictions walk-forward.
@@ -105,4 +111,7 @@ Le même code sert à la recherche, au backtest, au papier et au réel : ce qui 
   l'argent si on le suit à chaque heure ; l'optimiseur à coûts L1 ne trade que quand l'alpha marginal
   dépasse le coût, amorti sur la durée de vie du signal (Gârleanu-Pedersen).
 - **Le risque borne la perte quelle que soit la qualité du modèle.** Drawdown progressif puis arrêt,
-  disjoncteur journalier, plafond d'expected shortfall, stops catastrophe côté exchange.
+  disjoncteur journalier, plafond d'expected shortfall, stops catastrophe côté exchange — placés loin (8
+  volatilités quotidiennes depuis l'entrée, 3 % à 50 %) : ils protègent d'un moteur arrêté, ils ne sont pas
+  une règle de trading. À 4 volatilités ils se déclenchaient un jour sur trois et le P&L dépendait du prix
+  d'exécution supposé des stops ; sans stops, le livre fait aussi bien.

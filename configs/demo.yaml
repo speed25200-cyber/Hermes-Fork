@@ -14,5 +14,5 @@ live:
   capital_fraction: 1.0
 risk:
   exchange_leverage: 5
-  stop_loss_daily_sigmas: 4.0
+  stop_loss_daily_sigmas: 8.0
   kill_switch_file: state/KILL

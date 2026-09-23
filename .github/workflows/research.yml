@@ -59,7 +59,9 @@ jobs:
       - name: Cache des archives
         uses: actions/cache@v4
         with:
-          path: data/parsed
+          path: |
+            data/parsed
+            data/venue
           key: binance-parsed-${{ env.NAME }}-${{ github.run_id }}
           restore-keys: binance-parsed-${{ env.NAME }}-
       - name: Recherche

@@ -79,7 +79,8 @@ modèle est en panne (il est aussi rejoué après un cycle en échec). Pour repr
 
 Même si le processus meurt : les ordres en attente sont annulés par OKX en moins d'une minute
 (dead-man switch `cancel-all-after`) et chaque position porte un stop catastrophe côté exchange
-(`risk.stop_loss_daily_sigmas` volatilités quotidiennes, déclenché sur le prix mark).
+(`risk.stop_loss_daily_sigmas` = 8 volatilités quotidiennes depuis le prix d'entrée, entre 3 % et 50 %,
+déclenché sur le prix mark) : une protection pour un moteur arrêté, rarement touchée en fonctionnement.
 
 ## Incubation en papier (avant toute promotion)
 

@@ -15,7 +15,8 @@ from hermes.config import BAR_MINUTES, DataConfig
 from hermes.data.binance_archive import BinanceArchive
 from hermes.data.panel import INTRABAR_FIELDS, Panel, clean_panel, resample_panel
 from hermes.data.synthetic import make_synthetic_panel
-from hermes.data.universe import candidates_from_daily, is_excluded
+from hermes.data.universe import candidates_from_daily, daily_activity, is_excluded
+from hermes.data.venue import OkxListing, activity_windows
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +51,18 @@ def discover_candidates(cfg: DataConfig, archive: BinanceArchive) -> list[str]:
         return json.loads(cache.read_text())
     symbols = list(u.symbols) or [s for s in archive.list_symbols(u.quote) if not is_excluded(s, u)]
     daily = daily_volume_panel(archive, symbols, start, end)
-    cands = candidates_from_daily(daily, u)
+    if u.venue == "okx":
+        # Rank among the contracts OKX listed at the time. The venue's top-N lies within Binance's top-2N as
+        # long as fewer than N unlisted contracts outrank it (checked below); only those are probed.
+        wide = candidates_from_daily(daily, u, top_n=2 * u.top_n)
+        listed = OkxListing(cfg.cache_dir).calendar(activity_windows(daily[wide]))
+        cands = candidates_from_daily(daily[wide], u, listed=listed)
+        on = listed.reindex(index=daily.index, columns=wide).fillna(False).astype(bool)
+        n_listed = (daily[wide].notna() & on).sum(axis=1).iloc[90:]  # after the first liquidity window
+        if (short := int((n_listed < u.top_n).sum())) > 0:
+            log.warning("OKX universe: %d days with < %d listed names in Binance's top-%d", short, u.top_n, 2 * u.top_n)
+    else:
+        cands = candidates_from_daily(daily, u)
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(json.dumps(cands))
     daily.to_parquet(Path(cfg.cache_dir) / f"daily_volume_{key}.parquet")
@@ -76,6 +88,8 @@ def load_panel(cfg: DataConfig, seed: int = 0) -> Panel:
                 cfg.include_premium,
                 cfg.intrabar,
                 cfg.intrabar_start,
+                cfg.universe.venue,
+                "v2",  # fields vwap_first and venue_listed
             ]
         ).encode()
     ).hexdigest()[:10]
@@ -83,6 +97,7 @@ def load_panel(cfg: DataConfig, seed: int = 0) -> Panel:
     if (directory / "_panel.json").exists():
         return trim_to_funding(clean_panel(Panel.load(directory)))
     panel = archive.build_panel(symbols, src_bar, start, end, cfg.include_premium, cfg.include_metrics)
+    panel = with_execution_fields(panel, cfg)
     if src_bar != cfg.bar:
         panel = resample_panel(panel, cfg.bar)
     if cfg.intrabar and BAR_MINUTES[cfg.bar] > 1:
@@ -102,6 +117,27 @@ def load_panel(cfg: DataConfig, seed: int = 0) -> Panel:
         panel = panel.with_fields(extra)
     panel.save(directory)
     return trim_to_funding(clean_panel(panel))
+
+
+def with_execution_fields(panel: Panel, cfg: DataConfig) -> Panel:
+    """Fields the backtest needs to trade like the live engine, added at the source bar.
+
+    * ``vwap_first``: the bar's volume-weighted average price; after resampling, that of its **first**
+      source bar. A decision taken at close(t) is filled at ``vwap_first[t+1]`` -- the live broker trades in
+      the minutes after the close, not at the last print the signal was computed from (on 10 October 2025
+      that print was mid-crash and prices rebounded within minutes).
+    * ``venue_listed``: 1 on the days OKX listed the contract (``UniverseConfig.venue == "okx"``).
+    """
+    fields = {}
+    vol = panel["volume"].astype("float64")
+    fields["vwap_first"] = (panel["quote_volume"] / vol.where(vol > 0)).astype("float32")
+    if cfg.universe.venue == "okx":
+        qv, _ = daily_activity(panel)
+        listed = OkxListing(cfg.cache_dir).calendar(activity_windows(qv))
+        days = panel.index.floor("D")
+        cal = listed.reindex(index=days, columns=panel.symbols).fillna(False).to_numpy(dtype="float32")
+        fields["venue_listed"] = pd.DataFrame(cal, index=panel.index, columns=panel.symbols)
+    return panel.with_fields(fields)
 
 
 def trim_to_funding(panel: Panel) -> Panel:

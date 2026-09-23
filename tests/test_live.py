@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from hermes.config import with_overrides
 from hermes.data.synthetic import make_synthetic_panel
 from hermes.execution.broker import PaperBroker
 from hermes.live.engine import LiveEngine
@@ -130,6 +131,24 @@ def test_step_runs_a_full_cycle_with_daily_history_ending_yesterday(cfg_small, t
         feed.t = t + k
         asyncio.run(eng.step())
     assert not store.get_series("ic", panel.index[0]).empty
+
+
+@pytest.mark.slow
+def test_step_with_style_free_target_and_style_neutral_book(cfg_small, tmp_path):
+    # The configuration of the best research candidates: the live cycle must run end to end with it, and its
+    # realised IC is measured against the same style-free target the model was trained on.
+    cfg = with_overrides(cfg_small, {"labels.residualize": "style", "portfolio.style_neutral": True})
+    panel, bundle, broker, store, cfg = _engine(cfg, tmp_path)
+    t = 96 * 45 + 40
+    feed = FakeFeed(panel, t, 96 * 30)
+    eng = LiveEngine(cfg, bundle, feed, broker, store, mode="paper")
+    d = asyncio.run(eng.step())
+    assert d is not None and d.targets
+    for k in range(1, 12):
+        feed.t = t + k
+        asyncio.run(eng.step())
+    ic = store.get_series("ic", panel.index[0])
+    assert not ic.empty and np.isfinite(ic.to_numpy(dtype=float)).all()
 
 
 @pytest.mark.slow

@@ -26,6 +26,7 @@ class Instrument:
     max_mkt_sz: float
     state: str = "live"
     max_lever: float = 0.0
+    category: str = "1"  # OKX instCategory: 1 = crypto; equity/commodity swaps can share a crypto ticker
 
     @classmethod
     def from_okx(cls, d: dict[str, str]) -> Instrument:
@@ -46,6 +47,7 @@ class Instrument:
             max_mkt_sz=f("maxMktSz", 1e12),
             state=d.get("state", "live"),
             max_lever=f("lever"),
+            category=str(d.get("instCategory") or "1"),
         )
 
     @property

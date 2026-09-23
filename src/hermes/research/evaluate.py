@@ -135,6 +135,10 @@ def _bt_job(args: tuple[str, int | dict[str, object]]) -> tuple[str, pd.Series, 
             # and daily-loss controls that would stop a losing book switched off.
             risk = cfg.risk.model_copy(update={"drawdown_soft": 0.98, "drawdown_hard": 0.99, "daily_loss_limit": 1.0})
             c = c.model_copy(update={"risk": risk})
+        if kind == "nostop":
+            # Diagnostic only: the same book without catastrophe stops, to see whether the P&L owes anything to
+            # stop exits (whose fills a bar-level simulation can only approximate).
+            c = c.model_copy(update={"risk": cfg.risk.model_copy(update={"stop_loss_daily_sigmas": 0.0})})
         score = wf.score.shift(1) if kind == "lag1" else wf.score
         if kind == "market":
             sig = make_signal(score, ds, wf.prior_ic, c, wf.market_score, wf.market_prior_ic)
@@ -143,7 +147,9 @@ def _bt_job(args: tuple[str, int | dict[str, object]]) -> tuple[str, pd.Series, 
     # Cost stress: the book is built on the usual cost estimates, but every trade pays twice as much
     # (fees, spread and impact) -- an execution that turns out worse than modelled, not a re-optimised book.
     mult = 2.0 if kind == "costx2" else 1.0
-    bt = run_backtest(ds.panel, ds.mask, ds.feats.aux, sig, c, start=start, cost_multiplier=mult)  # type: ignore[arg-type]
+    # Stop stress: every triggered stop fills at the bar's extreme (flash crash with an empty book).
+    fill = "extreme" if kind == "stopworst" else "stop"
+    bt = run_backtest(ds.panel, ds.mask, ds.feats.aux, sig, c, start=start, cost_multiplier=mult, stop_fill=fill)  # type: ignore[arg-type]
     daily = (1 + bt.returns).groupby(bt.returns.index.floor("D")).prod() - 1
     return f"{kind}:{param}", daily, bt.summary(c.bars_per_year)
 
@@ -377,7 +383,7 @@ def evaluate(
     grid = grid or [{"holding_horizon": h, "cost_aversion": ca} for h in cfg.labels.horizons for ca in (0.5, 1.0, 2.0)]
     jobs: list[tuple[str, int | dict[str, object]]] = [("null", s) for s in range(n_null)]
     jobs += [("grid", g) for g in grid]
-    jobs += [("costx2", {}), ("lag1", {}), ("nohalt", {})]
+    jobs += [("costx2", {}), ("lag1", {}), ("stopworst", {}), ("nostop", {}), ("nohalt", {})]
     if wf.market_score is not None:
         jobs.append(("market", {"beta_neutral": True}))
     results = _run_parallel(jobs, workers)
@@ -403,6 +409,12 @@ def evaluate(
             stress["sharpe_costx2"] = sharpe(d.to_numpy(), 365.0)
         elif k.startswith("lag1"):
             stress["sharpe_lag1"] = sharpe(d.to_numpy(), 365.0)
+        elif k.startswith("stopworst"):
+            stress["sharpe_stop_worst"] = sharpe(d.to_numpy(), 365.0)
+        elif k.startswith("nostop"):
+            stress["sharpe_nostop"] = sharpe(d.to_numpy(), 365.0)
+            stress["cagr_nostop"] = float(s.get("cagr", np.nan))
+            stress["max_drawdown_nostop"] = float(s.get("max_drawdown", np.nan))
         elif k.startswith("nohalt"):
             by_year = (1 + d).groupby(d.index.year).prod() - 1
             nohalt = {
@@ -442,6 +454,10 @@ def evaluate(
     tests["sharpe_ci_low"] = float(np.quantile(boot, 0.05))
     tests["sharpe_ci_high"] = float(np.quantile(boot, 0.95))
     tests.update(stress)
+    # Concentration diagnostic: what is left without the five best days (one crash can make a year).
+    ex = daily.drop(daily.nlargest(5).index) if len(daily) > 30 else daily
+    tests["sharpe_ex_top5"] = sharpe(ex.to_numpy(), 365.0)
+    tests["cagr_ex_top5"] = float((1 + ex).prod() ** (365.0 / max(len(daily), 1)) - 1)
     pos_years = positive_year_fraction(daily)
     tests["positive_year_fraction"] = pos_years
 
@@ -477,6 +493,11 @@ def evaluate(
             "value": stress.get("sharpe_lag1", np.nan),
             "threshold": 0.0,
             "pass": bool(stress.get("sharpe_lag1", -1) > 0),
+        },
+        "stop_stress": {
+            "value": stress.get("sharpe_stop_worst", np.nan),
+            "threshold": 0.0,
+            "pass": bool(stress.get("sharpe_stop_worst", -1) > 0),
         },
     }
     promoted = all(g["pass"] for g in gate.values())
