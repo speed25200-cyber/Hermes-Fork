@@ -47,6 +47,17 @@ def ambiguous(exc: OKXError) -> bool:
     return code in AMBIGUOUS_CODES or (len(code) == 3 and code.startswith("5"))
 
 
+TERMINAL = ("filled", "canceled", "mmp_canceled", "missing")
+
+
+class ChildError(RuntimeError):
+    """A child order stopped early; carries what was already executed so no fill is ever lost."""
+
+    def __init__(self, msg: str, fills: list[Fill], remaining: float):
+        super().__init__(msg)
+        self.fills, self.remaining = fills, remaining
+
+
 @dataclass
 class Child:
     symbol: str
@@ -227,10 +238,17 @@ class OKXBroker:
         children.sort(key=lambda c: not c.reduce_only)
         return children
 
-    async def rebalance(self, targets: dict[str, float], urgent: bool = False) -> ExecutionReport:
+    async def rebalance(
+        self, targets: dict[str, float], urgent: bool = False, hold: set[str] | None = None
+    ) -> ExecutionReport:
+        """Trade toward ``targets`` (USDT notionals); positions absent from it are closed, except those in
+        ``hold``, which are left exactly as they are (no price this bar, not in the data feed)."""
         rep = ExecutionReport()
         await self.cancel_own_orders()  # an order left resting by an earlier cycle must not fill twice
         positions = await self.positions()
+        if hold:
+            positions = {s: p for s, p in positions.items() if s not in hold}
+            targets = {s: v for s, v in targets.items() if s not in hold}
         tick = {t["instId"]: t for t in await self.c.tickers()}
         prices = {}
         for s, inst in self.instruments.items():
@@ -243,6 +261,12 @@ class OKXBroker:
         for group in (reduces, increases):
             results = await asyncio.gather(*(self._execute_child(c, urgent) for c in group), return_exceptions=True)
             for c, r in zip(group, results):
+                if isinstance(r, ChildError):
+                    rep.errors.append(f"{c.symbol}: {r}")
+                    rep.fills.extend(r.fills)
+                    if r.remaining > 0:
+                        rep.unfilled[c.symbol] = r.remaining
+                    continue
                 if isinstance(r, BaseException):
                     rep.errors.append(f"{c.symbol}: {r}")
                     rep.unfilled[c.symbol] = c.contracts
@@ -296,29 +320,53 @@ class OKXBroker:
             log.warning(
                 "%s %s transport failure (%r): checking the exchange", order.get("ordType"), ch.inst.inst_id, exc
             )
-        for _ in range(3):
+        for _ in range(5):
             await asyncio.sleep(1.0)
             try:
                 _, _, state, _ = await self._order_state(ch.inst, clid)
             except Exception:
                 continue
-            return state != "missing"
-        raise RuntimeError(f"{ch.inst.inst_id} order {clid}: state unknown after an ambiguous send")
+            if state != "missing":
+                return True
+        # Still unknown: the order may yet reach the book. Sending another one could double the trade, so
+        # this child stops here; the next cycle cancels anything resting and re-reads the positions.
+        with contextlib.suppress(Exception):
+            await self.c.cancel_order(ch.inst.inst_id, clid)
+        raise RuntimeError(f"{ch.inst.inst_id} order {clid}: not confirmed after an ambiguous send, child aborted")
 
     async def _final_state(self, inst: Instrument, clid: str) -> tuple[float, float, str, float]:
         """Order state once terminal (filled / canceled / missing), polling briefly after a cancel or IOC."""
         filled, avg, state, fee = await self._order_state(inst, clid)
         for _ in range(10):
-            if state in ("filled", "canceled", "mmp_canceled", "missing"):
+            if state in TERMINAL:
                 break
             await asyncio.sleep(0.3)
             filled, avg, state, fee = await self._order_state(inst, clid)
         return filled, avg, state, fee
 
     async def _execute_child(self, ch: Child, urgent: bool) -> tuple[list[Fill], float]:
+        """Passive phase then bounded IOC. Any failure raises ``ChildError`` carrying the fills already done."""
+        fills: list[Fill] = []
+        remaining = ch.contracts
+        try:
+            remaining = await self._run_child(ch, urgent, fills)
+        except ChildError:
+            raise
+        except Exception as exc:
+            raise ChildError(str(exc), fills, remaining) from exc
+        return fills, max(remaining, 0.0)
+
+    async def _run_child(self, ch: Child, urgent: bool, fills: list[Fill]) -> float:
         inst = ch.inst
         remaining = ch.contracts
-        fills: list[Fill] = []
+
+        def book(filled: float, avg: float, fee: float, maker: bool) -> None:
+            nonlocal remaining
+            if filled > 0:
+                qty = filled if ch.side == "buy" else -filled
+                fills.append(Fill(ch.symbol, ch.side, qty, avg, fee, maker, notional=inst.notional(filled, avg)))
+                remaining = round(remaining - filled, 12)
+
         if self.cfg.maker_first and not urgent:
             deadline = time.monotonic() + self.cfg.maker_timeout_s
             chases = 0
@@ -326,21 +374,16 @@ class OKXBroker:
                 clid = new_client_id()
                 bid, ask, _, _ = await self._touch(inst)
                 px = bid if ch.side == "buy" else ask
-                placed = await self._place(
-                    ch,
-                    clid,
-                    ordType="post_only",
-                    sz=inst.fmt_size(remaining),
-                    px=inst.fmt_price(px),
-                )
-                if not placed:
+                if not await self._place(
+                    ch, clid, ordType="post_only", sz=inst.fmt_size(remaining), px=inst.fmt_price(px)
+                ):
                     break
                 live_px = px
                 state = "live"
                 while time.monotonic() < deadline:
                     await asyncio.sleep(self.cfg.chase_interval_s)
                     filled, _, state, _ = await self._order_state(inst, clid)
-                    if state in ("filled", "canceled", "mmp_canceled", "missing"):
+                    if state in TERMINAL:
                         break
                     bid, ask, _, _ = await self._touch(inst)
                     touch = bid if ch.side == "buy" else ask
@@ -350,35 +393,34 @@ class OKXBroker:
                             live_px, chases = touch, chases + 1
                         except OKXError:
                             pass  # filled or cancelled meanwhile; the next poll tells
-                if state not in ("filled", "canceled", "mmp_canceled", "missing"):
+                if state not in TERMINAL:
                     with contextlib.suppress(OKXError):
                         await self.c.cancel_order(inst.inst_id, clid)
                 filled, avg, state, fee = await self._final_state(inst, clid)
-                if state == "live":
-                    # Cancel not confirmed: the order may still fill; never size the next leg on a guess.
-                    raise RuntimeError(f"{inst.inst_id} order {clid} still live after cancel")
-                if filled > 0:
-                    fills.append(Fill(ch.symbol, ch.side, filled if ch.side == "buy" else -filled, avg, fee, True))
-                    remaining = round(remaining - filled, 12)
+                book(filled, avg, fee, True)
+                if state not in TERMINAL:
+                    # Cancel not confirmed (live / partially filled): it may still fill, so nothing more is sent
+                    # for this child; the next cycle cancels it and re-reads the position.
+                    raise ChildError(f"{inst.inst_id} order {clid} still {state} after cancel", fills, remaining)
                 if state == "filled":
                     break
         if remaining >= inst.min_sz or (ch.reduce_only and remaining > 0):
-            fills_t, remaining = await self._aggressive(ch, remaining)
-            fills.extend(fills_t)
-        return fills, max(remaining, 0.0)
+            bid, ask, _, _ = await self._touch(inst)
+            cap = self.cfg.taker_slippage_cap_bps * 1e-4
+            px = ask * (1 + cap) if ch.side == "buy" else bid * (1 - cap)
+            px = inst.round_price(px, ch.side, passive=False)
+            clid = new_client_id()
+            if await self._place(ch, clid, ordType="ioc", sz=inst.fmt_size(remaining), px=inst.fmt_price(px)):
+                filled, avg, state, fee = await self._final_state(inst, clid)
+                book(filled, avg, fee, False)
+                if state not in TERMINAL:
+                    raise ChildError(f"{inst.inst_id} IOC {clid} still {state}", fills, remaining)
+        return remaining
 
-    async def _aggressive(self, ch: Child, size: float) -> tuple[list[Fill], float]:
-        inst = ch.inst
-        bid, ask, _, _ = await self._touch(inst)
-        cap = self.cfg.taker_slippage_cap_bps * 1e-4
-        px = ask * (1 + cap) if ch.side == "buy" else bid * (1 - cap)
-        px = inst.round_price(px, ch.side, passive=False)
-        clid = new_client_id()
-        if not await self._place(ch, clid, ordType="ioc", sz=inst.fmt_size(size), px=inst.fmt_price(px)):
-            return [], size
-        filled, avg, _, fee = await self._final_state(inst, clid)
-        fills = [Fill(ch.symbol, ch.side, filled if ch.side == "buy" else -filled, avg, fee, False)] if filled else []
-        return fills, round(size - filled, 12)
+    @staticmethod
+    def price_to_model(symbol: str, price: float) -> float:
+        """OKX price (per coin) in the model's (Binance) units, e.g. per 1000 coins for 1000PEPEUSDT."""
+        return okx_price_to_model(symbol, price)
 
     # -- protection -----------------------------------------------------------------------------------------
     async def protect(self, stop_fraction: dict[str, float]) -> None:

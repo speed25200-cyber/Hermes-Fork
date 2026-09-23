@@ -167,3 +167,87 @@ def test_kill_switch_flattens_without_touching_the_feed(cfg_small, tmp_path):
     assert feed.calls == calls, "the kill switch must act before (and without) market data"
     assert not asyncio.run(broker.positions())
     assert eng.overlay.state.halted
+
+
+def test_restart_re_registers_cached_candidates_with_the_broker(cfg_small, tmp_path):
+    class RegBroker(PaperBroker):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self.registered: set[str] = set()
+
+        def register(self, symbols):
+            self.registered |= set(symbols)
+            return list(symbols)
+
+    store = StateStore(tmp_path / "s")
+    store.put("candidates", ["BTCUSDT", "ETHUSDT"])
+    store.put("candidates_day", pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d"))  # same-day restart
+    store.put("traded_symbols", ["1000PEPEUSDT"])
+    broker = RegBroker(tmp_path / "a.json", 1e4, 0, 0)
+
+    class Feed:
+        async def top_symbols(self, n):
+            raise AssertionError("cached for today")
+
+    eng = LiveEngine(cfg_small, type("B", (), {"meta": {}})(), Feed(), broker, store, mode="paper")
+    asyncio.run(eng.refresh_candidates([]))
+    assert {"BTCUSDT", "ETHUSDT", "1000PEPEUSDT"} <= broker.registered
+
+
+def test_changing_capital_fraction_keeps_the_drawdown(cfg_small, tmp_path):
+    store = StateStore(tmp_path / "s")
+    broker = PaperBroker(tmp_path / "a.json", 1e4, 0, 0)
+    bundle = type("B", (), {"meta": {}})()
+    eng = LiveEngine(cfg_small, bundle, None, broker, store, mode="paper")
+    ts = pd.Timestamp("2026-01-01 10:00", tz="UTC")
+    eng.overlay.observe(ts, eng.strategy_nav(10_000.0))  # frac 1: NAV = equity
+    eng.overlay.observe(ts, eng.strategy_nav(9_500.0))  # 5% drawdown
+    eng._save_risk_state()  # as decide() does each bar
+    cfg2 = cfg_small.model_copy(update={"live": cfg_small.live.model_copy(update={"capital_fraction": 0.25})})
+    eng2 = LiveEngine(cfg2, bundle, None, broker, store, mode="paper")
+    nav = eng2.strategy_nav(9_500.0)
+    assert nav == pytest.approx(2_375.0)
+    assert eng2.overlay.drawdown(nav) == pytest.approx(0.05)  # rescaled, not a 76% drawdown and a halt
+    nav2 = eng2.strategy_nav(9_405.0)  # account -1% = strategy -4%
+    assert nav2 == pytest.approx(2_375.0 * 0.96)
+
+
+def test_drift_warning_and_implementation_shortfall(cfg_small, tmp_path):
+    from hermes.execution.broker import Fill
+    from hermes.live.engine import Decision
+    from hermes.models.drift import feature_profile
+
+    r = np.random.default_rng(0)
+    names = ["a", "b"]
+    bundle = type("B", (), {"meta": {"feature_profile": feature_profile(r.normal(size=(20_000, 2)), names)}})()
+    bundle.feature_names = names
+    eng = LiveEngine(
+        cfg_small, bundle, None, PaperBroker(tmp_path / "a.json", 1e4, 0, 0), StateStore(tmp_path / "s"), "paper"
+    )
+    ts = pd.Timestamp("2026-01-01", tz="UTC")
+    d = Decision(ts=str(ts), equity=1.0, stale=False, n_members=0, ic_est=0.0)
+    for k in range(40):
+        x = np.column_stack([r.normal(size=30), r.normal(2.0, 1.0, size=30)])  # feature b has moved
+        eng._check_drift(ts + pd.Timedelta(minutes=15 * k), x, d)
+    assert d.risk["psi_drifted"] >= 1 and any("drift" in n for n in d.notes)
+    fills = [
+        Fill("BTCUSDT", "buy", 1.0, 101.0, 0.0, True, notional=101.0),
+        Fill("ETHUSDT", "sell", -1.0, 9.9, 0.0, False, notional=9.9),
+    ]
+    bps = eng._shortfall_bps(fills, pd.Series({"BTCUSDT": 100.0, "ETHUSDT": 10.0}))
+    assert bps == pytest.approx(100.0)  # both paid 1% against the decision price
+
+
+@pytest.mark.slow
+def test_held_contract_without_daily_history_is_left_alone(cfg_small, tmp_path):
+    from hermes.data.live_feed import DailyHistory
+
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path)
+    feed = FakeFeed(panel, 96 * 45 + 40, 96 * 30)
+    eng = LiveEngine(cfg, bundle, feed, broker, store, mode="paper")
+    window = asyncio.run(feed.update(panel.symbols))
+    daily = asyncio.run(feed.daily(panel.symbols))
+    held = panel.symbols[0]
+    broken = DailyHistory(*(x.drop(columns=held) for x in (daily.quote_volume, daily.alive, daily.close)))
+    d = eng.decide(window, {held: 1_000.0}, 10_000.0, daily=broken)
+    assert held in d.hold and held not in d.targets

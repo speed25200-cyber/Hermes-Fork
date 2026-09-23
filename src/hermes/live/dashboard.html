@@ -29,7 +29,8 @@ async function load(){
  const s=await j("api/status"),e=await j("api/equity"),v=await j("api/events");
  document.getElementById("mode").textContent=s.mode||"?";document.getElementById("upd").textContent="barre "+(s.bar||"—");
  const k=[["Équité (USDT)",f(s.equity)],["Exposition brute",f(s.gross)+"×"],["Exposition nette",f(s.net)+"×"],
-  ["IC estimé",f(s.ic_est,4)],["Drawdown",pct((s.risk||{}).drawdown)],["Part maker",pct((s.execution||{}).maker_share)]];
+  ["IC estimé",f(s.ic_est,4)],["Drawdown",pct((s.risk||{}).drawdown)],["Part maker",pct((s.execution||{}).maker_share)],
+  ["Écart d'exécution",f((s.execution||{}).shortfall_bps,1)+" pb"],["Dérive max (PSI)",f((s.risk||{}).psi_max,2)]];
  document.getElementById("kpis").innerHTML=k.map(([a,b])=>`<div class="card"><div class="sub">${a}</div><div class="kpi">${b}</div></div>`).join("");
  const r=s.risk||{};document.getElementById("risk").innerHTML=Object.entries(r).map(([a,b])=>`<tr><td>${esc(a)}</td><td>${f(b,4)}</td></tr>`).join("")+
   (s.notes||[]).map(n=>`<tr><td colspan=2>${esc(n)}</td></tr>`).join("");

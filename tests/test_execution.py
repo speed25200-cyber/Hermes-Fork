@@ -277,3 +277,76 @@ def test_unknown_instrument_position_is_mapped_and_closable():
     assert b.register(["ETHUSDT"]) == ["ETHUSDT"]
     kids = b.plan({}, pos, {"ETHUSDT": 2000.0})
     assert len(kids) == 1 and kids[0].reduce_only and kids[0].side == "sell"
+
+
+class StuckOKX(FakeOKX):
+    """A post_only order that partially fills and whose cancel is never confirmed."""
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/api/v5/trade/cancel-order":
+            self.calls.append("POST cancel (ignored)")
+            return httpx.Response(200, json={"code": "0", "msg": "", "data": [{"sCode": "0"}]})
+        resp = super().handler(request)
+        if path == "/api/v5/trade/order" and request.method == "GET":
+            for o in self.orders.values():
+                if o["ordType"] == "post_only":
+                    o.update(state="partially_filled", accFillSz="0.02", avgPx=o["px"])
+            clid = request.url.params["clOrdId"]
+            o = self.orders.get(clid)
+            if o is not None:
+                return httpx.Response(200, json={"code": "0", "msg": "", "data": [o]})
+        return resp
+
+
+def test_unconfirmed_cancel_stops_the_child_and_keeps_its_fills():
+    from hermes.execution.okx_broker import Child, ChildError
+
+    fake = StuckOKX(fill_after=None)
+    b = _broker(fake, timeout=1.2)
+    ch = Child("BTCUSDT", b.instruments["BTCUSDT"], "buy", 0.05, False)
+    with pytest.raises(ChildError) as e:
+        asyncio.run(b._execute_child(ch, urgent=False))
+    assert sum(f.qty for f in e.value.fills) == pytest.approx(0.02)
+    assert e.value.remaining == pytest.approx(0.03)
+    assert not any(o["ordType"] == "ioc" for o in fake.orders.values()), "no IOC on top of a live order"
+    # The report of a rebalance keeps those fills.
+    rep = asyncio.run(b.rebalance({"BTCUSDT": 5.0}))
+    assert all(isinstance(x, str) for x in rep.errors)
+
+
+class LostOrderOKX(FakeOKX):
+    """The POST times out (HTTP 504) and the order never shows up: the child must stop, not resend."""
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v5/trade/order" and request.method == "POST":
+            self.calls.append("POST order (lost)")
+            return httpx.Response(504, text="gateway timeout")
+        return super().handler(request)
+
+
+def test_unconfirmed_ambiguous_send_aborts_the_child():
+    from hermes.execution.okx_broker import Child, ChildError
+
+    fake = LostOrderOKX()
+    b = _broker(fake)
+    ch = Child("BTCUSDT", b.instruments["BTCUSDT"], "buy", 0.05, False)
+    with pytest.raises(ChildError):
+        asyncio.run(b._execute_child(ch, urgent=False))
+    assert fake.calls.count("POST order (lost)") == 1
+
+
+def test_paper_broker_hold_and_marks_survive_restart(tmp_path):
+    pb = PaperBroker(tmp_path / "acc.json", 10_000, 0.0, 0.0, maker_share=1.0, half_spread=0.0, slippage=0.0)
+    pb.set_prices({"BTCUSDT": 100.0, "ETHUSDT": 10.0})
+
+    async def run():
+        await pb.rebalance({"BTCUSDT": 1_000.0, "ETHUSDT": -500.0})
+        pb.set_prices({"BTCUSDT": 120.0})
+        await pb.rebalance({"BTCUSDT": 1_000.0}, hold={"ETHUSDT"})  # ETH has no price this bar: untouched
+        return await pb.positions()
+
+    pos = asyncio.run(run())
+    assert pos["ETHUSDT"].contracts == pytest.approx(-50.0)
+    pb2 = PaperBroker(tmp_path / "acc.json", 1.0, 0.0, 0.0)
+    assert pb2.prices["BTCUSDT"] == 120.0  # valued at the last mark after a restart, not at entry

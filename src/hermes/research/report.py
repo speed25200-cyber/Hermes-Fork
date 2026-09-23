@@ -253,7 +253,7 @@ def comparison_table(reports: list[Path]) -> str:
         fees = sum(float(s.get(k, 0.0) or 0.0) for k in ("fees_annual", "spread_annual", "impact_annual"))
         rows.append(
             [
-                meta["config"].get("name", f.parent.name),
+                f"{meta['config'].get('name', '')} ({f.parent.name})",
                 d["bar"],
                 f"{d['oos_start'][:10]} → {d['end'][:10]}",
                 _num(ich.get("ic_mean"), 4) + f" (t {_num(ich.get('ic_t'), 1)})",
@@ -271,7 +271,7 @@ def comparison_table(reports: list[Path]) -> str:
             ]
         )
     head = [
-        "Config",
+        "Config (rapport)",
         "Bougie",
         "Hors échantillon",
         "IC (t)",

@@ -66,6 +66,18 @@ def estimate_ic(
     return est.clip(lower=0.0, upper=cap)
 
 
+def smooth_scores(score: pd.DataFrame, halflife_bars: float) -> pd.DataFrame:
+    """Exponentially smoothed scores per contract (time-decayed across gaps), NaN where the raw score is.
+
+    Short-horizon forecasts carry noise that flips from bar to bar; trading every flip costs more than the
+    forecast is worth. Smoothing keeps the persistent part (Garleanu & Pedersen's "trade toward the aim"
+    applied to the signal) and is computed identically in research and live.
+    """
+    if halflife_bars <= 0:
+        return score
+    return score.ewm(halflife=halflife_bars, ignore_na=False, min_periods=1).mean().where(score.notna())
+
+
 def signal_persistence(score: pd.DataFrame, horizon: int, window_bars: int, floor: float = 0.2) -> pd.Series:
     """Cost amortisation factor ``1 - rho_H`` from the causal lag-``H`` autocorrelation of the scores.
 

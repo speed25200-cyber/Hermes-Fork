@@ -95,5 +95,5 @@ def test_panel_is_trimmed_where_funding_history_ends(small_panel):
     fr.iloc[: len(fr) // 2 : 32] = 1e-4  # settlements only in the first half (monthly archives lag)
     q = trim_to_funding(p.with_fields({"funding_rate": fr}))
     last = fr.notna().any(axis=1)[lambda x: x].index[-1]
-    assert q.index[-1] == last.floor("D") + pd.Timedelta(days=1) - p.bar_delta
+    assert q.index[-1] == last
     assert len(q.index) < len(p.index)

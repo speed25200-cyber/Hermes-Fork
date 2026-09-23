@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import shutil
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,6 +34,18 @@ from hermes.research.walkforward import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _memory_note(phase: str) -> None:
+    """Log resident and available memory at a phase boundary (diagnoses out-of-memory kills on runners)."""
+    try:
+        status = Path("/proc/self/status").read_text().splitlines()
+        meminfo = Path("/proc/meminfo").read_text().splitlines()
+        rss = next(int(x.split()[1]) for x in status if x.startswith("VmRSS"))
+        avail = next(int(x.split()[1]) for x in meminfo if x.startswith("MemAvailable"))
+        log.info("memory after %s: process %.1f GB, available %.1f GB", phase, rss / 1e6, avail / 1e6)
+    except (OSError, StopIteration, ValueError):
+        pass
 
 
 def config_hash(cfg: HermesConfig) -> str:
@@ -119,6 +132,11 @@ def train_final(
         market = RidgeModel(LinearConfig(alpha=3000.0)).fit(
             TrainData(ds.market_X[ok], ds.market_y[ok], np.zeros(len(ok), dtype=np.int64))
         )
+    # Reference distribution of the features for train/serve drift checks (most recent 90 days of training).
+    from hermes.models.drift import feature_profile
+
+    recent = np.nonzero((ds.t_pos < last) & (ds.t_pos >= last - cfg.days(90)))[0]
+    profile = feature_profile(ds.X[recent], ds.feature_names) if len(recent) else {}
     return ModelBundle(
         config=cfg,
         feature_names=ds.feature_names,
@@ -137,6 +155,7 @@ def train_final(
             "config_hash": config_hash(cfg),
             "val_ic": ics,
             "evaluation": evaluation,
+            "feature_profile": profile,
             **(extra_meta or {}),
         },
     )
@@ -162,6 +181,7 @@ def run_research(
     panel = panel if panel is not None else load_panel(cfg.data, cfg.seed)
     log.info("panel %s from %s to %s", panel.shape, panel.index[0], panel.index[-1])
     ds = build_dataset(panel, cfg)
+    _memory_note("dataset")
     wf_dir = out / "walkforward"
     marker = wf_dir / "training_hash"
     thash = f"{training_hash(cfg)}:{panel.index[0]}:{panel.index[-1]}:{len(panel.symbols)}"
@@ -169,10 +189,15 @@ def run_research(
         log.info("resuming from the saved walk-forward in %s", wf_dir)
         wf = WalkForwardResult.load(wf_dir)
     else:
+        # The marker is only valid for a complete save: remove it (and stale artefacts) before retraining.
+        if wf_dir.exists():
+            shutil.rmtree(wf_dir)
         wf = walk_forward_train(ds, cfg)
         wf.save(wf_dir)
         marker.write_text(thash)
+    _memory_note("walk-forward")
     bundle = train_final(ds, cfg, False, {}) if save_model else None
+    _memory_note("final model")
     # Training arrays are no longer needed: free them before the forking evaluation.
     ds.release_training_arrays()
     ev, bt = evaluate(ds, wf, cfg, n_null=n_null, workers=workers)
@@ -180,9 +205,12 @@ def run_research(
     write_report(out, cfg, ds, wf, ev, bt, chash, elapsed)
     if bundle is not None:
         from hermes.portfolio.alpha import signal_persistence
+        from hermes.research.evaluate import holding_target, traded_score
 
-        H = cfg.portfolio.holding_horizon
-        persist = signal_persistence(wf.score, H, cfg.bars_per_day * 30).dropna()
+        H, _ = holding_target(ds, cfg)
+        persist = signal_persistence(
+            traded_score(wf.score, cfg, H), H, cfg.bars_per_day * 30, floor=cfg.portfolio.cost_scale_floor
+        ).dropna()
         bundle.meta.update(
             {
                 "promoted": ev.promoted,

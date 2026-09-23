@@ -36,7 +36,14 @@ from hermes.labels.targets import build_targets
 from hermes.live.alerts import alert
 from hermes.live.state import StateStore
 from hermes.models.bundle import ModelBundle
-from hermes.portfolio.alpha import estimate_ic, market_alpha_series, rowwise_corr, signal_persistence
+from hermes.models.drift import psi
+from hermes.portfolio.alpha import (
+    estimate_ic,
+    market_alpha_series,
+    rowwise_corr,
+    signal_persistence,
+    smooth_scores,
+)
 from hermes.portfolio.construct import BookInputs, PortfolioConstructor
 from hermes.portfolio.costs import CostModel
 from hermes.portfolio.covariance import EwmaCovariance, market_variance
@@ -99,6 +106,7 @@ class Decision:
     scores: dict[str, float] = field(default_factory=dict)
     risk: dict[str, float] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    hold: list[str] = field(default_factory=list)  # positions left exactly as they are this bar
 
 
 class LiveEngine:
@@ -135,6 +143,7 @@ class LiveEngine:
         self.model_dir = Path(model_dir) if model_dir is not None else None
         self._model_mtime = self._bundle_mtime()
         self._cache: dict[str, pd.DataFrame] = {}
+        self._drift_rows: list[tuple[pd.Timestamp, np.ndarray]] = []
 
     def _set_config(self, cfg: HermesConfig) -> None:
         self.cfg = cfg
@@ -198,19 +207,32 @@ class LiveEngine:
 
         The book trades ``frac * equity``, so a bar's strategy return is the account return divided by
         ``frac``; drawdown and daily-loss limits apply to this NAV, not to the (diluted) account. Transfers in or
-        out of the account show up as returns: reset the risk state after moving funds.
+        out of the account show up as returns: ``hermes live resume`` restarts the NAV after moving funds.
+        When the fraction changes (or on the first run after an upgrade), the NAV restarts at ``frac * equity``
+        and the risk state is rescaled to it, so the current drawdown is preserved rather than invented.
         """
-        frac = self.cfg.live.capital_fraction
-        if frac >= 1.0 or equity <= 0:
+        frac = min(float(self.cfg.live.capital_fraction), 1.0)
+        if equity <= 0:
             return equity
         st = self.store.get("nav_state")
-        if not isinstance(st, dict) or float(st.get("equity", 0.0)) <= 0:
-            nav = equity * frac
+        valid = isinstance(st, dict) and float(st.get("equity", 0.0) or 0.0) > 0 and float(st.get("nav", 0.0)) > 0
+        if valid and st.get("frac", frac) == frac:  # type: ignore[union-attr]
+            r = (equity / float(st["equity"]) - 1.0) / frac  # type: ignore[index]
+            nav = float(st["nav"]) * max(1.0 + r, 1e-6)  # type: ignore[index]
         else:
-            r = (equity / float(st["equity"]) - 1.0) / frac
-            nav = float(st["nav"]) * max(1.0 + r, 1e-6)
-        self.store.put("nav_state", {"nav": nav, "equity": equity})
+            nav = equity * frac
+            # The overlay tracked either the previous NAV or, before NAV tracking existed, the account.
+            prev = float(st["nav"]) * equity / float(st["equity"]) if valid else equity  # type: ignore[index]
+            self._rescale_risk_state(nav / prev if prev > 0 else 1.0)
+        self.store.put("nav_state", {"nav": nav, "equity": equity, "frac": frac})
         return nav
+
+    def _rescale_risk_state(self, ratio: float) -> None:
+        st = self.overlay.state
+        st.peak_equity *= ratio
+        st.day_start_equity *= ratio
+        st.last_equity *= ratio
+        self._save_risk_state()
 
     def tradable(self, symbols: list[str]) -> list[str]:
         u = self.cfg.data.universe
@@ -225,6 +247,8 @@ class LiveEngine:
         return min(self.cfg.live.candidates, 2 * self.cfg.data.universe.top_n + 10)
 
     async def refresh_candidates(self, held: list[str]) -> list[str]:
+        """Today's candidates (cached per UTC day) plus anything held. Every symbol the engine may trade is
+        (re-)registered with the broker on each call: after a restart the broker's contract map starts empty."""
         today = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
         if self.feed is not None and (self.candidates_day != today or not self.candidates):
             n = self.n_candidates()
@@ -233,7 +257,36 @@ class LiveEngine:
             self.candidates_day = today
             self.store.put("candidates", self.candidates)
             self.store.put("candidates_day", today)
+        traded = list(self.store.get("traded_symbols", []) or [])  # type: ignore[arg-type]
+        self.candidates = self.tradable(self.candidates)
+        self.tradable(traded)  # model symbols of earlier positions (e.g. 1000PEPEUSDT for PEPE-USDT-SWAP)
         return sorted(set(self.candidates) | set(held))
+
+    def _remember_traded(self, symbols: list[str]) -> None:
+        traded = set(self.store.get("traded_symbols", []) or [])  # type: ignore[arg-type]
+        if not set(symbols) <= traded:
+            self.store.put("traded_symbols", sorted(traded | set(symbols)))
+
+    def _check_drift(self, ts: pd.Timestamp, X: np.ndarray, d: Decision) -> None:
+        """Feature drift (PSI) of the last day's member rows against the training profile of the bundle."""
+        profile = self.bundle.meta.get("feature_profile")
+        if not isinstance(profile, dict) or not profile:
+            return
+        buf = self._drift_rows
+        buf.append((ts, np.asarray(X, dtype=np.float32)))
+        while buf and buf[0][0] < ts - pd.Timedelta(days=1):
+            buf.pop(0)
+        if len(buf) < max(4, self.bpd // 4):
+            return  # too few rows for a stable histogram yet
+        values = psi(profile, np.concatenate([x for _, x in buf]), self.bundle.feature_names)
+        if not values:
+            return
+        drifted = sorted((v, k) for k, v in values.items() if v > 0.25)
+        d.risk["psi_max"] = round(max(values.values()), 3)
+        d.risk["psi_drifted"] = float(len(drifted))
+        if len(drifted) > 0.1 * len(values):
+            worst = ", ".join(k for _, k in drifted[::-1][:3])
+            d.notes.append(f"feature drift vs training: {len(drifted)} features with PSI > 0.25 ({worst})")
 
     # -- score / realised-IC memory: in RAM, backed by the state store for restarts ----------------------------
     def _memory(self, name: str, ts: pd.Timestamp) -> pd.DataFrame:
@@ -310,6 +363,7 @@ class LiveEngine:
         X, mi = feats.stack(mask, rows=np.array([t]))
         members = list(mi.get_level_values(1))
         d.n_members = len(members)
+        self._check_drift(ts, X, d)
         scores = pd.Series(self.bundle.score(X, np.zeros(len(X), dtype=np.int64)), index=members, dtype=float)
         d.scores = {k: round(float(v), 4) for k, v in scores.items() if np.isfinite(v)}
         self.store.add_scores(ts, scores)
@@ -329,8 +383,18 @@ class LiveEngine:
         tgt = targets.residual[H]
         freq = BAR_TO_OFFSET[panel.bar]
         grid = pd.date_range(end=ts, periods=SCORE_MEMORY_DAYS * self.bpd, freq=freq)
-        names = self._memory("scores", ts)
+        # The book trades the smoothed score (portfolio.signal_halflife), exactly as in research: its realised
+        # IC and persistence are measured on that same series.
+        mem = self._memory("scores", ts)
+        if len(mem):  # regular bar grid: skipped bars decay the average exactly as in research
+            mem = mem.reindex(pd.date_range(mem.index[0], ts, freq=freq))
+        names = smooth_scores(mem, cfg.portfolio.signal_halflife * H)
+        traded = names.iloc[-1] if len(names) and names.index[-1] == ts else pd.Series(dtype=float)
         ric_new = rowwise_corr(names.reindex(index=panel.index, columns=panel.symbols), tgt).dropna()
+        # Each bar's realised IC is recorded once, when its horizon has just elapsed (the end of the window,
+        # where features and targets are fully warmed up); older values are never rewritten from a window
+        # that has slid past their warm-up.
+        ric_new = ric_new[~ric_new.index.isin(self._series("ic", ts).index)]
         self.store.put_series("ic", ric_new)
         self._remember_series("ic", ric_new, ts)
         ric = self._series("ic", ts).reindex(grid)
@@ -340,12 +404,13 @@ class LiveEngine:
         window = self.bpd * 30
         recent = names.reindex(pd.date_range(end=ts, periods=window + H, freq=freq))
         if recent.notna().any(axis=1).sum() > 4 * H:
-            cost_scale = float(signal_persistence(recent, H, window).iloc[-1])
+            cost_scale = float(signal_persistence(recent, H, window, floor=cfg.portfolio.cost_scale_floor).iloc[-1])
         d.ic_est = round(ic_est, 5)
         d.risk["cost_scale"] = round(cost_scale, 3)
         m_alpha = 0.0
         if use_market:
             mt_new = targets.market[H].dropna()
+            mt_new = mt_new[~mt_new.index.isin(self._series("mkt_target", ts).index)]
             self.store.put_series("mkt_target", mt_new)
             self._remember_series("mkt_target", mt_new, ts)
             ms = self._series("mkt_score", ts).reindex(grid)
@@ -360,13 +425,18 @@ class LiveEngine:
         syms = panel.symbols
         pos_w = np.array([positions_notional.get(s, 0.0) / max(capital, 1e-9) for s in syms])
         close_t = panel["close"].iloc[t].to_numpy()
-        # A held contract without a price for this bar (feed hiccup) is left untouched, never liquidated blind.
+        # A held contract without a price for this bar, or without the daily history its universe membership
+        # needs (a failed fetch), is left untouched: never liquidated blind on missing data.
         frozen = (pos_w != 0) & ~np.isfinite(close_t)
+        if daily is not None:
+            has_daily = daily.quote_volume.reindex(columns=syms).notna().any(axis=0).to_numpy()
+            frozen |= (pos_w != 0) & ~has_daily
         active = mask.iloc[t].to_numpy() & np.isin(syms, members)
         idx = np.nonzero((active | (pos_w != 0)) & ~frozen)[0]
         z = np.full(len(syms), np.nan)
-        for s, v in scores.items():
-            z[syms.index(s)] = v
+        for s in scores.index:
+            v = traded.get(s, np.nan)
+            z[syms.index(s)] = v if np.isfinite(v) else scores[s]
         costs = CostModel.from_panel(
             cfg.costs, panel["high"], panel["low"], panel["close"], panel["quote_volume"], feats.aux["vol"], self.bpd
         )
@@ -411,11 +481,11 @@ class LiveEngine:
                 d.weights[syms[i]] = round(float(w[j]), 5)
                 d.targets[syms[i]] = float(w[j] * capital)
         for i in np.nonzero(frozen)[0]:
-            d.targets[syms[i]] = float(positions_notional[syms[i]])
-            d.notes.append(f"{syms[i]}: no price this bar, position left unchanged")
+            d.hold.append(syms[i])
+            d.notes.append(f"{syms[i]}: missing data this bar, position left unchanged")
         for s, v in positions_notional.items():
             if s not in syms and v != 0:
-                d.targets[s] = float(v)
+                d.hold.append(s)
                 d.notes.append(f"{s}: not in the data feed, position left unchanged")
         self._save_risk_state()
         return d
@@ -474,8 +544,10 @@ class LiveEngine:
             return None
         positions = await self.broker.positions()
         symbols = await self.refresh_candidates(list(positions))
-        panel = await self.feed.update(symbols)
-        daily = await self.feed.daily(symbols)
+        # Market data must arrive within the bar; otherwise the cycle fails and the guard runs again.
+        budget = 0.6 * self.cfg.bar_minutes * 60.0
+        panel = await asyncio.wait_for(self.feed.update(symbols), timeout=budget)
+        daily = await asyncio.wait_for(self.feed.daily(symbols), timeout=budget)
         now = pd.Timestamp.now(tz="UTC")
         if isinstance(self.broker, PaperBroker):
             self.broker.set_prices(panel["close"].iloc[-1].dropna().to_dict())
@@ -487,10 +559,14 @@ class LiveEngine:
         if d.stale:
             await alert(f"données périmées ({d.ts}) : aucune nouvelle prise de risque", "WARNING")
         urgent = self.overlay.state.halted
-        rep = await self.broker.rebalance(d.targets, urgent=urgent)
+        self._remember_traded([s for s, v in d.targets.items() if v != 0])
+        rep = await self.broker.rebalance(d.targets, urgent=urgent, hold=set(d.hold))
         self.store.add_fills(rep.fills)
         for e in rep.errors:
             self.store.event("ERROR", e)
+        shortfall = self._shortfall_bps(rep.fills, panel["close"].iloc[-1])
+        if np.isfinite(shortfall):
+            self.store.put_series("shortfall_bps", pd.Series({pd.Timestamp(d.ts): shortfall}))
         # Exchange-side catastrophe stops, k daily sigmas away (same EWMA half-life as the features).
         hl = self.cfg.bars(self.cfg.features.vol_halflife_minutes)
         vol = panel["close"].pipe(np.log).diff().ewm(halflife=hl, adjust=False).std()
@@ -529,6 +605,7 @@ class LiveEngine:
                 "fees": rep.fees,
                 "maker_share": rep.maker_share,
                 "unfilled": rep.unfilled,
+                "shortfall_bps": round(shortfall, 2) if np.isfinite(shortfall) else None,
                 "errors": rep.errors[:10],
             },
             "bundle": {k: self.bundle.meta.get(k) for k in ("config_hash", "train_end", "promoted")},
@@ -547,6 +624,22 @@ class LiveEngine:
             100 * rep.maker_share,
         )
         return d
+
+    def _shortfall_bps(self, fills: list, ref: pd.Series) -> float:  # type: ignore[type-arg]
+        """Implementation shortfall of this bar's fills against the decision price (the Binance close the
+        decision used), notional-weighted, in bps; positive = paid more than the decision price. Includes the
+        Binance/OKX basis, fees excluded. The backtest assumes about the half-spread plus impact."""
+        conv = getattr(self.broker, "price_to_model", None)
+        num = den = 0.0
+        for f in fills:
+            p0 = float(ref.get(f.symbol, np.nan))
+            if not (np.isfinite(p0) and p0 > 0 and f.price > 0):
+                continue
+            px = conv(f.symbol, f.price) if conv else f.price
+            w = abs(f.notional) if f.notional else abs(f.qty * f.price)
+            num += (1.0 if f.qty > 0 else -1.0) * (px / p0 - 1.0) * w
+            den += w
+        return 1e4 * num / den if den > 0 else float("nan")
 
     def _accrue_paper_funding(self, panel: Panel) -> None:
         """Paper account: charge every funding settlement since the last accrued bar (none is skipped when a

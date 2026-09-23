@@ -29,6 +29,18 @@ def cross_sectional_ic(pred: pd.Series, target: pd.Series, method: str = "spearm
     return ic[counts >= min_names].dropna()
 
 
+def rank_ic_wide(score: pd.DataFrame, target: pd.DataFrame, min_names: int = 5) -> pd.Series:
+    """Per-timestamp Spearman IC from wide (time x symbol) frames -- same numbers as ``cross_sectional_ic``
+    on the stacked series, without building a long frame of every (time, symbol) pair."""
+    from hermes.portfolio.alpha import rowwise_corr
+
+    target = target.reindex(index=score.index, columns=score.columns)
+    valid = score.notna() & target.notna()
+    rs = score.where(valid).rank(axis=1)
+    rt = target.where(valid).rank(axis=1)
+    return rowwise_corr(rs, rt, min_names=min_names).dropna()
+
+
 def ic_summary(ic: pd.Series, horizon: int = 1) -> dict[str, float]:
     """Mean IC, IC information ratio and a t-stat robust to label overlap and IC clustering.
 

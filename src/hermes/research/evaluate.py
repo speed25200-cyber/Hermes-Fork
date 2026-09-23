@@ -19,10 +19,17 @@ import pandas as pd
 
 from hermes.backtest.engine import BacktestResult, SignalBundle, run_backtest
 from hermes.config import HermesConfig
-from hermes.portfolio.alpha import cs_zscore, estimate_ic, market_alpha_series, rowwise_corr, signal_persistence
+from hermes.portfolio.alpha import (
+    cs_zscore,
+    estimate_ic,
+    market_alpha_series,
+    rowwise_corr,
+    signal_persistence,
+    smooth_scores,
+)
 from hermes.research.dataset import Dataset
 from hermes.research.walkforward import WalkForwardResult
-from hermes.validation.metrics import cross_sectional_ic, ic_summary
+from hermes.validation.metrics import ic_summary, rank_ic_wide
 from hermes.validation.stats import (
     deflated_sharpe,
     min_track_record,
@@ -52,13 +59,19 @@ def make_signal(
     market_prior: pd.Series | None = None,
 ) -> SignalBundle:
     H, target = holding_target(ds, cfg)
+    score = traded_score(score, cfg, H)
     ric = rowwise_corr(score, target)
     ic_est = estimate_ic(ric, H, prior_ic, halflife_bars=cfg.bars_per_day * 30)
     malpha = None
     if market_score is not None and market_prior is not None:
         malpha = market_alpha(market_score, market_prior, ds, cfg)
-    persist = signal_persistence(score, H, cfg.bars_per_day * 30)
+    persist = signal_persistence(score, H, cfg.bars_per_day * 30, floor=cfg.portfolio.cost_scale_floor)
     return SignalBundle(score=score, ic_est=ic_est, market_alpha=malpha, cost_scale=persist)
+
+
+def traded_score(score: pd.DataFrame, cfg: HermesConfig, horizon: int) -> pd.DataFrame:
+    """The score the book is built from: the model score, smoothed over ``signal_halflife`` horizons."""
+    return smooth_scores(score, cfg.portfolio.signal_halflife * horizon)
 
 
 def market_alpha(market_score: pd.Series, market_prior: pd.Series, ds: Dataset, cfg: HermesConfig) -> pd.Series:
@@ -68,25 +81,36 @@ def market_alpha(market_score: pd.Series, market_prior: pd.Series, ds: Dataset, 
     )
 
 
-def block_permute(score: pd.DataFrame, mask: pd.DataFrame, seed: int, block_bars: int) -> pd.DataFrame:
-    """Null score: within each block (one week), members' scores are reassigned by a random permutation of names.
+def block_permute(score: pd.DataFrame, mask: pd.DataFrame, seed: int, block_days: int = 7) -> pd.DataFrame:
+    """Null score: within each block, every contract takes the score path of a fixed random partner.
 
-    Preserves each score path's time structure (hence realistic turnover) while destroying its alignment
-    with the contract whose return it is supposed to predict.
+    Blocks follow the universe's calendar reselection grid (``block_days`` from the same Monday anchor), so
+    membership is constant inside a block and the partner map never shuffles mid-block (a reshuffle would add
+    artificial turnover and costs to the null book, making the real one look better than it is). The map is a
+    random cyclic derangement of the block's members: no contract keeps its own score. The time structure of
+    each score path -- hence realistic turnover -- is preserved; its alignment with the right contract is not.
     """
+    from hermes.data.universe import EPOCH
+
     rng = np.random.default_rng(seed)
     S = score.to_numpy()
     M = mask.to_numpy() & np.isfinite(S)
     out = np.full_like(S, np.nan)
-    T, N = S.shape
-    for b0 in range(0, T, block_bars):
-        keys = rng.random(N)
-        for t in range(b0, min(T, b0 + block_bars)):
-            mem = np.nonzero(M[t])[0]
-            if len(mem) < 2:
-                continue
-            src = mem[np.argsort(keys[mem])]
-            out[t, mem] = S[t, src]
+    block = np.asarray((score.index.floor("D") - EPOCH).days // block_days)
+    starts = np.flatnonzero(np.r_[True, block[1:] != block[:-1]])
+    ends = np.r_[starts[1:], len(block)]
+    for b0, b1 in zip(starts, ends):
+        members = np.flatnonzero(M[b0:b1].any(axis=0))
+        if len(members) < 2:
+            continue
+        order = members[rng.permutation(len(members))]
+        partner = np.empty(S.shape[1], dtype=np.int64)
+        partner[order] = np.roll(order, -1)
+        for t in range(b0, b1):
+            mem = np.flatnonzero(M[t])
+            src = partner[mem]
+            ok = M[t, src]  # a partner that is not a member at t (delisting, gap) gives no score this bar
+            out[t, mem[ok]] = S[t, src[ok]]
     return pd.DataFrame(out, index=score.index, columns=score.columns)
 
 
@@ -101,7 +125,7 @@ def _bt_job(args: tuple[str, int | dict[str, object]]) -> tuple[str, pd.Series, 
     cfg: HermesConfig = _CTX["cfg"]  # type: ignore[assignment]
     start = _CTX["start"]
     if kind == "null":
-        score = block_permute(wf.score, ds.mask, seed=int(param), block_bars=cfg.days(7))  # type: ignore[arg-type]
+        score = block_permute(wf.score, ds.mask, seed=int(param), block_days=cfg.data.universe.reselect_every_days)  # type: ignore[arg-type]
         sig = make_signal(score, ds, wf.prior_ic, cfg)
         c = cfg
     else:
@@ -172,7 +196,9 @@ def trial_count_and_variance(ledger_trials: int, grid_daily: pd.DataFrame, n_day
     if n_grid < 2 or len(grid_daily) < 10:
         return max(1, ledger_trials), null_var
     corr = grid_daily.corr().to_numpy()
-    rho = float(np.clip(np.nanmean(corr[np.triu_indices(n_grid, 1)]), 0.0, 1.0))
+    pairs = corr[np.triu_indices(n_grid, 1)]
+    pairs = pairs[np.isfinite(pairs)]  # a flat variant (no trade) has no correlation: it counts as independent
+    rho = float(np.clip(pairs.mean(), 0.0, 1.0)) if len(pairs) else 0.0
     n_eff = rho + (1.0 - rho) * n_grid
     per_sr = grid_daily.mean() / grid_daily.std()
     var = float(per_sr.var()) if np.isfinite(per_sr.var()) else 0.0
@@ -225,19 +251,22 @@ def evaluate(
     v = cfg.validation
     bpy = cfg.bars_per_year
     start = wf.oof_start
-    workers = workers or max(1, min(os.cpu_count() or 2, _workers_for_memory()))
+    # Each worker holds a few (bar x contract) float64 arrays of the backtest window on top of the shared data.
+    n_cols = int(ds.mask.iloc[ds.mask.index.searchsorted(start) :].to_numpy().any(axis=0).sum())
+    per_worker = max(1.0, 1.5 * 16 * 8 * len(ds.mask.index) * max(n_cols, 1) / 1e9)
+    workers = workers or max(1, min(os.cpu_count() or 2, _workers_for_memory(per_worker)))
+    log.info("evaluation: %d parallel backtests (%.1f GB each, %d contracts)", workers, per_worker, n_cols)
     n_null = n_null if n_null is not None else min(v.null_permutations, 40)
 
     # --- forecast quality -------------------------------------------------------------------------------
-    long_score = wf.score.stack()
     ic: dict[str, object] = {}
     for h, tgt in ds.targets.residual.items():
-        ic[f"h{h}"] = ic_summary(cross_sectional_ic(long_score, tgt.stack()), horizon=h)
+        ic[f"h{h}"] = ic_summary(rank_ic_wide(wf.score, tgt), horizon=h)
     for name, sc in wf.model_scores.items():
         H, tgt = holding_target(ds, cfg)
-        ic[f"model_{name}_h{H}"] = ic_summary(cross_sectional_ic(sc.stack(), tgt.stack()), horizon=H)
+        ic[f"model_{name}_h{H}"] = ic_summary(rank_ic_wide(sc, tgt), horizon=H)
     H, tgt = holding_target(ds, cfg)
-    realized = rowwise_corr(wf.score, tgt).dropna()
+    realized = rowwise_corr(traded_score(wf.score, cfg, H), tgt).dropna()
     by_year = realized.groupby(realized.index.year).mean()
     ic["by_year"] = {int(k): round(float(x), 4) for k, x in by_year.items()}
     if wf.market_score is not None:

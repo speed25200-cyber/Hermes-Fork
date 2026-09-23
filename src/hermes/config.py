@@ -185,6 +185,12 @@ class PortfolioConfig(_Strict):
     min_trade_weight: float = Field(0.002, ge=0)
     ic_ref: float = Field(0.03, gt=0, description="IC at which the book reaches its volatility target")
     min_position_usdt: float = Field(5.0, ge=0, description="Positions smaller than this are not held")
+    signal_halflife: float = Field(
+        0.0, ge=0, description="EWMA half-life of the traded score, in holding horizons (0 = raw model score)"
+    )
+    cost_scale_floor: float = Field(
+        0.2, gt=0, le=1, description="Lowest cost amortisation factor 1 - rho_H (1 = no amortisation)"
+    )
 
 
 class RiskConfig(_Strict):

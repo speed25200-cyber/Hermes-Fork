@@ -109,19 +109,20 @@ def trim_to_funding(panel: Panel) -> Panel:
 
     Funding archives are monthly only: the current month has klines (daily archives) but no funding yet.
     Keeping those weeks would give the model a zero carry and label returns gross of funding there -- a
-    different strategy from the one that trades live. They are dropped instead (the end of the UTC day of the
-    last settlement is kept).
+    different strategy from the one that trades live. They are dropped instead: the panel ends with the bar of
+    the last known settlement.
     """
     if "funding_rate" not in panel:
         return panel
     has = panel["funding_rate"].notna().any(axis=1).to_numpy()
     if not has.any():
         return panel
+    # The next settlement after the last known one (e.g. 00:00 on the 1st, in next month's archive) belongs
+    # to a bar that would otherwise look settlement-free: the panel ends with the last settled bar.
     last = panel.index[np.nonzero(has)[0][-1]]
-    cut = last.floor("D") + pd.Timedelta(days=1)
-    if panel.index[-1] < cut:
+    if panel.index[-1] <= last:
         return panel
-    keep = int(panel.index.searchsorted(cut))
+    keep = int(panel.index.searchsorted(last, side="right"))
     log.info("panel trimmed to the funding history: %s -> %s", panel.index[-1], panel.index[keep - 1])
     out = panel.iloc(slice(0, keep))
     out.meta["trimmed_to_funding"] = str(panel.index[keep - 1])

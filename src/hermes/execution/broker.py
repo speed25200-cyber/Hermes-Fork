@@ -35,6 +35,7 @@ class Fill:
     fee: float
     maker: bool
     ts: float = field(default_factory=time.time)
+    notional: float = 0.0  # USDT value of the fill (qty units differ by venue: coins, contracts)
 
 
 @dataclass
@@ -47,7 +48,7 @@ class ExecutionReport:
 
     @property
     def traded_notional(self) -> float:
-        return sum(abs(f.qty * f.price) for f in self.fills)
+        return sum(abs(f.notional) if f.notional else abs(f.qty * f.price) for f in self.fills)
 
     @property
     def fees(self) -> float:
@@ -66,7 +67,9 @@ class Broker(Protocol):
 
     async def positions(self) -> dict[str, Position]: ...
 
-    async def rebalance(self, targets: dict[str, float], urgent: bool = False) -> ExecutionReport: ...
+    async def rebalance(
+        self, targets: dict[str, float], urgent: bool = False, hold: set[str] | None = None
+    ) -> ExecutionReport: ...
 
     async def protect(self, stop_fraction: dict[str, float]) -> None: ...
 
@@ -110,6 +113,8 @@ class PaperBroker:
             self.avg = {k: float(v) for k, v in s.get("avg", {}).items()}
             self.fees_paid = float(s.get("fees_paid", 0.0))
             self.funding_paid = float(s.get("funding_paid", 0.0))
+            # Last marks: after a restart the book is valued at market, not at entry prices.
+            self.prices = {k: float(v) for k, v in s.get("prices", {}).items()}
         else:
             self.cash = float(initial_equity)
             self.qty, self.avg = {}, {}
@@ -129,6 +134,7 @@ class PaperBroker:
                     "avg": self.avg,
                     "fees_paid": self.fees_paid,
                     "funding_paid": self.funding_paid,
+                    "prices": {k: v for k, v in self.prices.items() if k in self.qty},
                 }
             )
         )
@@ -161,9 +167,13 @@ class PaperBroker:
         self._save()
         return paid
 
-    async def rebalance(self, targets: dict[str, float], urgent: bool = False) -> ExecutionReport:
+    async def rebalance(
+        self, targets: dict[str, float], urgent: bool = False, hold: set[str] | None = None
+    ) -> ExecutionReport:
         rep = ExecutionReport()
         for s in sorted(set(targets) | set(self.qty)):
+            if hold and s in hold:
+                continue
             px = self.prices.get(s)
             if not px:
                 if targets.get(s, 0.0):
@@ -186,7 +196,7 @@ class PaperBroker:
                 )
                 fee = abs(q * fpx) * (self.maker_fee if maker else self.taker_fee)
                 self._apply(s, q, fpx, fee)
-                rep.fills.append(Fill(s, side, q, fpx, fee, maker))
+                rep.fills.append(Fill(s, side, q, fpx, fee, maker, notional=abs(q * fpx)))
         rep.finished = time.time()
         self._save()
         return rep
@@ -208,6 +218,10 @@ class PaperBroker:
 
     async def protect(self, stop_fraction: dict[str, float]) -> None:
         return None
+
+    @staticmethod
+    def price_to_model(symbol: str, price: float) -> float:
+        return price
 
     async def flatten(self) -> ExecutionReport:
         return await self.rebalance({}, urgent=True)

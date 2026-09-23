@@ -140,10 +140,10 @@ def _build_dataset_chunked(panel: Panel, mask: pd.DataFrame, cfg: HermesConfig, 
     for c0 in range(0, T, chunk_bars):
         c1 = min(T, c0 + chunk_bars)
         a0, a1 = max(0, c0 - warm), min(T, c1 + Hmax + 1)
-        # Every contract that is a member anywhere in the computed window (warm-up included), plus BTC for the
+        # Every contract that is a member anywhere in the computed window (warm-up and label suffix), plus BTC for the
         # market-state features: market returns and betas in the warm-up must see the same member set as the
         # one-shot computation, not only the contracts that will be members later (a survivorship leak).
-        active = mask.iloc[a0:c1].any(axis=0)
+        active = mask.iloc[a0:a1].any(axis=0)  # label suffix included: its market return needs the same set
         keep = [c for c in cols if active[c] or c == "BTCUSDT"]
         if not mask.iloc[c0:c1].to_numpy().any():
             continue

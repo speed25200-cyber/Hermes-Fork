@@ -93,3 +93,69 @@ def test_dsr_trials_and_variance_floor():
     d = pd.Series(0.001, index=idx)
     d[d.index.year == 2025] = -0.01
     assert positive_year_fraction(d) == 1.0
+
+
+def test_psi_flags_a_shifted_feature_and_not_a_stable_one():
+    from hermes.models.drift import feature_profile, psi
+
+    r = np.random.default_rng(1)
+    train = np.column_stack([r.normal(size=50_000), r.normal(size=50_000)])
+    train[::50, 1] = np.nan
+    prof = feature_profile(train, ["stable", "shifted"])
+    live = np.column_stack([r.normal(size=3_000), r.normal(1.0, 1.0, size=3_000)])
+    out = psi(prof, live, ["stable", "shifted"])
+    assert out["stable"] < 0.05 and out["shifted"] > 0.25
+
+
+def test_null_permutation_is_a_stable_derangement_within_blocks():
+    import pandas as pd
+
+    from hermes.research.evaluate import block_permute, trial_count_and_variance
+
+    r = np.random.default_rng(2)
+    idx = pd.date_range("2024-01-01", periods=96 * 21, freq="15min", tz="UTC")
+    cols = [f"S{i}" for i in range(8)]
+    S = pd.DataFrame(r.normal(size=(len(idx), 8)), index=idx, columns=cols)
+    mask = pd.DataFrame(True, index=idx, columns=cols)
+    mask.iloc[500:, 7] = False  # one contract leaves mid-block
+    out = block_permute(S, mask, seed=0, block_days=7).to_numpy()
+    s = S.to_numpy()
+    for t in range(1, len(idx)):
+        for i in range(7):
+            if np.isfinite(out[t, i]):
+                src = int(np.flatnonzero(np.isclose(s[t], out[t, i]))[0])
+                assert src != i  # never its own score
+                if np.isfinite(out[t - 1, i]) and idx[t].floor("D") == idx[t - 1].floor("D"):
+                    assert np.isclose(out[t - 1, i], s[t - 1, src])  # same partner as the previous bar
+    flat = pd.DataFrame({"a": r.normal(0, 0.01, 200), "b": 0.0, "c": 0.0})
+    n, var = trial_count_and_variance(3, flat, 200)  # flat variants: no crash, counted as independent
+    assert n >= 3 and var > 0
+
+
+def test_wide_rank_ic_equals_the_long_format_ic():
+    import pandas as pd
+
+    from hermes.validation.metrics import cross_sectional_ic, rank_ic_wide
+
+    r = np.random.default_rng(4)
+    idx = pd.date_range("2024-01-01", periods=300, freq="15min", tz="UTC")
+    a = pd.DataFrame(r.normal(size=(300, 9)), index=idx)
+    b = 0.3 * a + pd.DataFrame(r.normal(size=(300, 9)), index=idx)
+    a.iloc[::7, 2] = np.nan
+    b.iloc[::5, 4] = np.nan
+    wide = rank_ic_wide(a, b)
+    long = cross_sectional_ic(a.stack(), b.stack())
+    np.testing.assert_allclose(wide.to_numpy(), long.reindex(wide.index).to_numpy(), atol=1e-12)
+
+
+def test_smoothed_scores_are_time_decayed_and_masked():
+    import pandas as pd
+
+    from hermes.portfolio.alpha import smooth_scores
+
+    idx = pd.date_range("2024-01-01", periods=6, freq="15min", tz="UTC")
+    s = pd.DataFrame({"A": [1.0, 1.0, np.nan, -1.0, -1.0, -1.0]}, index=idx)
+    out = smooth_scores(s, 1.0)
+    assert np.isnan(out.iloc[2, 0])  # not a member: no score
+    assert 0 > out.iloc[3, 0] > -1 and out.iloc[5, 0] < out.iloc[3, 0]  # moves toward the new sign
+    assert smooth_scores(s, 0.0).equals(s)

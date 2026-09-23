@@ -321,7 +321,10 @@ def build_features(panel: Panel, mask: pd.DataFrame, cfg: FeatureConfig) -> Feat
         disp = member_r.std(axis=1)
         M["dispersion"] = np.log(disp.rolling(day, min_periods=mpd).mean() + 1e-8)
         ret_day = F[ret_names[max(m for m in ret_names if B(m) <= day)]]
-        M["breadth_day"] = (ret_day.where(mask) > 0).mean(axis=1) - 0.5
+        # Share of *members* up on the day: averaged over members only (the panel's column set differs between
+        # research chunks and the live candidate list, and must not change the scale).
+        up = (ret_day > 0).astype("float64").where(mask & ret_day.notna())
+        M["breadth_day"] = up.mean(axis=1) - 0.5
         M["mkt_flow_day"] = flow_day.where(mask).mean(axis=1)
         fs = [n for n in F if n.startswith("funding_sum_")]
         if fs:

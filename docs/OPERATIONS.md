@@ -53,7 +53,17 @@ une durée de cycle supérieure à la bougie est journalisée.
 Lecture seule, processus séparé du moteur. Si le secret `HERMES_DASHBOARD_TOKEN` est défini, il est servi
 sur `http://<vps>:8899/?token=<jeton>` (puis un cookie de session) ; sinon il n'écoute que localement
 (`ssh -L 8899:127.0.0.1:8899 root@<vps>` puis `hermes live dashboard`). Il affiche équité, expositions,
-IC estimé, drawdown, part maker, positions, état du risque et événements.
+IC estimé, drawdown, part maker, positions, état du risque et événements, ainsi que deux contrôles de
+qualité :
+
+- **écart d'exécution** (implementation shortfall) : prix obtenu contre le prix de décision (clôture Binance
+  de la bougie), pondéré par le notionnel, en points de base, frais exclus ; il inclut la base Binance/OKX.
+  Le backtest suppose environ le demi-spread plus l'impact : un écart durablement supérieur signale une
+  exécution plus chère que modélisée ;
+- **dérive des variables** (PSI) : distribution des variables des membres sur les dernières 24 h comparée
+  à celle des 90 derniers jours d'entraînement (profil stocké dans le modèle). Au-delà de 0,25 sur plus de
+  10 % des variables, une note l'indique : changement de régime ou problème de données. Simple alerte,
+  jamais une entrée de trading.
 
 ## Arrêt d'urgence
 
