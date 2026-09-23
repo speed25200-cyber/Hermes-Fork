@@ -620,6 +620,13 @@ class LiveEngine:
         self.store.write_status(status)
         if self.overlay.state.halted:
             await alert(f"ARRÊT : {self.overlay.state.halt_reason}", "ERROR")
+        elif self.overlay.cushion_exhausted(nav_after) and self.store.get("cushion_alert_day") != str(ts.date()):
+            self.store.put("cushion_alert_day", str(ts.date()))  # once a day, not every bar
+            await alert(
+                f"drawdown {self.overlay.drawdown(nav_after):.1%} : budget de risque < 5 %, livre quasi à l'arrêt "
+                "(décision humaine : hermes live kill, ou reprise)",
+                "WARNING",
+            )
         log.info(
             "bar %s equity %.2f gross %.2f net %.2f ic %.4f traded %.0f maker %.0f%%",
             d.ts,

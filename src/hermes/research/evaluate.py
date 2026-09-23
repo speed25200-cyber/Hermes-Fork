@@ -226,6 +226,14 @@ def positive_year_fraction(daily: pd.Series, min_days: int = 90) -> float:
     return float(((use["prod"] - 1) > 0).mean())
 
 
+def _stopped_at(bt: BacktestResult) -> str | None:
+    """When the main backtest stopped trading: a formal halt, or the drawdown budget falling below 5 %."""
+    halt = next((str(ts) for ts, msg in bt.risk_events if msg.startswith("HALT")), None)
+    low = bt.stats.index[bt.stats["budget"].between(1e-12, 0.05)]
+    exhausted = str(low[0]) if len(low) else None
+    return min((x for x in (halt, exhausted) if x), default=None)
+
+
 @dataclass
 class Evaluation:
     ic: dict[str, object]
@@ -351,6 +359,17 @@ def evaluate(
     summary = bt.summary(bpy)
     daily = (1 + bt.returns).groupby(bt.returns.index.floor("D")).prod() - 1
     yearly = bt.yearly(bpy)
+    st = bt.stats
+    econ = st.groupby(st.index.year).agg(
+        gross_pnl=("gross_pnl", "sum"),
+        pnl_long=("pnl_long", "sum"),
+        pnl_short=("pnl_short", "sum"),
+        funding=("funding", "sum"),
+        turnover=("turnover", "sum"),
+    )
+    econ["costs"] = st[["fees", "spread", "impact"]].sum(axis=1).groupby(st.index.year).sum()
+    if len(yearly):
+        yearly = yearly.join(econ)
 
     # --- robustness & null backtests (parallel) ---------------------------------------------------------
     _CTX.update({"ds": ds, "wf": wf, "cfg": cfg, "start": start})
@@ -475,7 +494,7 @@ def evaluate(
         promoted=promoted,
         grid=grid_df,
         null_sharpes=[round(x, 3) for x in null_sr],
-        halted_at=next((ts for ts, msg in bt.risk_events if msg.startswith("HALT")), None),
+        halted_at=_stopped_at(bt),
         nohalt=nohalt,
     )
     return ev, bt

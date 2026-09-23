@@ -194,6 +194,8 @@ def _run_backtest(
         for k in (
             "ret",
             "gross_pnl",
+            "pnl_long",
+            "pnl_short",
             "funding",
             "fees",
             "spread",
@@ -218,7 +220,8 @@ def _run_backtest(
         rt = r[t]
         held = w != 0
         valid = np.isfinite(rt)
-        gross_pnl = float(np.sum(w[valid & held] * rt[valid & held]))
+        contrib = np.where(valid & held, w * np.nan_to_num(rt), 0.0)
+        gross_pnl = float(contrib.sum())
         fpay = float(np.sum(w[held] * np.nan_to_num(fund[t][held])))
         pnl = gross_pnl - fpay
         equity_prev = equity
@@ -234,6 +237,8 @@ def _run_backtest(
         ewma.update(np.where(member[t], rt, np.nan))
         overlay.observe(ts, equity, day=int(day_keys[t]))
         out["gross_pnl"][k] = gross_pnl
+        out["pnl_long"][k] = float(contrib[w > 0].sum())  # price P&L of the long leg (before costs, funding)
+        out["pnl_short"][k] = float(contrib[w < 0].sum())
         out["funding"][k] = -fpay
 
         # 2) rebalance at close(t)

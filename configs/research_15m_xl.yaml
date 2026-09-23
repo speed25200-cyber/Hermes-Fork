@@ -1,0 +1,67 @@
+# Bougies 15 min, horizons 8 h / 24 h / 48 h, détention visée 24 h, aversion aux coûts 2.
+# Motivation mesurée (research_30m_long) : l'IC croît avec l'horizon (0,057 à 4 h, 0,073 à 24 h) ; dans la
+# grille de robustesse, horizon 24 h et aversion 2 donnent les meilleurs Sharpe nets (0,97-1,01) ; en 2025 la
+# rotation a doublé et mangé tout le P&L brut. Variante choisie après avoir vu ces résultats : elle compte
+# comme un essai de plus dans le registre (DSR), et la PBO mesure le risque de sélection.
+name: hermes-15m-xl
+seed: 42
+data:
+  source: binance_archive
+  cache_dir: data
+  bar: 15m
+  start: "2022-06-01"
+  include_premium: true
+  intrabar: false
+  universe:
+    top_n: 30
+    liquidity_lookback_days: 30
+    min_history_days: 60
+    reselect_every_days: 7
+labels:
+  horizons: [32, 96, 192]
+  primary_horizon: 96
+  residualize: beta
+model:
+  gbm:
+    learning_rate: 0.05
+    n_estimators: 1000
+    early_stopping_rounds: 100
+    num_leaves: 31
+    min_data_in_leaf: 3000
+    feature_fraction: 0.6
+    lambda_l2: 10.0
+    seeds: [1, 2]
+  linear:
+    alpha: 300.0
+  ensemble: ic_weighted
+  market_model: true
+validation:
+  expanding: true
+  min_train_days: 365
+  test_days: 60
+  val_days: 45
+  embargo_minutes: 2880
+  train_sample_minutes: 60
+portfolio:
+  vol_target_annual: 0.20
+  gross_max: 2.5
+  net_max: 0.25
+  weight_max: 0.15
+  beta_neutral: true
+  holding_horizon: 96
+  cost_aversion: 2.0
+  signal_halflife: 0.5
+  cost_scale_floor: 0.5
+  ic_ref: 0.03
+  cov_halflife_days: 7
+costs:
+  maker_fee: 0.0002
+  taker_fee: 0.0005
+  maker_fill_ratio: 0.6
+  min_half_spread_bps: 1.0
+  impact_coef: 0.7
+risk:
+  daily_loss_limit: 0.03
+  drawdown_soft: 0.10
+  drawdown_hard: 0.25
+  es_limit_daily: 0.04

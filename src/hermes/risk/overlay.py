@@ -77,13 +77,19 @@ class RiskOverlay:
 
     # -- decisions -------------------------------------------------------------------------------------------
     def budget(self, equity: float) -> float:
-        """Multiplier in [0, 1] on the target book."""
+        """Multiplier in [0, 1] on the target book, proportional to the remaining drawdown cushion (Grossman &
+        Zhou): the hard limit is approached asymptotically, so a deep drawdown leaves the book nearly idle
+        rather than formally halted -- ``cushion_exhausted`` reports that state."""
         if self.state.halted:
             return 0.0
         dd = self.drawdown(equity)
         if dd <= self.cfg.drawdown_soft:
             return 1.0
         return float(np.clip((self.cfg.drawdown_hard - dd) / (self.cfg.drawdown_hard - self.cfg.drawdown_soft), 0, 1))
+
+    def cushion_exhausted(self, equity: float, threshold: float = 0.05) -> bool:
+        """True when the drawdown budget has fallen below ``threshold``: the book is de facto stopped."""
+        return self.budget(equity) < threshold
 
     def reduce_only(self, equity: float) -> bool:
         return self.daily_loss(equity) >= self.cfg.daily_loss_limit

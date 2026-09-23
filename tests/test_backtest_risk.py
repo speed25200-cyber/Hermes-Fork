@@ -38,6 +38,7 @@ def test_perfect_foresight_is_profitable_and_costs_charged(small_panel, setup):
     st = bt.stats
     approx = st["gross_pnl"] + st["funding"] - st["fees"] - st["spread"] - st["impact"]
     assert np.allclose(approx, bt.returns, atol=1e-6)
+    assert np.allclose(st["pnl_long"] + st["pnl_short"], st["gross_pnl"], atol=1e-12)  # legs add up
 
 
 def test_drawdown_budget_and_halt(tmp_path):
@@ -114,3 +115,12 @@ def test_rebalancing_follows_the_clock_aligned_grid(small_panel, setup):
     assert bt.stats["turnover"][~grid].eq(0).all() and bt.stats["turnover"][grid].gt(0).any()
     # Same grid whatever the backtest's first bar (research and live decide on the same bars).
     assert (bt.stats.index[grid].minute % 60).isin([0]).all()
+
+
+def test_exhausted_drawdown_cushion_is_reported(tmp_path):
+    cfg = RiskConfig(drawdown_soft=0.1, drawdown_hard=0.2, kill_switch_file=tmp_path / "KILL")
+    ov = RiskOverlay(cfg)
+    t = pd.Timestamp("2024-01-01", tz="UTC")
+    ov.observe(t, 100.0)
+    assert not ov.cushion_exhausted(85.0)  # 15% drawdown: half the budget left
+    assert ov.cushion_exhausted(80.2) and not ov.state.halted  # nearly idle, yet never formally halted
