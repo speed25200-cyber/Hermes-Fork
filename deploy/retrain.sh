@@ -10,7 +10,7 @@ cd /opt/hermes
 MODE="$(cat /etc/hermes/mode 2>/dev/null || echo paper)"
 OUT="reports/auto/$(date -u +%Y-%m-%d)"
 as_hermes() { runuser -u hermes -- "$@"; }
-CONFIG="$(cat /etc/hermes/research_config 2>/dev/null || echo configs/research_15m.yaml)"
+CONFIG="$(cat /etc/hermes/research_config 2>/dev/null || echo configs/research_30m_xl_lb_sres.yaml)"
 as_hermes .venv/bin/hermes research run -c "$CONFIG" --out "$OUT" --n-null 40
 meta() { python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get(sys.argv[2], ''))" "$1" "$2"; }
 NEW="$OUT/model/bundle.json"

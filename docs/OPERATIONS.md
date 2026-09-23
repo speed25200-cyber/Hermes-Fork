@@ -41,9 +41,10 @@ systemctl start hermes-retrain            # réentraîner maintenant (sinon chaq
 
 ## Unité de temps
 
-Le moteur trade l'unité de temps du modèle installé (15 min par défaut). Pour changer : entraîner avec
-`configs/research_30m.yaml` ou `configs/research_1m.yaml` (ou choisir `/etc/hermes/research_config` sur le
-VPS pour le réentraînement hebdomadaire), puis installer le modèle. L'exécution s'adapte seule : la phase
+Le moteur trade l'unité de temps du modèle installé. Le réentraînement hebdomadaire utilise par défaut le
+meilleur candidat exécutable, `configs/research_30m_xl_lb_sres.yaml` (bougies de 30 min, détention 24 h,
+voir `RESULTS.md`) ; pour changer, écrire un autre chemin dans `/etc/hermes/research_config` sur le VPS (par
+ex. `configs/research_15m_long.yaml` ou `configs/research_1m_long.yaml`), puis installer le modèle. L'exécution s'adapte seule : la phase
 passive (post-only) dure au plus 15 % de la bougie, puis bascule en IOC borné. En 1 min, un cycle de
 décision prend quelques secondes (≈ 3,5 s pour les variables sur 40 contrats × 12 000 bougies, ~1 Go) ;
 une durée de cycle supérieure à la bougie est journalisée.

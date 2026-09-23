@@ -6,8 +6,11 @@ de zéro en septembre 2026 : données sans biais de survie, apprentissage automa
 
 > **Aucune rentabilité n'est promise.** Le système mesure, avec des statistiques qui savent dire « non »,
 > et refuse de trader de l'argent réel avec un modèle qui n'a pas franchi sa porte de promotion. État
-> actuel, mesuré sur données réelles : la prédiction est solide, mais aucune configuration n'est encore
-> rentable après coûts ni promue — détails et travaux en cours dans [`docs/RESULTS.md`](docs/RESULTS.md).
+> actuel, mesuré hors échantillon sur données réelles, exécutable sur OKX : le meilleur candidat
+> (`configs/research_30m_xl_lb_sres.yaml`) fait Sharpe 1,1 et +12,6 %/an nets de tous coûts (drawdown
+> −11 %), robuste aux stress de coûts, de latence et d'exécution des stops, mais **n'est pas promu** : après
+> correction des essais multiples, trois ans d'historique ne suffisent pas à exclure la chance, et 2026 est
+> négatif. Détails, audit et historique de tous les essais dans [`docs/RESULTS.md`](docs/RESULTS.md).
 
 ## Ce qu'il fait
 

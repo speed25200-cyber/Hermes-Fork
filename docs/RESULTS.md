@@ -13,9 +13,11 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 > régime (2024) et, pour plus de la moitié, de paris de style (petites capitalisations peu volatiles).
 > Entraîné sur une **cible nette des styles** avec un livre neutre (`research_30m_xl_lb_sres`), le modèle
 > gagne +10 %/an avec un drawdown de −13 %, **3 années sur 4 positives**, du funding encaissé, et reste
-> positif à coûts doublés. Sur 50 contrats et 8 h de détention, le backtest affichait +23 %/an ; un audit
-> adversarial a montré qu'un tiers de ce P&L venait de contrats qu'OKX ne listait pas : **exécutable sur OKX,
-> l'estimation tombe à Sharpe ≈ 1,1 et +15,6 %/an**, toujours refusée par la porte (Sharpe dégonflé ≈ 0,4).
+> positif à coûts doublés. Un audit adversarial a ensuite corrigé trois biais (univers pris sur Binance alors
+> qu'on exécute sur OKX, stops trop serrés, exécution au dernier prix). **Exécutable sur OKX, le meilleur
+> candidat fait Sharpe 1,10, +12,6 %/an, drawdown −11 %** (intervalle à 90 % du Sharpe [0,20 ; 2,07]), reste
+> positif à coûts doublés (0,64) et avec chaque stop exécuté au pire (0,39) : **7 critères sur 9**. Refusé :
+> Sharpe dégonflé 0,46 (33 essais effectifs, 3 ans d'historique) et PBO 0,39 ; 2026 est négatif (−6,8 %).
 
 ## Tous les essais
 
@@ -37,6 +39,8 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 | `research_30m_xl_lb_sres` (cible nette des styles, livre neutre) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,045* (8,7) | 10,6 % | 5,0 % | **+10,4 %** | **0,84** | **−13 %** | 0,34 | **0,04** | 0,45 | **0,20** | **0,56** | ❌ |
 | `research_30m_xl_lb_sres_u50` (idem, 50 contrats) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,052* (11,3) | 17,2 % | 9,5 % | **+11,2 %** | **0,83** | **−14 %** | 0,22 | **0,04** | **0,05** | −0,08 | **0,82** | ❌ |
 | `research_30m_xl_lb_sres_u50_h16` (idem, détention 8 h) — **biaisé, voir § 7** | 30 min | 8 h-48 h (détention 8 h) | 2023-07 → 2026-08 | 0,049* (16,3) | 25,6 % | 7,5 % | (+22,9 %) | (1,50) | (−10 %) | 0,73 | 0,04 | 0,05 | 0,85 | 1,41 | ❌ |
+| **`research_30m_xl_lb_sres`, corrigé** (univers OKX, VWAP, stops 8 σ) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,045* (8,3) | 15,6 % | 6,0 % | **+12,6 %** | **1,10** | **−11 %** | 0,46 | **0,04** | 0,38 | **0,64** | **1,08** | ❌ |
+| `research_30m_xl_lb_sres_u50_h16`, corrigé | 30 min | 8 h-48 h (détention 8 h) | 2023-07 → 2026-08 | 0,051* (16,5) | 18,8 % | 8,5 % | **+12,7 %** | **1,09** | −16 % | 0,44 | 0,08 | **0,08** | **0,55** | **1,02** | ❌ |
 
 IC : Spearman transversal à l'horizon de détention, t de Newey-West sur les IC journaliers. En gras : ce
 qui franchit son seuil (drawdown en gras : meilleur que −15 %). * IC mesuré contre la cible nette des
@@ -186,9 +190,36 @@ vérificateur chargé de le réfuter (reproduction exacte du run à partir du wa
 
 Le funding du backtest reste celui de Binance (OKX paie le sien) : écart de second ordre, non corrigé.
 
-## 8. En cours
+## 8. Candidats corrigés : ce qui est réellement exécutable
 
-Les deux meilleures configurations (`sres` et `sres_u50_h16`) relancées avec les trois corrections : univers
-OKX à la date, exécution au VWAP suivant, stops à 8 volatilités.
+Mêmes modèles, avec les trois corrections (univers pris parmi les contrats qu'OKX listait la veille, exécution
+au VWAP du quart d'heure suivant la décision, stops catastrophe à 8 volatilités) :
+
+| | `sres` corrigé (30 contrats, 24 h) | `sres_u50_h16` corrigé (50 contrats, 8 h) |
+|---|---:|---:|
+| Sharpe net / intervalle à 90 % | **1,10** / [0,20 ; 2,07] | 1,09 / [0,14 ; 2,12] |
+| CAGR / drawdown max | +12,6 % / −11,0 % | +12,7 % / −16,1 % |
+| P&L brut / coûts / funding (par an) | 15,6 % / 6,0 % / +2,7 % | 18,8 % / 8,5 % / +2,3 % |
+| 2023 (5 mois) / 2024 / 2025 / 2026 (8 mois) | +0,6 / +12,4 / +36,7 / −6,8 % | −2,5 / +20,2 / +31,5 / −6,2 % |
+| Coûts ×2 / une bougie de latence / stops au pire | 0,64 / 1,08 / 0,39 | 0,55 / 1,02 / 0,33 |
+| Sans les 5 meilleurs jours | Sharpe 0,77, +7,7 %/an | Sharpe 0,78, +8,1 %/an |
+| Stops déclenchés par an | 43 (683 en 3 ans auparavant) | 63 |
+| p nul / PBO / DSR | **0,04** / 0,38 / 0,46 | 0,08 / **0,08** / 0,44 |
+| Critères franchis | **7 sur 9** | 6 sur 9 |
+
+Lecture :
+- l'estimation de l'audit se confirme : un Sharpe autour de 1,1 et 12-13 %/an une fois le biais retiré ;
+- sur 30 contrats, la correction **améliore** le résultat (Sharpe 0,84 → 1,10) : les petites capitalisations
+  propres à Binance étaient coûteuses à 24 h de détention ; l'avantage des 50 contrats disparaît (sa grille
+  reste la plus stable, PBO 0,08) ;
+- le livre ne dépend plus des stops (sans stops : Sharpe 1,00) ni de la chance d'exécution (stops au pire :
+  0,39) ; il reste positif à coûts doublés ;
+- **faiblesses** : 2025 porte l'essentiel du gain ; 2026 est négatif et l'IC réalisé y est nul ou négatif
+  (−0,022 sur 30 contrats) ; le Sharpe dégonflé (0,46) dit qu'avec ~33 essais effectifs, trois ans ne
+  suffisent pas à exclure la chance ; la PBO (0,38) dépasse le seuil.
+
+**Conclusion honnête** : `research_30m_xl_lb_sres` est le meilleur candidat exécutable, cohérent et robuste
+aux stress, mais pas démontré. La prochaine preuve ne peut venir que de données jamais vues : l'incubation en
+papier sur OKX (voir `OPERATIONS.md`), sur décision de l'utilisateur ; le réel reste interdit par la porte.
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.
