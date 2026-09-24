@@ -406,45 +406,109 @@ def test_exchange_side_stops_are_recorded_in_the_history(cfg_small, tmp_path):
         assert now[victim]["opened"] != held[victim]["opened"]
 
 
-def test_live_engine_refuses_a_multi_book_model_until_it_can_trade_it(cfg_small, tmp_path):
+def _books_cfg(cfg, *settings):
     from hermes.config import BookSetting
 
-    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path, panel_bars=96 * 30)
-    one = (BookSetting(holding_horizon=4, cost_aversion=1),)
-    multi = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={"books": one})})
-    with pytest.raises(ValueError, match=r"portfolio\.books"):
-        LiveEngine(multi, bundle, FakeFeed(panel, 96 * 30 + 4, 96 * 20), broker, store, mode="paper")
+    books = tuple(BookSetting(holding_horizon=h, cost_aversion=ca) for h, ca in settings)
+    return cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={"books": books})})
 
 
-def test_a_multi_book_champion_is_refused_at_install_and_on_hot_reload(cfg_small, tmp_path):
-    """A 1/N bundle (portfolio.books) must never become a champion the engine then refuses to start: the install
-    is refused, and a hot reload keeps the running model without restarting (even when the feed would change)."""
+def _run_cycles(eng, broker, panel, t0, n):
+    async def cycle(t):
+        window = panel.iloc(slice(t - 96 * 30, t))
+        broker.set_prices(window["close"].iloc[-1].dropna().to_dict())
+        pos = await broker.positions()
+        d = eng.decide(window, {s: p.notional for s, p in pos.items()}, await broker.equity())
+        await broker.rebalance(d.targets)
+        return d
+
+    return [asyncio.run(cycle(t)) for t in range(t0, t0 + n)]
+
+
+def test_live_one_over_n_book_of_identical_sub_books_is_the_single_book(cfg_small, tmp_path):
+    """Sub-book state (drift with prices, reconciliation with the real positions, capital shares): two identical
+    sub-books must take exactly the single book's decisions, cycle after cycle, as in the backtest."""
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path / "a")
+    H, ca = cfg.portfolio.holding_horizon, cfg.portfolio.cost_aversion
+    twin_cfg = _books_cfg(cfg, (H, ca), (H, ca))
+    broker2 = PaperBroker(tmp_path / "acc2.json", 10_000, 0.0002, 0.0005)
+    single = _run_cycles(LiveEngine(cfg, bundle, None, broker, store, mode="paper"), broker, panel, 96 * 45, 8)
+    eng2 = LiveEngine(twin_cfg, bundle, None, broker2, StateStore(tmp_path / "b"), mode="paper")
+    twin = _run_cycles(eng2, broker2, panel, 96 * 45, 8)
+    assert single[0].targets and any(d.targets != single[0].targets for d in single[1:])
+    for a, b in zip(single, twin, strict=True):
+        assert set(a.targets) == set(b.targets)
+        for s_ in a.targets:
+            assert abs(a.targets[s_] - b.targets[s_]) < 1e-6 * max(1.0, abs(a.targets[s_]))
+    assert twin[-1].risk["books"] == 2.0
+
+
+def test_live_sub_books_on_two_horizons_keep_their_state(cfg_small, tmp_path):
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path)
+    hs = sorted(cfg.labels.horizons)
+    multi = _books_cfg(cfg, (hs[0], 0.5), (hs[-1], 2.0))
+    eng = LiveEngine(multi, bundle, None, broker, store, mode="paper")
+    ds = _run_cycles(eng, broker, panel, 96 * 45, 6)
+    assert ds[-1].targets and {f"ic_h{hs[0]}", f"ic_h{hs[-1]}"} <= set(ds[-1].risk)
+    st = store.get("book_state")
+    assert st["settings"] == [[hs[0], 0.5], [hs[-1], 2.0]] and st["w"]
+    assert any(abs(w[0] - w[1]) > 1e-6 for w in st["w"].values())  # each sub-book holds its own book
+    # The saved sub-books add up to the book the broker now holds (fractions of the capital).
+    pos = asyncio.run(broker.positions())
+    cap = asyncio.run(broker.equity()) * cfg.live.capital_fraction
+    for s_, w in st["w"].items():
+        held = pos[s_].notional / cap if s_ in pos else 0.0
+        assert abs(sum(w) - held) < 0.02 * max(abs(held), 0.01)
+    # A restarted engine resumes from the saved sub-books.
+    eng2 = LiveEngine(multi, bundle, None, broker, store, mode="paper")
+    more = _run_cycles(eng2, broker, panel, 96 * 45 + 6, 2)
+    assert more[-1].targets
+
+
+def test_a_multi_book_champion_installs_and_hot_reloads(cfg_small, tmp_path):
     import os
 
     from typer.testing import CliRunner
 
     from hermes.cli import app
-    from hermes.config import BookSetting
     from hermes.models.bundle import ModelBundle
 
     panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path, panel_bars=96 * 30)
     champion = tmp_path / "champion"
     bundle.save(champion)
-    books = (BookSetting(holding_horizon=4, cost_aversion=1),)
-    multi_cfg = bundle.config.model_copy(
-        update={"portfolio": bundle.config.portfolio.model_copy(update={"books": books, "cov_halflife_days": 40})}
-    )
-    ModelBundle(**{**bundle.__dict__, "config": multi_cfg}).save(tmp_path / "multi")
-
-    res = CliRunner().invoke(app, ["model", "install", str(tmp_path / "multi"), "--to", str(champion)])
-    assert res.exit_code == 2 and not (tmp_path / "champion.previous").exists()
-    assert not ModelBundle.load(champion).config.portfolio.books
-
+    H = cfg.portfolio.holding_horizon
+    multi = ModelBundle(**{**bundle.__dict__, "config": _books_cfg(bundle.config, (H, 0.5), (H, 2.0))})
+    multi.save(tmp_path / "multi")
     feed = FakeFeed(panel, 96 * 30 + 4, 96 * 20)
     eng = LiveEngine(cfg, bundle, feed, broker, store, mode="paper", model_dir=champion)
-    ModelBundle(**{**bundle.__dict__, "config": multi_cfg}).save(champion)  # copied over by hand
+    res = CliRunner().invoke(app, ["model", "install", str(tmp_path / "multi"), "--to", str(champion)])
+    assert res.exit_code == 0 and (tmp_path / "champion.previous").exists()
     later = (champion / "bundle.json").stat().st_mtime + 10
     os.utime(champion / "bundle.json", (later, later))
-    assert eng.maybe_reload_bundle() is False  # no SystemExit for the (larger) feed it would need
-    assert not eng.cfg.portfolio.books and eng.bundle is bundle
-    assert any("refusé" in e[2] and "portfolio.books" in e[2] for e in store.recent_events())
+    assert eng.maybe_reload_bundle() is True
+    assert len(eng.book_settings) == 2 and len(eng.book_constructors) == 2
+
+
+def test_sub_books_drift_with_prices_and_follow_the_real_positions(cfg_small, tmp_path):
+    _, bundle, broker, store, cfg = _engine(cfg_small, tmp_path, panel_bars=96 * 30)
+    H = cfg.portfolio.holding_horizon
+    eng = LiveEngine(_books_cfg(cfg, (H, 0.5), (H, 2.0)), bundle, None, broker, store, mode="paper")
+    store.put(
+        "book_state",
+        {"settings": [[H, 0.5], [H, 2.0]], "capital": 1000.0, "w": {"A": [0.1, -0.05], "B": [0.02, 0.02]},
+         "close": {"A": 100.0, "B": 10.0}},
+    )  # fmt: skip
+    syms = ["A", "B", "C"]
+    close = np.array([110.0, 10.0, 5.0])
+    # A: +10 % with capital +10 %: unchanged fractions, matching the real position.
+    sub = eng._book_state(syms, np.array([0.05, 0.0, 0.0]), close, 1100.0, 2)
+    np.testing.assert_allclose(sub[:, 0], [0.1, -0.05])
+    assert not sub[:, 1].any()  # B is flat at the exchange (stopped, closed): flat in every sub-book
+    # A partial fill halves A in both sub-books; a position nobody explains (C) is split equally.
+    sub = eng._book_state(syms, np.array([0.025, 0.04, -0.02]), close, 1100.0, 2)
+    np.testing.assert_allclose(sub[:, 0], [0.05, -0.025])
+    np.testing.assert_allclose(sub[:, 1], [0.02, 0.02])
+    np.testing.assert_allclose(sub[:, 2], [-0.01, -0.01])
+    # Other settings (a new champion): the old sub-books are forgotten, positions split equally.
+    eng2 = LiveEngine(_books_cfg(cfg, (H, 1.0), (H, 2.0)), bundle, None, broker, store, mode="paper")
+    np.testing.assert_allclose(eng2._book_state(syms, np.array([0.06, 0, 0]), close, 1100.0, 2)[:, 0], [0.03, 0.03])

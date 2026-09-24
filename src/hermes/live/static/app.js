@@ -759,7 +759,7 @@ function vModel(D) {
      <div class="card"><h3>${esc(rs.name || "—")}</h3><dl class="kv">
       <dt>Identifiant</dt><dd>${esc(b.config_hash || "—")}</dd>
       <dt>Entraîné sur</dt><dd>${esc(String(b.train_start || "").slice(0, 10))} → ${esc(String(b.train_end || "").slice(0, 10))}</dd>
-      <dt>Bougie · détention</dt><dd>${esc(D.bar)} · ${dur((D.strat.holding_bars || 48) * D.barMin * 60)}</dd>
+      <dt>Bougie · détention</dt><dd>${esc(D.bar)} · ${bookHolding(D)}</dd>
       <dt>Cible</dt><dd>${esc(TARGET[D.strat.target] || D.strat.target || "—")}</dd>
       <dt>Ensemble</dt><dd>GBM + ridge, ${esc(ENSEMBLE[D.strat.ensemble] || D.strat.ensemble || "—")}</dd>
       <dt>IC a priori</dt><dd>${esc(fin(b.prior_ic) ? num(b.prior_ic, 3) : "borne basse de validation")}</dd>
@@ -796,6 +796,14 @@ function vJournal(D) {
   const ev = D.events.filter(e => f === "all" || e[1] === f);
   el.innerHTML = `<div class="panel"><div class="ph"><h2>Journal du moteur</h2><span class="sub">${D.events.length} derniers événements</span><div class="right filters">${[["all", "Tous"], ["ERROR", "Erreurs"], ["WARNING", "Alertes"], ["INFO", "Infos"]].map(([k, l]) => `<button class="btn-s" data-lvl="${k}" aria-pressed="${f === k}">${l}</button>`).join("")}</div></div>${eventsHTML(ev)}</div>`;
   $$("[data-lvl]", el).forEach(b => b.onclick = () => {S.filt.lvl = b.dataset.lvl; render()});
+}
+
+/* A 1/N book (portfolio.books) holds several settings at once: show them all. */
+function bookHolding(D) {
+  const books = Array.isArray(D.strat.books) ? D.strat.books : [];
+  if (!books.length) return dur((D.strat.holding_bars || 48) * D.barMin * 60);
+  const hs = [...new Set(books.map(b => b[0]))].sort((x, y) => x - y).map(h => dur(h * D.barMin * 60));
+  return `livre 1/N · ${books.length} réglages (${hs.join(", ")})`;
 }
 
 function vInactive(mode) {

@@ -21,7 +21,7 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -56,9 +56,6 @@ from hermes.portfolio.covariance import EwmaCovariance, market_variance
 from hermes.risk.overlay import RiskOverlay, RiskState
 
 log = logging.getLogger(__name__)
-BOOKS_UNSUPPORTED = (
-    "livre 1/N à plusieurs réglages (portfolio.books) : évalué en recherche, pas encore exécuté par le moteur en direct"
-)
 
 # Days of scores and realised IC kept in the state store (the IC estimate and market timing read ~90 days).
 SCORE_MEMORY_DAYS = 120
@@ -152,9 +149,6 @@ class LiveEngine:
         self.mode = mode
         self.operator_cfg = operator_cfg
         self.overrides = overrides or {}
-        if cfg.portfolio.books:
-            store.event("ERROR", f"démarrage refusé : {BOOKS_UNSUPPORTED}")
-            raise ValueError(BOOKS_UNSUPPORTED)
         self._set_config(cfg)
         rs = store.get("risk_state")
         state = RiskState(**rs) if isinstance(rs, dict) else RiskState()
@@ -176,6 +170,14 @@ class LiveEngine:
         self.cfg = cfg
         self.bpd = cfg.bars_per_day
         self.constructor = PortfolioConstructor(cfg.portfolio, cfg.bars_per_year, cfg.portfolio.ic_ref)
+        # A 1/N book (portfolio.books): one constructor per sub-book, each with its own horizon and cost aversion.
+        self.book_settings = [
+            cfg.portfolio.model_copy(update={"holding_horizon": b.holding_horizon, "cost_aversion": b.cost_aversion})
+            for b in cfg.portfolio.books
+        ]
+        self.book_constructors = [
+            PortfolioConstructor(p, cfg.bars_per_year, cfg.portfolio.ic_ref) for p in self.book_settings
+        ]
 
     def _bundle_mtime(self) -> float:
         if self.model_dir is None or not (self.model_dir / "bundle.json").exists():
@@ -196,10 +198,6 @@ class LiveEngine:
             new = ModelBundle.load(self.model_dir)
         except (OSError, ValueError) as exc:
             self.store.event("ERROR", f"nouveau modèle refusé : {exc}")
-            self._model_mtime = m
-            return False
-        if new.config.portfolio.books:  # before any check that could restart the engine on this champion
-            self.store.event("ERROR", f"nouveau modèle refusé : {BOOKS_UNSUPPORTED}")
             self._model_mtime = m
             return False
         if self.mode == "live" and not new.promoted and not self.cfg.live.allow_unpromoted:
@@ -418,8 +416,76 @@ class LiveEngine:
         merged = pd.concat([cur[~cur.index.isin(values.index)], values.astype(float)]).sort_index()
         self._cache[name] = merged.to_frame(name)
 
-    def _holding_horizon(self, horizons: dict[int, object]) -> int:
-        H = self.cfg.portfolio.holding_horizon
+    def _horizon_signal(
+        self,
+        mem: pd.DataFrame,
+        panel: Panel,
+        tgt: pd.DataFrame,
+        H: int,
+        ts: pd.Timestamp,
+        grid: pd.DatetimeIndex,
+        gate: float,
+    ) -> tuple[pd.Series, float, float]:
+        """Traded score, IC estimate and cost amortisation of a sub-book horizon (realised IC kept as ``ic_h{H}``)."""
+        cfg = self.cfg
+        freq = BAR_TO_OFFSET[panel.bar]
+        names = smooth_scores(mem, cfg.portfolio.signal_halflife * H)
+        traded = names.iloc[-1] if len(names) and names.index[-1] == ts else pd.Series(dtype=float)
+        key = f"ic_h{H}"
+        ric_new = rowwise_corr(names.reindex(index=panel.index, columns=panel.symbols), tgt).dropna()
+        ric_new = ric_new[~ric_new.index.isin(self._series(key, ts).index)]
+        self.store.put_series(key, ric_new)
+        self._remember_series(key, ric_new, ts)
+        est = estimate_ic(self._series(key, ts).reindex(grid), H, self.bundle.prior_ic, halflife_bars=self.bpd * 30)
+        ic_est = (float(est.iloc[-1]) if np.isfinite(est.iloc[-1]) else self.bundle.prior_ic) * gate
+        cost_scale = float(self.bundle.meta.get("cost_scale", 1.0) or 1.0)  # type: ignore[arg-type]
+        window = self.bpd * 30
+        recent = names.reindex(pd.date_range(end=ts, periods=window + H, freq=freq))
+        if recent.notna().any(axis=1).sum() > 4 * H:
+            cost_scale = float(signal_persistence(recent, H, window, floor=cfg.portfolio.cost_scale_floor).iloc[-1])
+        return traded, ic_est, cost_scale
+
+    def _book_state(self, syms: list[str], pos_w: np.ndarray, close: np.ndarray, capital: float, K: int) -> np.ndarray:
+        """Sub-book positions (fractions of the capital) as saved at the last decision, drifted with prices like
+        the backtest (x price ratio / capital ratio), then reconciled with the real positions: a contract that
+        is flat (closed, stopped) is flat in every sub-book, a partial fill or an outside change rescales them,
+        and anything the sub-books cannot explain is split equally."""
+        st = self.store.get("book_state")
+        sub = np.zeros((K, len(syms)))
+        settings = [[p.holding_horizon, p.cost_aversion] for p in self.book_settings]
+        if isinstance(st, dict) and st.get("settings") == settings and float(st.get("capital", 0) or 0) > 0:
+            ratio_cap = float(st["capital"]) / max(capital, 1e-9)
+            for i, s in enumerate(syms):
+                w_then = st.get("w", {}).get(s)
+                px_then = st.get("close", {}).get(s)
+                if w_then is None or not px_then or not np.isfinite(close[i]):
+                    continue
+                sub[:, i] = np.asarray(w_then, float) * (close[i] / float(px_then)) * ratio_cap
+        tot = sub.sum(axis=0)
+        for i in range(len(syms)):
+            if pos_w[i] == 0:
+                sub[:, i] = 0.0
+            elif tot[i] != 0 and np.sign(tot[i]) == np.sign(pos_w[i]):
+                sub[:, i] *= pos_w[i] / tot[i]
+            else:
+                sub[:, i] = pos_w[i] / K
+        return sub
+
+    def _save_book_state(self, sub: np.ndarray, syms: list[str], close: np.ndarray, capital: float) -> None:
+        held = np.nonzero(np.any(sub != 0, axis=0) & np.isfinite(close))[0]
+        self.store.put(
+            "book_state",
+            {
+                "settings": [[p.holding_horizon, p.cost_aversion] for p in self.book_settings],
+                "capital": capital,
+                "w": {syms[i]: [round(float(x), 10) for x in sub[:, i]] for i in held},
+                "close": {syms[i]: float(close[i]) for i in held},
+            },
+        )
+
+    def _holding_horizon(self, horizons: dict[int, object], H: int | None = None) -> int:
+        """The configured holding horizon (or ``H``), or the nearest one the targets carry (as in research)."""
+        H = self.cfg.portfolio.holding_horizon if H is None else H
         return H if H in horizons else min(horizons, key=lambda h: abs(h - H))
 
     # -- decision (pure given inputs; unit-testable offline) ----------------------------------------------
@@ -496,6 +562,7 @@ class LiveEngine:
         est = estimate_ic(ric, H, self.bundle.prior_ic, halflife_bars=self.bpd * 30)
         ic_est = float(est.iloc[-1]) if np.isfinite(est.iloc[-1]) else self.bundle.prior_ic
         pc = cfg.portfolio
+        g = 1.0
         if pc.regime_gate_drawdown > 0 and daily is not None and pc.regime_gate_symbol in daily.close:
             gate = regime_scale(
                 daily.close[pc.regime_gate_symbol],
@@ -511,6 +578,18 @@ class LiveEngine:
         recent = names.reindex(pd.date_range(end=ts, periods=window + H, freq=freq))
         if recent.notna().any(axis=1).sum() > 4 * H:
             cost_scale = float(signal_persistence(recent, H, window, floor=cfg.portfolio.cost_scale_floor).iloc[-1])
+        # Sub-books of a 1/N book on other horizons: the same smoothing, realised IC (own series), IC estimate
+        # and cost amortisation at their horizon, as book_signal builds them in research.
+        horizon_signals = {H: (traded, ic_est, cost_scale)}
+        book_h = [self._holding_horizon(targets.residual, p_.holding_horizon) for p_ in self.book_settings]
+        for Hj in book_h:
+            if Hj not in horizon_signals:
+                horizon_signals[Hj] = self._horizon_signal(mem, panel, targets.residual[Hj], Hj, ts, grid, g)
+        if book_h:
+            ic_est = float(np.mean([horizon_signals[h_][1] for h_ in book_h]))
+            cost_scale = float(np.mean([horizon_signals[h_][2] for h_ in book_h]))
+            for h_, (_, ic_h, _) in sorted(horizon_signals.items()):
+                d.risk[f"ic_h{h_}"] = round(float(ic_h), 5)
         d.ic_est = round(ic_est, 5)
         d.risk["cost_scale"] = round(cost_scale, 3)
         m_alpha = 0.0
@@ -539,15 +618,20 @@ class LiveEngine:
             frozen |= (pos_w != 0) & ~has_daily
         active = mask.iloc[t].to_numpy() & np.isin(syms, members)
         idx = np.nonzero((active | (pos_w != 0)) & ~frozen)[0]
+
         # The traded (smoothed) score, re-standardised across this bar's members exactly as the backtest does
         # (cs_zscore over the universe, clipped at 3): smoothing shrinks the dispersion, sizing must not.
-        row = pd.Series({s: traded.get(s, np.nan) for s in scores.index}, dtype=float)
-        row = row.where(np.isfinite(row), scores.reindex(row.index))
-        frame = pd.DataFrame([row.to_numpy()], index=mask.index[[t]], columns=row.index)
-        zrow = cs_zscore(frame, mask.iloc[[t]].reindex(columns=row.index)).iloc[0]
-        z = np.full(len(syms), np.nan)
-        for s, v in zrow.items():
-            z[syms.index(s)] = v
+        def zvec(traded_: pd.Series) -> np.ndarray:
+            row = pd.Series({s: traded_.get(s, np.nan) for s in scores.index}, dtype=float)
+            row = row.where(np.isfinite(row), scores.reindex(row.index))
+            frame = pd.DataFrame([row.to_numpy()], index=mask.index[[t]], columns=row.index)
+            zrow = cs_zscore(frame, mask.iloc[[t]].reindex(columns=row.index)).iloc[0]
+            out = np.full(len(syms), np.nan)
+            for s, v in zrow.items():
+                out[syms.index(s)] = v
+            return out
+
+        z = zvec(traded)
         costs = CostModel.from_panel(
             cfg.costs, panel["high"], panel["low"], panel["close"], panel["quote_volume"], feats.aux["vol"], self.bpd
         )
@@ -570,8 +654,32 @@ class LiveEngine:
             market_alpha=m_alpha,
             sample_cov=ewma.matrix(idx),
         )
-        book = self.constructor.target(inp, capital)
-        target = book.weights
+        props = None
+        if not self.book_settings:
+            book = self.constructor.target(inp, capital)
+            target = book.weights
+            ex_ante = book.ex_ante_vol_annual
+        else:
+            K = len(self.book_settings)
+            sub = self._book_state(syms, pos_w, close_t, capital, K)
+            props = np.zeros((K, len(idx)))
+            lin = costs.linear_rate(t, dollars_typ)[idx]
+            for j, (Hj, cons) in enumerate(zip(book_h, self.book_constructors, strict=True)):
+                tr_j, ic_j, cs_j = horizon_signals[Hj]
+                z_j = z if Hj == H else zvec(tr_j)
+                inp_j = replace(
+                    inp,
+                    score=np.where(active[idx], z_j[idx], np.nan),
+                    cost_rate=lin * cs_j,
+                    w0=K * sub[j, idx],  # each sub-book on its own capital share, as in the backtest
+                    ic=ic_j,
+                )
+                book = cons.target(inp_j, capital)
+                props[j] = book.weights / K
+            target = props.sum(axis=0)
+            ex_ante = float(np.sqrt(max(target @ book.cov_bar @ target, 0.0) * cfg.bars_per_year))
+            d.risk["books"] = float(K)
+        proposal = target.copy()
         if stale:
             target = RiskOverlay.restrict_to_reductions(target, pos_w[idx])
             d.notes.append("données périmées : réductions seulement")
@@ -585,7 +693,12 @@ class LiveEngine:
         d.risk.update({k: round(float(v), 5) for k, v in info.items()})
         d.risk["drawdown"] = round(self.overlay.drawdown(nav), 5)
         d.risk["halted"] = float(self.overlay.state.halted)
-        d.risk["ex_ante_vol"] = round(book.ex_ante_vol_annual, 4)
+        d.risk["ex_ante_vol"] = round(ex_ante, 4)
+        if props is not None:
+            # The overlay scales or drops positions of the sum: each sub-book follows its contract's ratio.
+            safe = np.where(proposal != 0, proposal, 1.0)
+            sub[:, idx] = props * np.where(proposal != 0, w / safe, 1.0)
+            self._save_book_state(sub, syms, close_t, capital)
         d.risk["nav"] = round(nav, 2)
         for j, i in enumerate(idx):
             if w[j] != 0 or pos_w[i] != 0:
@@ -932,6 +1045,7 @@ class LiveEngine:
             "beta_neutral": pc.beta_neutral,
             "style_neutral": pc.style_neutral,
             "cost_aversion": pc.cost_aversion,
+            "books": [[b.holding_horizon, b.cost_aversion] for b in pc.books],
             "signal_halflife": pc.signal_halflife,
             "rebalance_every": pc.rebalance_every,
             "ensemble": c.model.ensemble,
