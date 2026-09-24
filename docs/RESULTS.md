@@ -44,6 +44,7 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 | `research_30m_xl_lb_sres_gate` (garde de régime : taille ×0,5 si BTC < −15 % de son plus haut 90 j) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,045* (8,3) | 13,7 % | 5,0 % | **+10,6 %** | **1,00** | **−10,5 %** | 0,38 | **0,04** | **0,26** | **0,50** | **0,98** | ❌ |
 | `research_30m_xl_lb_sres_v2` (funding 8 h, 300 arbres, poids égaux) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,047* (9,1) | 12,0 % | 6,3 % | +8,4 % | **0,82** | **−12 %** | 0,25 | **0,04** | **0,10** | −0,01 | **0,75** | ❌ |
 | `research_30m_xl_lb_sres_pos` (positionnement des gros comptes, § 11) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,048* (9,2) | 13,0 % | 6,4 % | +8,3 % | 0,79 | −15 % | 0,25 | **0,04** | **0,04** | **0,16** | **0,64** | ❌ |
+| `research_30m_xl_lb_sres_books` (livre 1/N sur les 9 réglages, ordres compensés, § 16) | 30 min | 8 h-48 h (1/N) | 2023-07 → 2026-08 | 0,045* (8,3) | 20,9 % | 8,0 % | **+16,4 %** | **1,36** | **−11,7 %** | 0,64 | **0,04** | 0,35 | **0,35** | **1,27** | ❌ |
 
 IC : Spearman transversal à l'horizon de détention, t de Newey-West sur les IC journaliers. En gras : ce
 qui franchit son seuil (drawdown en gras : meilleur que −15 %). * IC mesuré contre la cible nette des
@@ -507,5 +508,27 @@ l'incertitude d'un seul backtest ; le Sharpe dégonflé reste loin de 0,95. Conf
 **variante candidate** : elle est construite dans le moteur (un seul livre, moyenne des neuf portefeuilles cibles,
 ordres compensés entre eux) puis soumise à la porte complète (nul par permutation, stress) avant tout passage en
 papier.
+
+**Livre 1/N construit dans le moteur (run `35950527756`, 24 septembre, 06 h UTC) : meilleur partout sauf en 2026,
+donc non retenu.** Mêmes scores que `sres`, neuf sous-livres, surcouche de risque et stops sur la somme, ordres
+compensés :
+
+| | Réglage fixe (papier) | 1/N calculé hors ligne (sans compensation) | 1/N dans le moteur |
+|---|---:|---:|---:|
+| Sharpe / intervalle à 90 % | 1,10 / [0,20 ; 2,07] | 1,29 / [0,41 ; 2,36] | **1,36** / [0,49 ; 2,45] |
+| CAGR / drawdown max | +12,6 % / −11,0 % | +15,0 % / −10,6 % | **+16,4 %** / −11,7 % |
+| 2023 / 2024 / 2025 / 2026 | +0,6 / +12,4 / +36,7 / **−6,8 %** | +0,8 / +13,9 / +43,3 / −6,45 % | +0,8 / +13,9 / +50,2 / −7,4 % |
+| DSR / test SPA (p) / historique minimal | 0,42 / 0,033 / 750 j | 0,58 / — / — | **0,64** / **0,011** / **453 j** |
+| Coûts ×2 / une bougie de latence / stops au pire | **0,64** / 1,08 / 0,39 | — | 0,35 / **1,27** / **0,45** |
+| Rotation annuelle / critères franchis | 117 / 7 sur 9 | — | 159 / 7 sur 9 |
+
+La compensation des ordres relève le Sharpe au-delà du calcul hors ligne (1,36 contre 1,29), et le livre est plus
+solide statistiquement (DSR 0,64, SPA p = 0,011, sans ses cinq meilleurs jours encore Sharpe 1,10). Mais il tourne
+davantage (159 fois le capital par an), résiste moins au doublement des coûts (0,35 contre 0,64) et **perd un peu
+plus en 2026 (−7,4 % contre −6,8 %)** : les neuf réglages tradent le même score, dont l'IC réalisé de 2026 est
+négatif (−0,022), et les sous-livres courts y perdent davantage. **La règle fixée d'avance (battre le réglage fixe
+sur le Sharpe et sur 2026) n'est pas franchie : le modèle en papier reste `sres`.** Le livre 1/N reste disponible
+(`portfolio.books`, exécuté par le moteur en direct), et la leçon est nette : la construction ne répare pas 2026 ;
+seul un signal dont l'IC tient peut le faire.
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.
