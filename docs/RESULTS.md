@@ -348,4 +348,51 @@ gagne moins et 2026 reste négatif (IC réalisé −0,023) : l'hypothèse « du 
 modèle de direction du marché (un quatrième changement, sans effet sur la porte). En cours : le
 positionnement des gros comptes (`sres_pos`).
 
+## 13. Pré-enregistrement : l'activité au comptant face aux perpétuels (24 septembre 2026, 00 h 45 UTC)
+
+Deuxième source d'information jamais utilisée : les bougies **au comptant** de Binance (archives publiques,
+30 minutes), comparées à celles du perpétuel. Idée : un contrat dont l'activité se fait surtout à effet de levier
+(perpétuel) plutôt qu'au comptant, ou dont les acheteurs agressifs sont sur le perpétuel plutôt qu'au comptant,
+porte un excès de spéculation qui se retourne. **Règles fixées avant tout résultat, identiques au § 11** : IC de
+rang *partiel* contre la cible nette des styles à 24 h, en plus du score walk-forward du modèle (jumeau à 30
+contrats) ; sélection sur 2023-08 → 2025-12 seulement (|t| de Newey-West ≥ 3 et même signe en 2024 et en 2025) ;
+contrôle sur 2026 (même signe et au moins la moitié de l'effet) ; un essai n'est dépensé que si une variable
+franchit les deux. Variables calculées seulement où le comptant existe (couverture publiée), lues **une bougie en
+retard**, huit en tout :
+
+| Variable | Définition |
+|---|---|
+| `perp_share_7d` | log(volume perpétuel / volume comptant), sommes sur 7 jours |
+| `perp_share_z` | même rapport sur 1 jour, z-score sur 30 jours |
+| `perp_share_chg_7d` | variation sur 7 jours du rapport sur 1 jour |
+| `spot_taker_1d` | part des achats agressifs au comptant sur 1 jour, moins ½ |
+| `spot_taker_z` | même part, z-score sur 30 jours |
+| `taker_gap_1d` | part des achats agressifs au comptant moins celle du perpétuel, 1 jour |
+| `spot_vol_growth` | log(volume comptant moyen 7 jours / volume comptant moyen 30 jours) |
+| `spot_perp_ret_gap_1d` | rendement 1 jour au comptant moins rendement 1 jour du perpétuel (a priori redondant avec la prime) |
+
+Correspondance des noms : le même symbole au comptant s'il existe, sinon sans le préfixe « 1000 » / « 1000000 » /
+« 1M » (1000PEPEUSDT → PEPEUSDT), LUNA2USDT → LUNAUSDT. Avec les 17 variables du § 11, 25 variables ont
+désormais été criblées par cette règle : un t de 3 garde une p corrigée (Bonferroni) d'environ 0,07.
+
+**Résultat (24 septembre, 01 h UTC) : aucune variable ne franchit la sélection, aucun essai n'est dépensé.**
+Comptant trouvé et vérifié (prix à ±3 % du perpétuel) pour 213 des 276 contrats, soit 89 % des bougies de
+l'univers ; alignement contrôlé (corrélation des rendements 30 min de 0,94-0,96 au même instant, ≈ 0 à une bougie
+d'écart). IC de rang du score du modèle sur les mêmes bougies : 0,047 (sélection), 0,038 en 2026.
+
+| Variable | IC partiel 2023-25 (t) | 2024 | 2025 | 2026 (t) | Sélection |
+|---|---:|---:|---:|---:|:-:|
+| `perp_share_7d` | −0,003 (−0,4) | −0,015 | +0,006 | +0,012 (1,2) | ❌ |
+| `perp_share_z` | +0,005 (0,9) | +0,001 | +0,018 | +0,014 (1,0) | ❌ |
+| `perp_share_chg_7d` | +0,008 (1,4) | +0,001 | +0,016 | +0,002 (0,1) | ❌ |
+| `spot_taker_1d` | −0,005 (−0,8) | −0,005 | −0,003 | +0,001 (0,1) | ❌ |
+| `spot_taker_z` | −0,006 (−1,0) | −0,005 | +0,001 | +0,019 (1,6) | ❌ |
+| `taker_gap_1d` | −0,002 (−0,3) | +0,001 | +0,001 | +0,003 (0,2) | ❌ |
+| `spot_vol_growth` | +0,013 (2,1) | +0,006 | +0,017 | −0,008 (−0,7) | ❌ |
+| `spot_perp_ret_gap_1d` | −0,003 (−1,5) | −0,006 | −0,002 | +0,002 (0,3) | ❌ |
+
+Lecture : au-delà de ce que le modèle sait déjà, la répartition de l'activité entre comptant et perpétuel ne
+prédit rien de mesurable à 24 h. La seule piste proche du seuil (croissance du volume au comptant, t 2,1) change
+de signe en 2026. L'hypothèse de l'excès de levier est écartée pour cet horizon.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.
