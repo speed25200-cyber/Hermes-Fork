@@ -569,4 +569,20 @@ nécessaire au levier (1,5 % à 9,2 %/an en moyenne selon l'année, avec des pic
 absorbe l'écart. Le meilleur rendement ajusté du risque est le portage à 1× (+3,45 %/an, Sharpe ≈ 9, baisse max
 0,7 %), à peu près ce que rapporte le prêt d'USDT. Pour gagner davantage, il faut un signal plus fort, pas plus de levier.
 
+**Second tour (même jour) : quatre autres familles**, même protocole et même vérification adverse, plus de
+200 000 simulations (données 1 min Binance et OKX, carnets d'exécution rejoués à la milliseconde pour les
+événements) :
+
+| Famille | Meilleur levier hors échantillon | 10-20× | Verdict |
+|---|---|---|---|
+| Retour de l'écart perpétuel/comptant après un décrochage (neutre au marché) | 5× sur Binance : +13,8 %/an (+6,7 % sans le 10 octobre 2025), 5 transactions en 20 mois | 20× liquidé dès la première transaction sous marque prudente ; ouverture refusée au-delà de ≈ 8,5× sur OKX | Non pour OKX : sur OKX l'écart BTC n'a jamais dépassé ±14 pb de sa médiane en 2025-26 ; l'avantage Binance (≈ +75 pb par transaction) disparaît avec 10 s de latence |
+| Paires corrélées (ETH/BTC, alts cointégrées) | 1× : +1,4 %/an, baisse −39 % (négatif avec un remplissage passif réaliste) | 97-99,5 % des réglages liquidés ; médiane −100 % dès 5× | Non : pas d'avantage net, et les paires décrochent en krach (−14 % en une heure sur ETH/BTC le 5 août 2024, −25 à −52 % en une heure sur des paires d'alts le 10 octobre 2025) |
+| Événements de funding (encaisser les funding extrêmes, couvert) | 1× : +64 %/an sur Binance, mais −58 %/an sur les coins cotés sur OKX | ruiné dès 5× | Non : le prix chute du montant du funding dans la seconde du versement ; les gains Binance viennent de quelques squeezes, surtout sur des coins absents d'OKX |
+| Styles « trader à levier » : contre-tendance après cascade, robot grid, cassure de session (400 réglages) | 1× ou ne pas trader | 0 réglage sur 400 rentable à 10×, 15× et 20× | Non : avantage brut de 15-50 pb par transaction, frais aller-retour de 15-20 pb multipliés par le levier ; le grid est un pari directionnel déguisé |
+
+Au total, huit familles et plus de 200 000 simulations : **aucune stratégie ne gagne de façon fiable à 10×, 15× ou
+20×**, et aucune ne dépasse, ajustée du risque et exécutable sur OKX, le livre actuel à 1-2×. Le seul avantage
+réel trouvé (décrochages Binance) est réservé à un robot à la seconde près sur Binance, rare (quelques
+transactions par an) et ne tient pas au-delà de ≈ 5×.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.

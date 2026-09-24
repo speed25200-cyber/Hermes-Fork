@@ -1,0 +1,47 @@
+{
+ "pick1x": {
+  "cagr_oos": 0.014150501365115309,
+  "cagr_drop_best1": -0.08904842776201516,
+  "cagr_drop_best2": -0.15336947399936385,
+  "loo_min": -0.06418022916651722,
+  "loo_median": -0.0009170541171348301,
+  "loo_n_nonpos": 18,
+  "loo_n": 34,
+  "worst_loo": {
+   "coin": "LTCUSDT",
+   "cagr_oos": -0.06418022916651722,
+   "trades": 125,
+   "liqs": 0
+  }
+ },
+ "pick10x": {
+  "cagr_oos": 0.33841291137457064,
+  "cagr_drop_best1": 0.009866534946189498,
+  "cagr_drop_best2": -0.2499937186278911,
+  "loo_min": 0.05752418662553471,
+  "loo_median": 0.30188257068250723,
+  "loo_n_nonpos": 0,
+  "loo_n": 39,
+  "worst_loo": {
+   "coin": "1000PEPEUSDT",
+   "cagr_oos": 0.05752418662553471,
+   "trades": 354,
+   "liqs": 0
+  }
+ },
+ "pick10x_at1x": {
+  "cagr_oos": 0.05321230715750591,
+  "cagr_drop_best1": 0.024332198889173373,
+  "cagr_drop_best2": -0.006029851817627496,
+  "loo_min": 0.026650242582202166,
+  "loo_median": 0.049283259426546655,
+  "loo_n_nonpos": 0,
+  "loo_n": 39,
+  "worst_loo": {
+   "coin": "LTCUSDT",
+   "cagr_oos": 0.026650242582202166,
+   "trades": 352,
+   "liqs": 0
+  }
+ }
+}

@@ -1,0 +1,4 @@
+exec,lat,n,IS_edge_pos,OOS_edge_pos,both_pos,IS_edge_median,OOS_edge_median,IS_edge_max,OOS_edge_max,corr_IS_OOS
+maker,0,576,208,431,205,-10.68,22.56,74.59,88.48,0.1587
+taker,0,576,199,371,192,-15.01,21.74,96.38,117.3,0.3955
+taker,1,576,57,64,22,-30.82,-22.55,52.34,30.66,0.1829
