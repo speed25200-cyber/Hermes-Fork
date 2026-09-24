@@ -175,6 +175,13 @@ class ValidationConfig(_Strict):
     gate_min_sharpe: float = 0.8
     gate_min_positive_year_fraction: float = 0.6
     gate_min_months: int = 12
+    gate_min_criteria: int = Field(
+        7,
+        ge=1,
+        le=9,
+        description="Promotion needs this many of the nine gate criteria (operator's decision of 24 September 2026: "
+        "7, down from all 9; the report and the dashboard still show every criterion)",
+    )
 
 
 class CostConfig(_Strict):
@@ -289,6 +296,12 @@ class LiveConfig(_Strict):
     )
     candidates: int = Field(80, ge=5, description="Most traded contracts considered each day")
     allow_unpromoted: bool = Field(False, description="DANGER: trade real money with a model that failed the gate")
+    paper_nominal_size: bool = Field(
+        True,
+        description="Paper mode only: size the book as if the IC were at least research's (per horizon), so that "
+        "the incubation trades and measures the signal at nominal size even while the live IC estimate is zero. "
+        "Demo and live keep the IC-scaled sizing (a zero IC estimate keeps the book flat)",
+    )
 
 
 class HermesConfig(_Strict):

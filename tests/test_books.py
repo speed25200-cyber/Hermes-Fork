@@ -108,6 +108,7 @@ def test_single_book_configs_keep_their_hash():
     d.pop("live", None)
     d.pop("execution", None)
     d["validation"].pop("n_trials", None)
+    d["validation"].pop("gate_min_criteria", None)  # a promotion rule, not the strategy
     d["portfolio"].pop("books", None)
     assert config_hash(cfg) == hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]
     assert config_hash(multi) != config_hash(cfg)

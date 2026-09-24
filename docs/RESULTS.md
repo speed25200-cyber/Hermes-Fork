@@ -19,6 +19,16 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 > positif à coûts doublés (0,64) et avec chaque stop exécuté au pire (0,39) : **7 critères sur 9**. Refusé :
 > Sharpe dégonflé 0,46 (33 essais effectifs, 3 ans d'historique) et PBO 0,39 ; 2026 est négatif (−6,8 %).
 
+> **Décision de l'utilisateur (24 septembre 2026).** La promotion exige désormais **7 critères sur 9** (au lieu
+> des 9) : `validation.gate_min_criteria`. Avec cette règle, `research_30m_xl_lb_sres` et le livre 1/N
+> `research_30m_xl_lb_sres_books` (7 sur 9 tous deux) sont promus. Les deux critères qu'ils manquent sont
+> précisément ceux qui mesurent le risque que le résultat soit dû au choix parmi de nombreux essais : le Sharpe
+> dégonflé (0,64 pour le livre 1/N, seuil 0,95) et la probabilité de sur-ajustement de la grille (0,35, seuil 0,30).
+> Le livre 1/N remplace `sres` en **papier** le 24 septembre, **à taille nominale** (`live.paper_nominal_size` : le
+> papier dimensionne le livre comme si l'IC valait celui de la recherche, même quand l'IC estimé en direct est nul,
+> pour mesurer le signal tel qu'il se comporte maintenant) ; les modes démo et réel gardent la taille proportionnelle à
+> l'IC estimé. Le passage en argent réel reste une décision explicite de l'utilisateur.
+
 ## Tous les essais
 
 | Essai | Bougie | Horizons | Hors échantillon | IC (t) | P&L brut/an | Coûts/an | CAGR net | Sharpe net | Drawdown | DSR | p nul | PBO | Sharpe coûts×2 | Sharpe +1 barre | Promu |

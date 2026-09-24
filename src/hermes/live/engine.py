@@ -595,6 +595,26 @@ class LiveEngine:
                 d.risk[f"ic_h{h_}"] = round(float(ic_h), 5)
         d.ic_est = round(ic_est, 5)
         d.risk["cost_scale"] = round(cost_scale, 3)
+        # Paper incubation at nominal size (live.paper_nominal_size): the book is sized as if each horizon's IC
+        # were at least research's out-of-sample IC, so that the signal is traded and measured even while the live
+        # estimate is zero. Demo and live keep the IC-scaled sizing (a zero estimate keeps the real book flat).
+        ic_size = ic_est
+        if self.mode == "paper" and cfg.live.paper_nominal_size:
+            rs = self.bundle.meta.get("research")
+            rs = rs if isinstance(rs, dict) else {}
+            by_h = rs.get("ic_by_horizon") if isinstance(rs.get("ic_by_horizon"), dict) else {}
+
+            def nominal(h: int) -> float:
+                v = by_h.get(str(h), rs.get("ic"))
+                return float(v) if isinstance(v, (int, float)) and np.isfinite(v) and v > 0 else 0.0
+
+            horizon_signals = {h_: (tr, max(ic_h, nominal(h_)), cs) for h_, (tr, ic_h, cs) in horizon_signals.items()}
+            ic_size = float(np.mean([horizon_signals[h_][1] for h_ in (book_h or [H])]))
+            if ic_size > ic_est:
+                d.risk["ic_sizing"] = round(ic_size, 5)
+                d.notes.append(
+                    f"papier : taille nominale (IC de recherche {ic_size:.3f} ; IC estimé en direct {ic_est:.3f})"
+                )
         m_alpha = 0.0
         if use_market:
             mt_new = targets.market[H].dropna()
@@ -653,7 +673,7 @@ class LiveEngine:
             cost_rate=costs.linear_rate(t, dollars_typ)[idx] * cost_scale,
             adv=costs.adv.iloc[t].to_numpy()[idx],
             w0=pos_w[idx],
-            ic=ic_est,
+            ic=ic_size,
             market_alpha=m_alpha,
             sample_cov=ewma.matrix(idx),
         )

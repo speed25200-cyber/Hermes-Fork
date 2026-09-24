@@ -57,6 +57,7 @@ def config_hash(cfg: HermesConfig) -> str:
     d.pop("live", None)
     d.pop("execution", None)
     d["validation"].pop("n_trials", None)
+    d["validation"].pop("gate_min_criteria", None)  # a promotion rule, not the strategy
     if not d["portfolio"].get("books"):
         d["portfolio"].pop("books", None)  # single-book configurations keep their identity
     return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]
@@ -255,6 +256,12 @@ def run_research(
                     "avg_gross": float(ev.summary.get("avg_gross", float("nan"))),
                     "max_drawdown": float(ev.summary.get("max_drawdown", float("nan"))),
                     "ic": float(ich.get("ic_mean", float("nan"))),  # type: ignore[union-attr]
+                    # Out-of-sample IC of each horizon: a sub-book's nominal IC in paper incubation.
+                    "ic_by_horizon": {
+                        str(h): float(ev.ic[f"h{h}"].get("ic_mean", float("nan")))  # type: ignore[union-attr]
+                        for h in cfg.labels.horizons
+                        if isinstance(ev.ic.get(f"h{h}"), dict)
+                    },
                 },
                 "cost_scale": float(persist.iloc[-1]) if len(persist) else 1.0,
                 "market_promoted": bool(ev.tests.get("market_promoted", 0.0)),

@@ -102,7 +102,10 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
     s = ev.summary
     t = ev.tests
     L: list[str] = []
-    verdict = "✅ PROMU — autorisé à trader" if ev.promoted else "⛔ NON PROMU — interdit de capital réel"
+    n_ok = sum(bool(g["pass"]) for g in ev.gate.values())
+    need = int(t.get("gate_required", len(ev.gate)))
+    count = f"{n_ok} critères sur {len(ev.gate)}, {need} requis"
+    verdict = f"✅ PROMU ({count})" if ev.promoted else f"⛔ NON PROMU ({count}) — interdit de capital réel"
     L += [
         "# Rapport de recherche Hermes",
         "",

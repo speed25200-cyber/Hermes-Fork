@@ -139,7 +139,7 @@ function renderKPIs(D) {
       ),
     kpi("Exposition", `${num(st.gross, 2)}×<small>brute</small>`, `nette ${num(st.net, 2, true)}× · max ${num(gmax, 1)}×`, {w: (st.gross || 0) / gmax, c: css("--s1")}),
     kpi("Positions", `<span class="up">${D.longs.length}▲</span> <span class="down">${D.shorts.length}▼</span>`, D.pos.length ? `${compact(lv)} long · ${compact(sv)} short` : "livre à plat"),
-    kpi("IC estimé", num(st.ic_est, 3), fin(rs.ic) ? `recherche ${num(rs.ic, 3)}` : "pilote la taille"),
+    kpi("IC estimé", num(st.ic_est, 3), fin((st.risk || {}).ic_sizing) ? `papier : taille nominale (IC ${num(st.risk.ic_sizing, 3)})` : fin(rs.ic) ? `recherche ${num(rs.ic, 3)}` : "pilote la taille"),
     kpi("Vol ex ante", pct(r.ex_ante_vol, 1), `cible ${pct(strat.vol_target, 0)} par an`, fin(r.ex_ante_vol) && strat.vol_target ? {w: r.ex_ante_vol / strat.vol_target, c: css("--s3")} : null),
   ].join("");
 }
@@ -469,6 +469,7 @@ function positionsList(D) {
 function flatReason(D) {
   const ic = D.st.ic_est;
   if (D.st.halted) return "Le moteur est arrêté : " + esc(D.st.halt_reason || "");
+  if (fin((D.st.risk || {}).ic_sizing)) return "Papier à taille nominale : aucune position à cette bougie (le livre se construit à la prochaine décision).";
   if (fin(ic) && ic <= 0) return "L'IC estimé est nul : la taille des positions lui est proportionnelle. Le moteur continue de décider et de mesurer l'IC réalisé ; il reprendra des positions s'il redevient positif.";
   return "Aucune position à cette bougie.";
 }
@@ -849,7 +850,7 @@ function vInactive(mode) {
    <div><img class="hero-mark on-dark" src="static/brand/mark.svg" alt="" width="56" height="56"><img class="hero-mark on-light" src="static/brand/mark-light.svg" alt="" width="56" height="56">
     <span class="mode-badge ${live ? "live" : ""}">${esc(MODE_LABEL[mode] || mode).toUpperCase()} · INACTIF</span>
     <h1>${live ? "Aucun argent réel n'est engagé." : "Aucun moteur ne tourne dans ce mode."}</h1>
-    ${live ? `<p>Le mode réel est verrouillé par construction : le moteur refuse de démarrer avec un modèle qui n'a pas franchi <b>tous</b> les critères de la porte de promotion, et l'activer reste une décision humaine explicite.</p>
+    ${live ? `<p>Le mode réel est verrouillé par construction : le moteur refuse de trader un modèle qui n'a pas franchi le nombre requis de critères de la porte de promotion (7 sur 9), et l'activer reste une décision humaine explicite.</p>
     <p>Le modèle actuel est en incubation en papier : il décide à chaque bougie sur les vrais prix, sans argent réel, pour vérifier que son avantage tient sur des données jamais vues.</p>` : `<p>Ce mode n'a encore publié aucun état.</p>`}
     <ol class="steps">
      <li><span class="n">1</span><span><b>Porte de promotion franchie</b> — Sharpe dégonflé, test nul, surapprentissage, années positives, stress de coûts, de latence et de stops.</span></li>

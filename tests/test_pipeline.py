@@ -94,6 +94,12 @@ def test_research_run_end_to_end_report_resume_and_compare(cfg_small, tmp_path, 
         assert k in tests and np.isfinite(tests[k]), k
     assert 1 / 5 <= tests["null_pvalue"] <= 1.0  # exact permutation p-value with 4 nulls
     assert set(ev.gate) >= {"dsr", "null_pvalue", "pbo", "cost_stress", "latency_stress", "oos_months"}
+    # Promotion: at least validation.gate_min_criteria (7) of the nine criteria.
+    passed = sum(bool(g["pass"]) for g in ev.gate.values())
+    assert tests["gate_passed"] == passed and tests["gate_required"] == 7 and ev.promoted == (passed >= 7)
+    assert f"{passed} critères sur 9, 7 requis" in (out / "REPORT.md").read_text()
+    meta = json.loads((out / "model" / "bundle.json").read_text())
+    assert set(meta["research"]["ic_by_horizon"]) == {str(h) for h in cfg_small.labels.horizons}
     assert (out / "REPORT.md").exists() and (out / "model" / "bundle.json").exists()
     nh = rep["evaluation"]["nohalt"]  # diagnostic without drawdown controls, over the whole period
     assert np.isfinite(nh["sharpe"]) and nh["by_year"] and "halted_at" in rep["evaluation"]

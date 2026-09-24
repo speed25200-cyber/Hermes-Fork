@@ -1,7 +1,9 @@
 # Déploiement de Hermes sur le VPS par SSH depuis un runner GitHub.
 # Secrets utilisés (Settings → Secrets and variables → Actions) : VPS_PASSWORD, et pour les modes
 # demo/live OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE ; optionnels HERMES_TELEGRAM_TOKEN/CHAT.
-# Les secrets transitent par l'entrée standard de ssh et ne sont jamais imprimés.
+# Les secrets transitent par l'entrée standard de ssh et ne sont jamais imprimés. L'entraînement sur runner, qui
+# exécute des dépendances téléchargées, tourne dans un job sans aucun secret et n'en sort qu'un modèle (donnée sans
+# code) ; le job de déploiement, seul à recevoir les secrets, n'exécute aucune dépendance téléchargée.
 name: Deploy
 
 on:
@@ -39,9 +41,62 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  train:
+    if: ${{ inputs.train_on_runner && inputs.model_run == '' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 200
+    timeout-minutes: 330
+    env:
+      CONF: ${{ inputs.model_config }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache des archives
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/parsed
+            data/venue
+          key: binance-parsed-${{ inputs.model_config }}-${{ github.run_id }}
+          restore-keys: |
+            binance-parsed-${{ inputs.model_config }}-
+            binance-parsed-
+      - name: Entraînement sur runner
+        shell: bash
+        run: |
+          [[ "$CONF" =~ ^[a-z0-9_]+$ && -f "configs/$CONF.yaml" ]] || { echo "::error::configuration inconnue : $CONF"; exit 1; }
+          if [ -f requirements.lock ]; then
+            pip install -q --require-hashes -r requirements.lock && pip install -q --no-deps -e .
+          else
+            pip install -q -e .
+          fi
+          hermes research run -c "configs/$CONF.yaml" --out "out/$CONF" --n-null 24 2>&1 | tee train.log | tail -60
+          [ -f "out/$CONF/model/bundle.json" ] || { echo "::error::pas de modèle produit"; exit 1; }
+      - name: Rapport
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-report-${{ github.run_id }}
+          path: |
+            out/${{ inputs.model_config }}/REPORT.md
+            out/${{ inputs.model_config }}/report.json
+            train.log
+          retention-days: 90
+      - name: Modèle
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ github.run_id }}
+          path: out/${{ inputs.model_config }}/model
+          retention-days: 90
+
+  deploy:
+    needs: train
+    if: ${{ always() && (needs.train.result == 'success' || needs.train.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: read
@@ -50,6 +105,8 @@ jobs:
       SSHOPTS: -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Outils SSH
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass rsync
       - name: Authentification
@@ -92,29 +149,17 @@ jobs:
             [ -n "$D1" ] && printf 'HERMES_DASHBOARD_TOKEN=%s\n' "$D1"
             true
           } | sshpass -e ssh $SSHOPTS "root@$VPS" "bash /opt/hermes/deploy/install.sh $MODE"
-      - uses: actions/setup-python@v5
+      - name: Modèle entraîné sur runner
         if: ${{ inputs.train_on_runner && inputs.model_run == '' }}
+        uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-      - name: Cache des archives
+          name: model-${{ github.run_id }}
+          path: out/model
+      - name: Modèle à installer
         if: ${{ inputs.train_on_runner && inputs.model_run == '' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            data/parsed
-            data/venue
-          key: binance-parsed-${{ inputs.model_config }}-${{ github.run_id }}
-          restore-keys: binance-parsed-${{ inputs.model_config }}-
-      - name: Entraînement sur runner
-        if: ${{ inputs.train_on_runner && inputs.model_run == '' }}
-        env:
-          CONF: ${{ inputs.model_config }}
         run: |
-          [[ "$CONF" =~ ^[a-z0-9_]+$ && -f "configs/$CONF.yaml" ]] || { echo "::error::configuration inconnue : $CONF"; exit 1; }
-          pip install -q -e .
-          hermes research run -c "configs/$CONF.yaml" --out "out/$CONF" --n-null 8 2>&1 | tail -60
-          [ -f "out/$CONF/model/bundle.json" ] || { echo "::error::pas de modèle produit"; exit 1; }
-          echo "MODEL_DIR=out/$CONF/model" >> "$GITHUB_ENV"
+          [ -f out/model/bundle.json ] || { echo "::error::modèle absent de l'artefact"; exit 1; }
+          echo "MODEL_DIR=out/model" >> "$GITHUB_ENV"
       - name: Modèle d'un run Research
         if: ${{ inputs.model_run != '' }}
         env:

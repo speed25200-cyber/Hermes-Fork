@@ -515,3 +515,20 @@ def test_sub_books_drift_with_prices_and_follow_the_real_positions(cfg_small, tm
     # Other settings (a new champion): the old sub-books are forgotten, positions split equally.
     eng2 = LiveEngine(_books_cfg(cfg, (H, 1.0), (H, 2.0)), bundle, None, broker, store, mode="paper")
     np.testing.assert_allclose(eng2._book_state(syms, np.array([0.06, 0, 0]), close, 1100.0, 2)[:, 0], [0.03, 0.03])
+
+
+def test_paper_trades_at_nominal_size_while_real_modes_keep_the_ic_guard(cfg_small, tmp_path):
+    """live.paper_nominal_size: with a zero IC estimate, paper sizes the book on research's IC (and says so); demo
+    and live keep the IC-scaled book, flat until the live IC turns positive."""
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path)
+    bundle.prior_ic = 0.0  # no edge measured live yet
+    bundle.meta["research"] = {"ic": 0.04, "ic_by_horizon": {str(h): 0.04 for h in cfg.labels.horizons}}
+    window = panel.iloc(slice(96 * 45 - 96 * 30, 96 * 45))
+    paper = LiveEngine(cfg, bundle, None, broker, store, mode="paper").decide(window, {}, 10_000.0)
+    assert paper.ic_est <= 0 and paper.risk["ic_sizing"] > 0 and any(v != 0 for v in paper.targets.values())
+    assert any("taille nominale" in n for n in paper.notes)
+    demo = LiveEngine(cfg, bundle, None, broker, StateStore(tmp_path / "d"), mode="demo").decide(window, {}, 10_000.0)
+    assert "ic_sizing" not in demo.risk and all(v == 0 for v in demo.targets.values())
+    off = cfg.model_copy(update={"live": cfg.live.model_copy(update={"paper_nominal_size": False})})
+    flat = LiveEngine(off, bundle, None, broker, StateStore(tmp_path / "p"), mode="paper").decide(window, {}, 10_000.0)
+    assert all(v == 0 for v in flat.targets.values())

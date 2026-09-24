@@ -601,7 +601,10 @@ def evaluate(
             "pass": bool(stress.get("sharpe_stop_worst", -1) > 0),
         },
     }
-    promoted = all(g["pass"] for g in gate.values())
+    passed = sum(bool(g["pass"]) for g in gate.values())
+    tests["gate_passed"] = float(passed)
+    tests["gate_required"] = float(v.gate_min_criteria)
+    promoted = passed >= v.gate_min_criteria
     mt = ic.get("market_timing")
     # The market model may steer net exposure only if it passes its own out-of-sample test AND improves the
     # promoted cross-sectional book once costs are paid.
