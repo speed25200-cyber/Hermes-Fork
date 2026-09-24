@@ -541,4 +541,32 @@ sur le Sharpe et sur 2026) n'est pas franchie : le modèle en papier reste `sres
 (`portfolio.books`, exécuté par le moteur en direct), et la leçon est nette : la construction ne répare pas 2026 ;
 seul un signal dont l'IC tient peut le faire.
 
+## 17. Leviers de 10×, 15× et 20× : quatre familles testées (24 septembre 2026)
+
+Demande de l'utilisateur : trouver une stratégie qui tienne 10×, 15× ou 20× de levier. Le livre actuel n'en est pas
+une (à 10× brut sa pire baisse du backtest est −98 %, à 20× le compte est ruiné) : le levier multiplie le gain par
+L mais l'usure de la variance par L², et le levier optimal vaut Sharpe / volatilité. Quatre familles capables *en
+principe* de porter un gros levier (peu de risque par unité de notionnel) ont été testées sur données réelles
+(archives Binance, API publiques OKX : taux d'emprunt USDT horaires depuis 2021, paliers de marge, funding), avec
+un protocole commun : réglages choisis sur 2022-2024 seulement, jugement sur 2025-01 → 2026-08, frais OKX VIP0 sur
+chaque jambe, glissement, funding, intérêts d'emprunt, liquidation au pire point intrabougie (marge de maintenance
+par palier, pénalité), puis rejeu par un vérificateur adverse chargé de casser le résultat. Plus de 3 000
+simulations au total ; code et résultats dans `research/leverage_2026-09/`. Chiffres vérifiés (hors
+échantillon, par an) :
+
+| Famille | 1× | 10× | 15× | 20× | Verdict |
+|---|---:|---:|---:|---:|---|
+| Portage comptant/perpétuel, BTC+ETH (L = notionnel par jambe / capital) | **+3,45 %** (≈ +2,6 % au funding OKX), baisse max 0,7 % | +0,3 % (≈ −8 % au funding OKX), baisse −14 % | liquidé le 14 janvier 2023 (en échantillon −15 %/an, baisse −82 % ; hors éch. −0,9 %) | liquidé 3-4 fois | Non : impossible à ouvrir au-delà de ≈ 8,5× sur OKX ; le levier multiplie l'écart funding − emprunt (+0,1 %/an en 2025-26), pas le funding |
+| Écart perpétuel / contrat à échéance, BTC+ETH | +0,9 % (t ≈ 0,8) | +4,9 %, baisse −30 % | +3,5 %, baisse −43 % | liquidé le 12 mai 2025 aux marges OKX réelles (−38 %/an) | Non : avantage de ≈ 1 %/an non significatif ; contrats USDT à échéance BTC/ETH absents d'OKX |
+| Arbitrage Binance / OKX (écart de funding) | +0,6 % sans l'épisode AXS | médiane −1,1 % sans AXS | médiane −3,9 % | médiane −24 % | Non : aucun réglage rentable en échantillon à 10-20× ; les gains hors échantillon viennent d'un seul squeeze (AXS, janvier-avril 2026) |
+| Directionnel BTC/ETH (tendance, retour à la moyenne ; 288 réglages) | −0,3 % (meilleur réglage de 2022-24) | −45 %, baisse −88 % | −75 % | liquidé le 23 mars 2026 (ETH +5,7 % en 5 min) | Non : le meilleur réglage faisait +289 %/an à 10× en échantillon ; hors échantillon, 7/288 réglages gagnent à 10×, 0/288 à 20× ; même sans frais, 98 % des réglages perdent plus de la moitié à 20× |
+
+Deux leçons. **Les résultats spectaculaires à gros levier n'existent qu'en échantillon** : ils viennent de la
+sélection parmi des centaines de réglages et d'un régime (2023-2024 : funding élevé, tendances nettes), puis
+s'effondrent quand le régime change. **Les stratégies à faible risque par unité ne gagnent presque rien par
+unité** : BTC/ETH ont payé en funding +2,5 %, +8 %, +12,5 %, +5 % et +2 % (2022 → 2026, annualisé), et l'emprunt
+nécessaire au levier (1,5 % à 9,2 %/an en moyenne selon l'année, avec des pics horaires à 70-100 % annualisés)
+absorbe l'écart. Le meilleur rendement ajusté du risque est le portage à 1× (+3,45 %/an, Sharpe ≈ 9, baisse max
+0,7 %), à peu près ce que rapporte le prêt d'USDT. Pour gagner davantage, il faut un signal plus fort, pas plus de levier.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.

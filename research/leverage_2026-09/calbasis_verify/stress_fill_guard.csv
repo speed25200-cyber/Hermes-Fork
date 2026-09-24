@@ -1,0 +1,17 @@
+tag,L,per,cagr,dd,liq
+fill_worst_guard50bp,1,IS,1.25,-5.3,0
+fill_worst_guard50bp+slip_x2,1,IS,0.85,-5.6,0
+fill_worst_guard50bp,1,OOS,0.91,-3.2,0
+fill_worst_guard50bp+slip_x2,1,OOS,0.63,-3.3,0
+fill_worst_guard50bp,10,IS,11.77,-43.0,0
+fill_worst_guard50bp+slip_x2,10,IS,7.52,-45.1,0
+fill_worst_guard50bp,10,OOS,7.94,-26.8,0
+fill_worst_guard50bp+slip_x2,10,OOS,5.06,-27.4,0
+fill_worst_guard50bp,15,IS,17.14,-57.8,0
+fill_worst_guard50bp+slip_x2,15,IS,10.53,-60.4,0
+fill_worst_guard50bp,15,OOS,10.98,-36.8,0
+fill_worst_guard50bp+slip_x2,15,OOS,6.62,-38.2,0
+fill_worst_guard50bp,20,IS,22.2,-69.4,0
+fill_worst_guard50bp+slip_x2,20,IS,13.08,-72.1,0
+fill_worst_guard50bp,20,OOS,13.43,-45.8,0
+fill_worst_guard50bp+slip_x2,20,OOS,7.58,-47.3,0

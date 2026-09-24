@@ -1,0 +1,16 @@
+{
+ "closes+highs|1": 0.2,
+ "closes+highs|3": 0.2,
+ "closes+highs|5": 0.2,
+ "closes+highs|8": 0.2,
+ "closes+highs|10": 0.2,
+ "closes+highs|15": 0.1,
+ "closes+highs|20": 0.02,
+ "closes|1": 0.2,
+ "closes|3": 0.2,
+ "closes|5": 0.2,
+ "closes|8": 0.2,
+ "closes|10": 0.2,
+ "closes|15": 0.1,
+ "closes|20": 0.1
+}
