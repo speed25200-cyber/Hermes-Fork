@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from hermes.backtest.engine import BacktestResult, SignalBundle, run_backtest
+from hermes.backtest.engine import BacktestResult, BookSignals, SignalBundle, run_backtest
 from hermes.config import HermesConfig
 from hermes.portfolio.alpha import (
     cs_zscore,
@@ -75,6 +75,32 @@ def make_signal(
     return SignalBundle(score=score, ic_est=ic_est, market_alpha=malpha, cost_scale=persist)
 
 
+def book_signal(
+    score: pd.DataFrame,
+    ds: Dataset,
+    prior_ic: pd.Series,
+    cfg: HermesConfig,
+    market_score: pd.Series | None = None,
+    market_prior: pd.Series | None = None,
+) -> SignalBundle | BookSignals:
+    """The signal of the configured book: one bundle, or one per sub-book of a 1/N book (``portfolio.books``),
+    each with its own horizon (smoothing, IC estimate, cost amortisation) and cost aversion."""
+    books = cfg.portfolio.books
+    if not books:
+        return make_signal(score, ds, prior_ic, cfg, market_score, market_prior)
+    members = []
+    for b in books:
+        pc = cfg.portfolio.model_copy(update={"holding_horizon": b.holding_horizon, "cost_aversion": b.cost_aversion})
+        c = cfg.model_copy(update={"portfolio": pc})
+        members.append((pc, make_signal(score, ds, prior_ic, c, market_score, market_prior)))
+    return BookSignals(members)
+
+
+def single_book(cfg: HermesConfig, **update: object) -> HermesConfig:
+    """``cfg`` as a single book with ``update`` applied (grid variants are single settings)."""
+    return cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={**update, "books": ()})})
+
+
 def traded_score(score: pd.DataFrame, cfg: HermesConfig, horizon: int) -> pd.DataFrame:
     """The score the book is built from: the model score, smoothed over ``signal_halflife`` horizons."""
     return smooth_scores(score, cfg.portfolio.signal_halflife * horizon)
@@ -130,12 +156,16 @@ def _bt_job(args: tuple[str, int | dict[str, object]]) -> tuple[str, pd.Series, 
     wf: WalkForwardResult = _CTX["wf"]  # type: ignore[assignment]
     cfg: HermesConfig = _CTX["cfg"]  # type: ignore[assignment]
     start = _CTX["start"]
+    sig: SignalBundle | BookSignals
     if kind == "null":
         score = block_permute(wf.score, ds.mask, seed=int(param), block_days=cfg.data.universe.reselect_every_days)  # type: ignore[arg-type]
-        sig = make_signal(score, ds, wf.prior_ic, cfg)
+        sig = book_signal(score, ds, wf.prior_ic, cfg)
         c = cfg
     else:
-        c = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update=param)})  # type: ignore[arg-type]
+        if kind == "grid":
+            c = single_book(cfg, **param)  # type: ignore[arg-type]
+        else:
+            c = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update=param)})  # type: ignore[arg-type]
         if kind == "nohalt":
             # Diagnostic only (never gated): the signal's economics over the whole period, with the drawdown
             # and daily-loss controls that would stop a losing book switched off.
@@ -147,9 +177,9 @@ def _bt_job(args: tuple[str, int | dict[str, object]]) -> tuple[str, pd.Series, 
             c = c.model_copy(update={"risk": cfg.risk.model_copy(update={"stop_loss_daily_sigmas": 0.0})})
         score = wf.score.shift(1) if kind == "lag1" else wf.score
         if kind == "market":
-            sig = make_signal(score, ds, wf.prior_ic, c, wf.market_score, wf.market_prior_ic)
+            sig = book_signal(score, ds, wf.prior_ic, c, wf.market_score, wf.market_prior_ic)
         else:
-            sig = make_signal(score, ds, wf.prior_ic, c)
+            sig = book_signal(score, ds, wf.prior_ic, c)
     # Cost stress: the book is built on the usual cost estimates, but every trade pays twice as much
     # (fees, spread and impact) -- an execution that turns out worse than modelled, not a re-optimised book.
     mult = 2.0 if kind == "costx2" else 1.0
@@ -425,7 +455,7 @@ def evaluate(
             }
 
     # --- main backtest ------------------------------------------------------------------------------------
-    sig = make_signal(wf.score, ds, wf.prior_ic, cfg)
+    sig = book_signal(wf.score, ds, wf.prior_ic, cfg)
     bt = run_backtest(ds.panel, ds.mask, ds.feats.aux, sig, cfg, start=start, record_weights=True)
     summary = bt.summary(bpy)
     daily = (1 + bt.returns).groupby(bt.returns.index.floor("D")).prod() - 1
@@ -497,7 +527,8 @@ def evaluate(
     selection: dict[str, object] = {}
     if grid_all.shape[1] >= 2:
         own = str({"holding_horizon": cfg.portfolio.holding_horizon, "cost_aversion": cfg.portfolio.cost_aversion})
-        selection = walk_forward_selection(grid_all, daily, default_key=own if own in grid_all else None)
+        own_key = own if own in grid_all and not cfg.portfolio.books else None
+        selection = walk_forward_selection(grid_all, daily, default_key=own_key)
 
     # --- statistics -----------------------------------------------------------------------------------------
     d = daily.to_numpy()
@@ -594,4 +625,13 @@ def evaluate(
     return ev, bt
 
 
-__all__ = ["Evaluation", "block_permute", "cs_zscore", "evaluate", "make_signal", "walk_forward_selection"]
+__all__ = [
+    "Evaluation",
+    "block_permute",
+    "book_signal",
+    "cs_zscore",
+    "evaluate",
+    "make_signal",
+    "single_book",
+    "walk_forward_selection",
+]

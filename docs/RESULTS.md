@@ -482,4 +482,30 @@ règle. L'essentiel de l'écart de la grille (1,62 contre 1,10) disparaît dès 
 c'est la mesure directe de ce que coûterait un choix fait après coup. Le code reste (diagnostic à chaque rapport,
 rendements de la grille enregistrés dans `grid_daily.csv`).
 
+## 16. Pré-enregistrement : ne pas choisir, répartir (24 septembre 2026, 03 h 20 UTC)
+
+Constat du run `35942639721` : **toute la perte de 2026 tombe en janvier et février** (−4,5 % puis −2,5 %) ; dès mars
+l'IC estimé est nul et le livre est à plat, comme le moteur en papier aujourd'hui. Alternative au choix d'un
+réglage (§ 15) : la règle 1/N (DeMiguel, Garlappi et Uppal 2009), qui ne choisit rien. Règle fixée ici, avant
+calcul : le capital est réparti à parts égales et fixes entre les **9 réglages de la grille** (détention 8 h, 24 h,
+48 h × aversion 0,5 / 1 / 2), rééquilibrés chaque jour, chaque sous-livre payant ses propres coûts (aucune
+compensation entre sous-livres : estimation prudente). Calcul hors ligne sur `grid_daily.csv` ; compté comme un
+essai. Même décision qu'au § 15 : retenue seulement si elle bat le réglage fixe sur le Sharpe **et** sur 2026.
+
+**Résultat (03 h 30 UTC) : la répartition 1/N franchit la décision fixée d'avance, de peu.**
+
+| | Réglage fixe (papier) | 1/N sur les 9 réglages |
+|---|---:|---:|
+| Sharpe / intervalle à 90 % | 1,10 / [0,20 ; 2,07] | **1,29** / [0,41 ; 2,36] |
+| CAGR / drawdown max (quotidien) | +12,6 % / −10,1 % | **+15,0 %** / −10,6 % |
+| 2023 / 2024 / 2025 / 2026 | +0,6 / +12,4 / +36,7 / −6,8 % | +0,8 / +13,9 / +43,3 / **−6,45 %** |
+| Sharpe dégonflé (44 essais effectifs) | 0,41 | 0,58 |
+
+Les neuf réglages sont très corrélés (0,88 en moyenne) ; les détentions longues perdent moins en 2026 (48 h : −3,4 à
+−3,7 %), les courtes davantage (8 h : −8,5 à −9,2 %). Le gain en 2026 est minime et le gain de Sharpe reste dans
+l'incertitude d'un seul backtest ; le Sharpe dégonflé reste loin de 0,95. Conformément à la règle, 1/N devient une
+**variante candidate** : elle est construite dans le moteur (un seul livre, moyenne des neuf portefeuilles cibles,
+ordres compensés entre eux) puis soumise à la porte complète (nul par permutation, stress) avant tout passage en
+papier.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.

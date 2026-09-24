@@ -186,6 +186,13 @@ class CostConfig(_Strict):
     include_funding: bool = True
 
 
+class BookSetting(_Strict):
+    """One setting of a 1/N book: its own holding horizon and cost aversion (everything else is shared)."""
+
+    holding_horizon: int = Field(ge=1)
+    cost_aversion: float = Field(ge=0)
+
+
 class PortfolioConfig(_Strict):
     vol_target_annual: float = Field(0.20, gt=0, le=2.0)
     gross_max: float = Field(2.5, gt=0)
@@ -224,6 +231,12 @@ class PortfolioConfig(_Strict):
     regime_gate_lookback_days: int = Field(90, ge=5, description="Window of the high the drawdown is taken from")
     regime_gate_scale: float = Field(0.5, ge=0, le=1, description="Multiplier of the IC estimate in the regime")
     regime_gate_symbol: str = "BTCUSDT"
+    books: tuple[BookSetting, ...] = Field(
+        (),
+        description="1/N book over these settings (DeMiguel et al. 2009): each keeps its own sub-book (own horizon, "
+        "cost aversion, smoothed score, IC estimate) on an equal share of capital; the risk overlay and the stops "
+        "act on their sum, and only the netted trade is paid. Empty: a single book with the settings above",
+    )
 
 
 class RiskConfig(_Strict):

@@ -404,3 +404,13 @@ def test_exchange_side_stops_are_recorded_in_the_history(cfg_small, tmp_path):
     now = {p["symbol"]: p for p in json.loads((tmp_path / "state" / "status.json").read_text())["positions_detail"]}
     if victim in now:
         assert now[victim]["opened"] != held[victim]["opened"]
+
+
+def test_live_engine_refuses_a_multi_book_model_until_it_can_trade_it(cfg_small, tmp_path):
+    from hermes.config import BookSetting
+
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path, panel_bars=96 * 30)
+    one = (BookSetting(holding_horizon=4, cost_aversion=1),)
+    multi = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={"books": one})})
+    with pytest.raises(ValueError, match=r"portfolio\.books"):
+        LiveEngine(multi, bundle, FakeFeed(panel, 96 * 30 + 4, 96 * 20), broker, store, mode="paper")

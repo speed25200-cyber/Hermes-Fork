@@ -20,7 +20,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from hermes.config import HermesConfig
+from hermes.config import HermesConfig, PortfolioConfig
 from hermes.data.panel import Panel
 from hermes.portfolio.alpha import cs_zscore
 from hermes.portfolio.construct import BookInputs, PortfolioConstructor
@@ -36,6 +36,13 @@ class SignalBundle:
     ic_est: pd.Series  # causal IC estimate used for sizing
     market_alpha: pd.Series | None = None  # expected market return over the horizon (None = neutral)
     cost_scale: pd.Series | None = None  # cost amortisation factor per bar (1 = no amortisation)
+
+
+@dataclass
+class BookSignals:
+    """A 1/N book (``portfolio.books``): one (settings, signal) pair per sub-book, each on 1/K of the capital."""
+
+    members: list[tuple[PortfolioConfig, SignalBundle]]
 
 
 @dataclass
@@ -178,7 +185,7 @@ def _run_backtest(
     panel: Panel,
     mask: pd.DataFrame,
     aux: dict[str, pd.DataFrame],
-    signal: SignalBundle,
+    signal: SignalBundle | BookSignals,
     cfg: HermesConfig,
     capital: float = 100_000.0,
     start: pd.Timestamp | None = None,
@@ -190,7 +197,12 @@ def _run_backtest(
 ) -> BacktestResult:
     """``cost_multiplier`` scales what trades actually pay, not what the optimiser expects (cost stress).
     ``stop_fill="extreme"`` fills every triggered stop at the bar's low (long) or high (short) instead of the stop
-    price: the worst case of a stop-market order in a flash crash, where the book is empty below the trigger."""
+    price: the worst case of a stop-market order in a flash crash, where the book is empty below the trigger.
+
+    With ``BookSignals`` (K sub-books), each sub-book keeps its own positions (fractions of total equity), drifts
+    with prices and is re-optimised on its own capital share (1/K) from its own signal and settings; the risk
+    overlay and the stops act on the sum, and only the netted trade pays costs. A single ``SignalBundle`` is the
+    K = 1 case and runs the original single-book path."""
     bpd = cfg.bars_per_day
     bpy = cfg.bars_per_year
     pc = cfg.portfolio
@@ -208,12 +220,19 @@ def _run_backtest(
     stop_px = np.full(close.shape[1], np.nan)  # catastrophe stop of each open position (as placed on OKX)
     prev_side = np.zeros(close.shape[1])
     close_np = close.to_numpy()
-    z = cs_zscore(signal.score[cols], mask[cols]).to_numpy()
-    ic = signal.ic_est.reindex(index).fillna(0.0).to_numpy()
-    malpha = signal.market_alpha.reindex(index).fillna(0.0).to_numpy() if signal.market_alpha is not None else None
-    cscale = signal.cost_scale.reindex(index).fillna(1.0).to_numpy() if signal.cost_scale is not None else None
-
-    constructor = PortfolioConstructor(pc, bpy, ic_ref if ic_ref is not None else pc.ic_ref)
+    members = signal.members if isinstance(signal, BookSignals) else [(pc, signal)]
+    K = len(members)
+    zs = [cs_zscore(sb.score[cols], mask[cols]).to_numpy() for _, sb in members]
+    ics = [sb.ic_est.reindex(index).fillna(0.0).to_numpy() for _, sb in members]
+    malphas = [
+        sb.market_alpha.reindex(index).fillna(0.0).to_numpy() if sb.market_alpha is not None else None
+        for _, sb in members
+    ]
+    cscales = [
+        sb.cost_scale.reindex(index).fillna(1.0).to_numpy() if sb.cost_scale is not None else None for _, sb in members
+    ]
+    ic_mean = np.mean(ics, axis=0)
+    constructors = [PortfolioConstructor(p_, bpy, ic_ref if ic_ref is not None else pc.ic_ref) for p_, _ in members]
     overlay = RiskOverlay(cfg.risk, check_kill_file=False)
     day_keys = index.floor("D").asi8
     rebalance_bar = is_rebalance_bar(index, panel.bar_delta, pc.rebalance_every)
@@ -224,6 +243,7 @@ def _run_backtest(
         ewma.update(np.where(member[t], r[t], np.nan))
 
     w = np.zeros(N)
+    sub = np.zeros((K, N)) if K > 1 else None  # sub-book positions, fractions of total equity (sum = w)
     pend = np.zeros(N)  # trades of the last decision times their fill premium over the decision close
     fill_premium = ctx.fill_premium
     equity = capital
@@ -300,6 +320,9 @@ def _run_backtest(
         grow = np.where(valid, 1.0 + np.nan_to_num(rt), 1.0)
         w = w * grow / (1.0 + pnl)
         w[held & ~valid] = 0.0  # contract stopped trading: exited at the last price
+        if sub is not None:
+            sub = sub * grow / (1.0 + pnl)
+            sub[:, held & ~valid] = 0.0
         stop_fees = stop_spread = stop_impact = stop_turn = 0.0
         if hit.any():
             stop_fees, stop_spread, stop_impact = (
@@ -308,6 +331,8 @@ def _run_backtest(
             stop_turn = float(np.abs(w[hit]).sum())
             equity -= stop_fees + stop_spread + stop_impact
             w[hit] = 0.0
+            if sub is not None:
+                sub[:, hit] = 0.0
             stop_px[hit] = np.nan
             out["stops"][k] = float(hit.sum())
         ewma.update(np.where(member[t], r_bar, np.nan))
@@ -322,29 +347,46 @@ def _run_backtest(
         fees = spread = impact = turnover = 0.0
         # Decision bars, plus any bar where a hard halt must flatten at once (the live guard acts every bar).
         if rebalance_bar[t] or (overlay.state.halted and np.any(w)):
-            active = member[t] & np.isfinite(z[t])
-            idx = np.nonzero(active | (w != 0))[0]
+            active_any = np.zeros(N, dtype=bool)
+            for zj in zs:
+                active_any |= member[t] & np.isfinite(zj[t])
+            idx = np.nonzero(active_any | (w != 0))[0]
             if len(idx):
-                score = np.where(active[idx], z[t, idx], np.nan)
                 dollars_typ = np.abs(w[idx]).mean() * equity + 1.0
-                inp = BookInputs(
-                    score=score,
-                    ivol=ivol[t, idx],
-                    beta=beta[t, idx],
-                    mkt_var=float(mkt_var[t]) if np.isfinite(mkt_var[t]) else 1e-4,
-                    cost_rate=costs.linear_rate(t, dollars_typ)[idx] * (cscale[t] if cscale is not None else 1.0),
-                    adv=costs.adv_at(t)[idx],
-                    w0=w[idx],
-                    ic=float(ic[t]),
-                    market_alpha=float(malpha[t]) if malpha is not None else 0.0,
-                    sample_cov=ewma.matrix(idx),
-                )
-                book = constructor.target(inp, equity)
+                lin_rate = costs.linear_rate(t, dollars_typ)[idx]
+                adv_t = costs.adv_at(t)[idx]
+                cov_s = ewma.matrix(idx)
+                props = np.zeros((K, len(idx)))
+                for j in range(K):
+                    active = member[t] & np.isfinite(zs[j][t])
+                    cs_j = cscales[j]
+                    ma_j = malphas[j]
+                    inp = BookInputs(
+                        score=np.where(active[idx], zs[j][t, idx], np.nan),
+                        ivol=ivol[t, idx],
+                        beta=beta[t, idx],
+                        mkt_var=float(mkt_var[t]) if np.isfinite(mkt_var[t]) else 1e-4,
+                        cost_rate=lin_rate * (cs_j[t] if cs_j is not None else 1.0),
+                        adv=adv_t,
+                        # Each sub-book sees its positions on its own capital share (1/K of equity); position
+                        # caps (ADV participation, weight_max) and the volatility target then hold for the sum.
+                        w0=w[idx] if sub is None else K * sub[j, idx],
+                        ic=float(ics[j][t]),
+                        market_alpha=float(ma_j[t]) if ma_j is not None else 0.0,
+                        sample_cov=cov_s,
+                    )
+                    book = constructors[j].target(inp, equity)
+                    props[j] = book.weights if sub is None else book.weights / K
+                proposal = props.sum(axis=0) if sub is not None else props[0]
                 d = int(day_pos[t])
                 if d not in hist_cache:
                     lo = max(0, d - 180)
                     hist_cache = {d: np.nan_to_num(daily_np[lo:d])}
-                target, info = overlay.apply(ts, equity, book.weights, w[idx], book.cov_bar, bpd, hist_cache[d][:, idx])
+                target, info = overlay.apply(ts, equity, proposal, w[idx], book.cov_bar, bpd, hist_cache[d][:, idx])
+                if sub is not None:
+                    # The overlay scales or drops positions of the sum: each sub-book follows its symbol's ratio.
+                    safe = np.where(proposal != 0, proposal, 1.0)
+                    sub[:, idx] = props * np.where(proposal != 0, target / safe, 1.0)
                 trade = target - w[idx]
                 trade[np.abs(trade) < 1e-9] = 0.0
                 if np.any(trade):
@@ -355,7 +397,11 @@ def _run_backtest(
                     w[idx] = target
                     pend[idx] = trade * fill_premium[t, idx]
                     equity -= fees + spread + impact
-                out["vol_ex_ante"][k] = book.ex_ante_vol_annual
+                out["vol_ex_ante"][k] = (
+                    book.ex_ante_vol_annual
+                    if sub is None
+                    else float(np.sqrt(max(proposal @ book.cov_bar @ proposal, 0.0) * bpy))
+                )
                 out["budget"][k] = info.get("budget", 1.0)
                 out["es_1d"][k] = info.get("es_1d", 0.0)
         # Stops carried by the positions now held, as the live broker places them: one per position, k daily
@@ -379,7 +425,7 @@ def _run_backtest(
         bt = np.nan_to_num(beta[t], nan=1.0)
         out["beta_exposure"][k] = float(w @ bt)
         out["n_positions"][k] = float(np.count_nonzero(w))
-        out["ic_est"][k] = float(ic[t])
+        out["ic_est"][k] = float(ic_mean[t])
         if W is not None:
             W[k] = w
 

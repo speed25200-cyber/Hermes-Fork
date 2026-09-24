@@ -57,6 +57,8 @@ def config_hash(cfg: HermesConfig) -> str:
     d.pop("live", None)
     d.pop("execution", None)
     d["validation"].pop("n_trials", None)
+    if not d["portfolio"].get("books"):
+        d["portfolio"].pop("books", None)  # single-book configurations keep their identity
     return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]
 
 

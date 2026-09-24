@@ -56,6 +56,9 @@ from hermes.portfolio.covariance import EwmaCovariance, market_variance
 from hermes.risk.overlay import RiskOverlay, RiskState
 
 log = logging.getLogger(__name__)
+BOOKS_UNSUPPORTED = (
+    "livre 1/N à plusieurs réglages (portfolio.books) : évalué en recherche, pas encore exécuté par le moteur en direct"
+)
 
 # Days of scores and realised IC kept in the state store (the IC estimate and market timing read ~90 days).
 SCORE_MEMORY_DAYS = 120
@@ -149,6 +152,8 @@ class LiveEngine:
         self.mode = mode
         self.operator_cfg = operator_cfg
         self.overrides = overrides or {}
+        if cfg.portfolio.books:
+            raise ValueError(BOOKS_UNSUPPORTED)
         self._set_config(cfg)
         rs = store.get("risk_state")
         state = RiskState(**rs) if isinstance(rs, dict) else RiskState()
@@ -208,6 +213,10 @@ class LiveEngine:
         ) > live_history_bars(self.cfg):
             self.store.event("WARNING", "le nouveau modèle demande un autre flux de données : redémarrage du moteur")
             raise SystemExit(3)
+        if new_cfg.portfolio.books:
+            self.store.event("ERROR", f"nouveau modèle refusé : {BOOKS_UNSUPPORTED}")
+            self._model_mtime = m
+            return False
         self.bundle, self._model_mtime = new, m
         self._set_config(new_cfg)
         set_pos = getattr(self.feed, "set_positioning", None)
