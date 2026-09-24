@@ -252,6 +252,7 @@ def run_research(
                     "sharpe": float(ev.tests.get("sharpe_daily", float("nan"))),
                     "cagr": float(ev.summary.get("cagr", float("nan"))),
                     "vol": float(ev.summary.get("ann_vol", float("nan"))),
+                    "avg_gross": float(ev.summary.get("avg_gross", float("nan"))),
                     "max_drawdown": float(ev.summary.get("max_drawdown", float("nan"))),
                     "ic": float(ich.get("ic_mean", float("nan"))),  # type: ignore[union-attr]
                 },

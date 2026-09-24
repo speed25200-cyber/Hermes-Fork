@@ -18,6 +18,13 @@ fi
 $SSH 'mkdir -p /opt/hermes'
 # Copie du code suivi par git uniquement (pas de données, d'état ni de secrets).
 git ls-files -z | tar --null -T - -czf - | $SSH 'tar -xzf - -C /opt/hermes'
+# Version du code installé, que le réentraînement mensuel (workflow Retrain) reprend. Un arbre modifié n'a pas de
+# version : le fichier est retiré et le réentraînement refuse de tourner tant qu'on n'a pas redéployé proprement.
+if [ -z "$(git status --porcelain)" ]; then
+  git rev-parse HEAD | $SSH 'cat > /opt/hermes/REVISION'
+else
+  $SSH 'rm -f /opt/hermes/REVISION'
+fi
 {
   [ -n "${OKX_API_KEY:-}" ] && printf 'OKX_API_KEY=%s\nOKX_API_SECRET=%s\nOKX_API_PASSPHRASE=%s\n' \
     "$OKX_API_KEY" "$OKX_API_SECRET" "$OKX_API_PASSPHRASE"

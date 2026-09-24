@@ -126,6 +126,9 @@ def test_step_runs_a_full_cycle_with_daily_history_ending_yesterday(cfg_small, t
     assert d.targets and "cost_scale" in d.risk
     assert (tmp_path / "state" / "status.json").exists()
     assert not store.equity_curve().empty
+    # The risk of the book held is recorded with each equity point (the dashboard's expected-equity cone).
+    held = store.equity_curve()["vol_ex_ante"].iloc[-1]
+    assert held >= 0 and (held > 0) == bool(asyncio.run(broker.positions())) and "ex_ante_vol_held" in d.risk
     # The realised IC is persisted as it becomes known (months of memory beyond the base-bar window).
     for k in range(1, 12):
         feed.t = t + k

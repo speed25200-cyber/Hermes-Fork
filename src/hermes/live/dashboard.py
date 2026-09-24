@@ -299,7 +299,7 @@ def snapshot(root: Path, mode: str, trades: TradeBook | None = None) -> dict[str
         trades = TradeBook()
     trades.update(db)
     equity = [
-        [r["ts"], r["equity"], r["gross"], r["net"], r["drawdown"], r["ic_est"], r["n_positions"]]
+        [r["ts"], r["equity"], r["gross"], r["net"], r["drawdown"], r["ic_est"], r["n_positions"], r.get("vol_ex_ante")]
         for r in _query(db, "SELECT * FROM equity ORDER BY ts")
     ]
     events = [

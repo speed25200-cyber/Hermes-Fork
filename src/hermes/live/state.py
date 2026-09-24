@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS decisions (ts TEXT PRIMARY KEY, payload TEXT);
 CREATE TABLE IF NOT EXISTS fills (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, symbol TEXT, side TEXT, qty REAL,
                                   price REAL, fee REAL, maker INTEGER, notional REAL, kind TEXT, px_model REAL);
 CREATE TABLE IF NOT EXISTS equity (ts TEXT PRIMARY KEY, equity REAL, gross REAL, net REAL, drawdown REAL,
-                                   ic_est REAL, n_positions INTEGER);
+                                   ic_est REAL, n_positions INTEGER, vol_ex_ante REAL);
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL, level TEXT, message TEXT);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS series (name TEXT, ts TEXT, value REAL, PRIMARY KEY (name, ts));
@@ -37,6 +37,8 @@ class StateStore:
         for col, typ in (("notional", "REAL"), ("kind", "TEXT"), ("px_model", "REAL")):
             if col not in have:
                 self.db.execute(f"ALTER TABLE fills ADD COLUMN {col} {typ}")
+        if "vol_ex_ante" not in {r[1] for r in self.db.execute("PRAGMA table_info(equity)")}:
+            self.db.execute("ALTER TABLE equity ADD COLUMN vol_ex_ante REAL")
         self.db.commit()
 
     def close(self) -> None:
@@ -129,10 +131,14 @@ class StateStore:
         drawdown: float,
         ic_est: float,
         n_positions: int,
+        vol_ex_ante: float | None = None,
     ) -> None:
+        """``vol_ex_ante``: annualised ex-ante volatility of the book held from ``ts`` on (fraction of the strategy
+        capital); the dashboard's expected-equity cone integrates it."""
         self.db.execute(
-            "INSERT OR REPLACE INTO equity VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (ts.isoformat(), equity, gross, net, drawdown, ic_est, n_positions),
+            "INSERT OR REPLACE INTO equity (ts, equity, gross, net, drawdown, ic_est, n_positions, vol_ex_ante) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (ts.isoformat(), equity, gross, net, drawdown, ic_est, n_positions, vol_ex_ante),
         )
         self.db.commit()
 

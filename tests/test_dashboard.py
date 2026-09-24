@@ -134,9 +134,25 @@ def test_old_stores_gain_the_new_fill_columns(tmp_path):
     con.execute("INSERT INTO fills (ts, symbol, side, qty, price, fee, maker) VALUES (1, 'X', 'buy', 2, 3, 0, 1)")
     con.commit()
     con.close()
-    StateStore(tmp_path).add_fills([Fill("X", "sell", -2, 4, 0.0, False, notional=8.0)], kind="stop")
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE equity (ts TEXT PRIMARY KEY, equity REAL, gross REAL, net REAL, drawdown REAL, "
+                "ic_est REAL, n_positions INTEGER)")  # fmt: skip
+    con.execute("INSERT INTO equity VALUES ('2026-01-01T00:00:00+00:00', 100, 0, 0, 0, 0, 0)")
+    con.commit()
+    con.close()
+    store = StateStore(tmp_path)
+    store.add_fills([Fill("X", "sell", -2, 4, 0.0, False, notional=8.0)], kind="stop")
     rows = sqlite3.connect(db).execute("SELECT notional, kind, px_model FROM fills ORDER BY id").fetchall()
     assert rows == [(None, None, None), (8.0, "stop", 4.0)]
+    # The equity table gains the ex-ante risk of the book held (older rows: NULL, read as unknown).
+    import pandas as pd
+
+    store.add_equity(pd.Timestamp("2026-01-01 00:30", tz="UTC"), 101.0, 0.5, 0.0, 0.0, 0.03, 4, 0.18)
+    assert store.equity_curve()["vol_ex_ante"].tolist()[-1] == 0.18
+    from hermes.live.dashboard import snapshot
+
+    eq = snapshot(tmp_path, "")["equity"]
+    assert eq[0][7] is None and eq[1][7] == 0.18
     old = dict(zip(("id", "ts", "symbol", "side", "qty", "price", "fee", "maker"), (1, 1, "X", "buy", 2, 3, 0, 1)))
     t = reconstruct_trades([old, _f(2, 2, "sell", 8.0, 4.0)])
     assert abs(t["closed"][0]["pnl_gross"] - 2.0) < 1e-9  # the old row: notional = |qty x price|

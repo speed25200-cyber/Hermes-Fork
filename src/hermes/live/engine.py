@@ -201,7 +201,10 @@ class LiveEngine:
             self._model_mtime = m
             return False
         if self.mode == "live" and not new.promoted and not self.cfg.live.allow_unpromoted:
-            if new.meta.get("config_hash") != self.bundle.meta.get("config_hash"):
+            # Same strategy? Identities recomputed by this code (a recorded hash depends on the code that trained).
+            from hermes.research.run import config_hash
+
+            if config_hash(new.config) != config_hash(self.bundle.config):
                 self.store.event("WARNING", "nouveau modèle non promu : le modèle actuel reste en service en réel")
                 self._model_mtime = m
                 return False
@@ -694,6 +697,8 @@ class LiveEngine:
         d.risk["drawdown"] = round(self.overlay.drawdown(nav), 5)
         d.risk["halted"] = float(self.overlay.state.halted)
         d.risk["ex_ante_vol"] = round(ex_ante, 4)
+        # Risk of the book actually held after the overlay (what the expected-equity cone integrates).
+        d.risk["ex_ante_vol_held"] = round(float(np.sqrt(max(w @ book.cov_bar @ w, 0.0) * cfg.bars_per_year)), 5)
         if props is not None:
             # The overlay scales or drops positions of the sum: each sub-book follows its contract's ratio.
             safe = np.where(proposal != 0, proposal, 1.0)
@@ -849,7 +854,10 @@ class LiveEngine:
         ts = pd.Timestamp(d.ts)
         self.store.add_decision(ts, asdict(d))
         nav_after = float(d.risk.get("nav", equity_after))
-        self.store.add_equity(ts, equity_after, gross, net, self.overlay.drawdown(nav_after), d.ic_est, len(pos_after))
+        vol_held = float(d.risk.get("ex_ante_vol_held", 0.0)) if pos_after else 0.0
+        self.store.add_equity(
+            ts, equity_after, gross, net, self.overlay.drawdown(nav_after), d.ic_est, len(pos_after), vol_held
+        )
         if ts.minute == 0 and ts.hour == 0:
             self.store.prune(ts - pd.Timedelta(days=SCORE_MEMORY_DAYS + 10))
         status = {

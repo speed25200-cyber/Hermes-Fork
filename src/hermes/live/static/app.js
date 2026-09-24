@@ -42,7 +42,7 @@ const VIEWS = [["terminal", "Terminal"], ["positions", "Positions"], ["history",
 const S = {
   mode: store.get("mode", "paper"), view: store.get("view", "terminal"), tf: store.get("tf", null), sym: null,
   modes: [], snap: null, candles: null, fills: null, sort: {}, filt: {side: "all", q: "", lvl: "all"}, loaded: false, sig: "",
-  allFills: store.get("allFills", false),
+  allFills: store.get("allFills", false), eqDays: +store.get("eqDays", 0) || 0,
 };
 document.documentElement.dataset.theme = store.get("theme", "dark");
 
@@ -54,7 +54,7 @@ async function getJSON(url) {
 function derive(snap) {
   const st = snap.status || {}, strat = st.strategy || {}, b = st.bundle || {}, rs = b.research || {};
   const bar = strat.bar || rs.bar || "30m";
-  const eq = (snap.equity || []).map(r => ({t: toMs(r[0]), eq: r[1], g: r[2], n: r[3], dd: r[4], ic: r[5], np: r[6]})).filter(r => isFinite(r.t) && fin(r.eq));
+  const eq = (snap.equity || []).map(r => ({t: toMs(r[0]), eq: r[1], g: r[2], n: r[3], dd: r[4], ic: r[5], np: r[6], v: r[7]})).filter(r => isFinite(r.t) && fin(r.eq));
   const acc = st.account || {};
   const e0 = fin(acc.initial) ? acc.initial : eq.length ? eq[0].eq : null;
   let pos = Array.isArray(st.positions_detail) ? st.positions_detail : Object.entries(st.positions || {}).map(([s, v]) =>
@@ -368,22 +368,53 @@ function attachTip(c, host, spec) {
 }
 function legendHTML(items) {return `<div class="lg">${items.map(i => `<span><i class="${i.dash ? "dash" : ""}" style="border-top-color:${i.color}"></i>${esc(i.name)}</span>`).join("")}</div>`}
 
+/* Expected equity, as risk systems compare predicted and realised P&L: research's net Sharpe applied to the ex-ante
+   risk of the book actually held, bar after bar. Drift and variance accumulate over the time each book is held (any
+   bar size), so a flat book expects nothing and the cone has no width. The cone starts at the equity at the start of
+   the displayed window and continues past the last decision with the risk held now. */
+function expectedCone(D, rows) {
+  const rs = D.rs, SR = rs.sharpe;
+  if (!fin(SR) || rows.length < 1) return null;
+  const f = D.st.capital_fraction || D.strat.capital_fraction || 1, Y = 365.25 * 864e5;
+  // Annualised ex-ante volatility of the strategy's book held from a point on. Points recorded before the engine
+  // logged it: flat book = 0, otherwise research's volatility scaled by the exposure (gross / research's mean gross).
+  const vol = r => fin(r.v) ? r.v : !fin(r.g) || r.g <= 0 ? 0 : fin(rs.vol) ? rs.vol * (fin(rs.avg_gross) && rs.avg_gross > 0 ? r.g / rs.avg_gross : 1) : 0;
+  let mu = 0, v2 = 0;
+  const pts = [{t: rows[0].t, mu, sd: 0}];
+  for (let i = 1; i < rows.length; i++) {
+    const dt = (rows[i].t - rows[i - 1].t) / Y, s = f * vol(rows[i - 1]);
+    mu += SR * s * dt; v2 += s * s * dt;
+    pts.push({t: rows[i].t, mu, sd: Math.sqrt(v2)});
+  }
+  const last = rows.at(-1), sNow = f * vol(last), step = D.barMin * 6e4;
+  const span = last.t - rows[0].t, hold = (D.strat.holding_bars || rs.horizon_bars || 48) * step;
+  const fwd = Math.min(hold, Math.max(2 * step, 0.25 * span)), n = Math.max(2, Math.min(24, Math.round(fwd / step)));
+  for (let k = 1; k <= n; k++) {
+    const dt = fwd / n / Y; mu += SR * sNow * dt; v2 += sNow * sNow * dt;
+    pts.push({t: last.t + k * fwd / n, mu, sd: Math.sqrt(v2), fwd: true});
+  }
+  return {E0: rows[0].eq, pts, SR, sNow, flat: pts.every(p => p.sd === 0)};
+}
+function eqWindow(D) {
+  const days = S.eqDays, last = D.eq.length ? D.eq.at(-1).t : Date.now();
+  return days ? D.eq.filter(r => r.t >= last - days * 864e5) : D.eq;
+}
 function equitySpec(D) {
-  const e = D.eq, s1 = css("--accent"), ink2 = css("--ink-2"), band = css("--accent");
+  const e = eqWindow(D), s1 = css("--accent"), ink2 = css("--ink-2"), band = css("--accent");
   const series = [{name: "Équité", color: s1, type: "area", data: e.map(r => ({time: utc(r.t), value: r.eq}))}];
   const legend = [{name: "Équité " + (MODE_LABEL[S.mode] || "").toLowerCase(), color: s1}];
-  const rs = D.rs;
-  if (e.length > 1 && fin(rs.cagr) && fin(rs.vol) && rs.vol > 0 && fin(D.e0)) {
-    // Research's return and volatility are the strategy's, on its share of the account (capital_fraction).
-    const f = D.st.capital_fraction || D.strat.capital_fraction || 1;
-    const t0 = e[0].t, yr = t => (t - t0) / (365.25 * 864e5), med = t => D.e0 * (1 + f * (Math.pow(1 + rs.cagr, yr(t)) - 1));
-    const bd = k => t => med(t) + D.e0 * f * k * rs.vol * Math.sqrt(yr(t));
-    const grid = e.map(r => r.t);
-    series.push({name: "Attendu", color: ink2, dash: true, width: 1, quiet: true, data: grid.map(t => ({time: utc(t), value: med(t)}))});
-    [[1, "+1σ"], [-1, "−1σ"], [2, "+2σ"], [-2, "−2σ"]].forEach(([k, n]) => series.push({name: n, color: band + (Math.abs(k) === 1 ? "99" : "55"), dash: true, width: 1, quiet: true, data: grid.map(t => ({time: utc(t), value: bd(k)(t)}))}));
-    legend.push({name: `Attendu par la recherche (${pct(rs.cagr, 1)}/an)`, color: ink2, dash: true}, {name: "±1σ, ±2σ", color: band + "99", dash: true});
+  const c = e.length > 1 ? expectedCone(D, e) : null;
+  let note = "";
+  if (c) {
+    const at = (k, p) => c.E0 * (1 + p.mu + k * p.sd);
+    series.push({name: "Attendu", color: ink2, dash: true, width: 1, quiet: true, data: c.pts.map(p => ({time: utc(p.t), value: at(0, p)}))});
+    [[1, "+1σ"], [-1, "−1σ"], [2, "+2σ"], [-2, "−2σ"]].forEach(([k, nm]) => series.push({name: nm, color: band + (Math.abs(k) === 1 ? "99" : "55"),
+      dash: true, width: 1, quiet: true, data: c.pts.map(p => ({time: utc(p.t), value: at(k, p)}))}));
+    legend.push({name: `Attendu : Sharpe de recherche ${num(c.SR, 2)} × risque tenu`, color: ink2, dash: true}, {name: "±1σ, ±2σ du risque ex ante", color: band + "99", dash: true});
+    note = c.flat ? "Livre à plat sur la période : aucun risque pris, donc rien d'attendu (le cône n'a pas de largeur)."
+      : `Risque tenu maintenant : ${pct(c.sNow, 1)}/an ex ante ; le cône part de l'équité au début de la fenêtre et se prolonge avec ce risque.`;
   }
-  return {series, legend, fmt: v => usd(v, 0), tip: true};
+  return {series, legend, note, fmt: v => usd(v, 0), tip: true};
 }
 function dailyMean(rows) {
   const by = {}; (rows || []).forEach(([t, v]) => {if (!fin(v)) return; const d = String(t).slice(0, 10); (by[d] ||= []).push(v)});
@@ -454,8 +485,8 @@ function vTerminal(D) {
   if (!el.dataset.built) {
     el.innerHTML = `<div class="grid">
       <div class="c8" id="t-chart"></div><div class="c4 stick" id="t-pos"></div>
-      <div class="c8"><div class="panel"><div class="ph"><h2>Équité face à ce que la recherche attend</h2><div class="tfs" id="eq-range">${[["1", "24 h"], ["7", "7 j"], ["30", "30 j"], ["0", "Tout"]].map(([k, l]) => `<button data-days="${k}" aria-pressed="${k === "0"}">${l}</button>`).join("")}</div><div class="right" id="t-eq-lg"></div></div>
-        <div class="chart-wrap sm"><div class="lw" id="c-eq"></div><div class="chart-note" id="c-eq-note"></div></div></div></div>
+      <div class="c8"><div class="panel"><div class="ph"><h2>Équité face à ce que la recherche attend</h2><div class="tfs" id="eq-range">${[["1", "24 h"], ["7", "7 j"], ["30", "30 j"], ["0", "Tout"]].map(([k, l]) => `<button data-days="${k}" aria-pressed="${+k === S.eqDays}">${l}</button>`).join("")}</div><div class="right" id="t-eq-lg"></div></div>
+        <div class="chart-wrap sm"><div class="lw" id="c-eq"></div><div class="chart-note" id="c-eq-note"></div></div><p class="cap eq-cap" id="c-eq-cap"></p></div></div>
       <div class="c4"><div class="panel"><div class="ph"><h2>Composition du livre</h2><span class="sub">en multiple du capital alloué</span></div><div class="pb" id="t-book"></div></div></div>
       <div class="c7"><div class="panel"><div class="ph"><h2>Dernières exécutions</h2><span class="sub" id="t-fills-sub"></span></div><div class="tw maxh" id="t-fills"></div></div></div>
       <div class="c5 stick"><div class="panel"><div class="ph"><h2>Événements</h2></div><div class="tw plist" id="t-ev"></div></div></div></div>`;
@@ -473,15 +504,20 @@ function vTerminal(D) {
   }
   renderLevels(D); drawPrice(D);
   $("#t-pos").innerHTML = positionsList(D); wirePositions();
-  const eqs = equitySpec(D);
-  $("#t-eq-lg").innerHTML = legendHTML(eqs.legend);
-  $("#c-eq-note").textContent = D.eq.length < 2 ? "La courbe apparaît après deux décisions." : "";
-  const eqc = lineChart("eq", $("#c-eq"), eqs);
+  const drawEq = fit => {
+    const eqs = equitySpec(D);
+    $("#t-eq-lg").innerHTML = legendHTML(eqs.legend);
+    $("#c-eq-note").textContent = D.eq.length < 2 ? "La courbe apparaît après deux décisions." : "";
+    $("#c-eq-cap").textContent = eqs.note;
+    const eqc = lineChart("eq", $("#c-eq"), eqs);
+    if (fit) eqc.chart.timeScale().fitContent();
+  };
+  drawEq(false);
+  // The window changes the anchor of the cone, not only the view: each window is recomputed from its own start.
   $$("#eq-range button").forEach(b => b.onclick = () => {
     $$("#eq-range button").forEach(x => x.setAttribute("aria-pressed", x === b));
-    const days = +b.dataset.days, last = D.eq.length ? D.eq.at(-1).t : Date.now();
-    if (!days || !D.eq.length) eqc.chart.timeScale().fitContent();
-    else eqc.chart.timeScale().setVisibleRange({from: utc(Math.max(D.eq[0].t, last - days * 864e5)), to: utc(last)});
+    S.eqDays = +b.dataset.days; store.set("eqDays", S.eqDays);
+    drawEq(true);
   });
   $("#t-book").innerHTML = bookComposition(D);
   const F = D.fills.slice(0, window.innerWidth < 680 ? 12 : 60);  // the full list is in the History tab

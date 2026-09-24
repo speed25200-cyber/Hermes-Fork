@@ -106,11 +106,17 @@ def model_install(
     from hermes.models.bundle import ModelBundle
 
     b = ModelBundle.load(source)  # verifies hashes
+    # Copy beside the target first, then swap by renames: the engine never sees a half-copied champion (it would
+    # fail to load it and, its timestamps being preserved, never retry).
+    staging = target.with_name(f"{target.name}.incoming-{os.getpid()}")
+    shutil.rmtree(staging, ignore_errors=True)
+    shutil.copytree(source, staging)
+    ModelBundle.load(staging)  # the copy is intact
     if target.exists():
         backup = target.with_name(target.name + ".previous")
         shutil.rmtree(backup, ignore_errors=True)
         target.rename(backup)
-    shutil.copytree(source, target)
+    staging.rename(target)
     typer.echo(f"installé : {target} (promu={b.promoted}, entraîné jusqu'au {b.meta.get('train_end')})")
 
 
@@ -149,8 +155,12 @@ def live_run(
         typer.echo(f"ATTENTION : surcharges de la stratégie validée : {', '.join(strategy_keys)}", err=True)
     cfg = live_config(bundle.config, operator, kv)
     if mode == "live" and not bundle.promoted and not cfg.live.allow_unpromoted:
-        typer.echo("REFUS : ce modèle n'a pas franchi la porte de promotion. Mode réel interdit.", err=True)
-        raise typer.Exit(2)
+        # Never trade real money on it, but never abandon open positions either (a champion demoted while the
+        # engine was down): the engine refuses every new risk, closes the book and keeps its guards running.
+        typer.echo(
+            "ATTENTION : modèle non promu. Mode réel : aucune nouvelle position, le livre est fermé et reste à plat.",
+            err=True,
+        )
     store = StateStore(cfg.live.state_dir / mode)
     feed = BinanceLiveFeed(
         cfg.data.bar,

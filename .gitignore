@@ -25,3 +25,6 @@ build/
 !.env.example
 *.pem
 *.key
+
+# Version du code déployé (écrite par le workflow Deploy)
+/REVISION

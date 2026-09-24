@@ -68,6 +68,7 @@ jobs:
           SSHPASS: ${{ secrets.VPS_PASSWORD }}
         run: |
           sshpass -e ssh $SSHOPTS "root@$VPS" 'mkdir -p /opt/hermes'
+          git rev-parse HEAD > REVISION  # le réentraînement mensuel (workflow Retrain) entraîne avec ce code
           sshpass -e rsync -az --delete -e "ssh $SSHOPTS" \
             --exclude /.git --exclude /data/ --exclude /state/ --exclude /artifacts/ --exclude /reports/auto/ \
             --exclude /.venv/ ./ "root@$VPS:/opt/hermes/"
@@ -137,11 +138,15 @@ jobs:
         env:
           SSHPASS: ${{ secrets.VPS_PASSWORD }}
           MODE: ${{ inputs.mode }}
+          CONF: ${{ inputs.model_config }}
         run: |
+          # La configuration du champion : le réentraînement mensuel (workflow Retrain) la reprend.
+          [[ "$CONF" =~ ^[a-z0-9_]+$ && -f "configs/$CONF.yaml" ]] || { echo "::error::configuration inconnue : $CONF"; exit 1; }
           sshpass -e ssh $SSHOPTS "root@$VPS" 'rm -rf /opt/hermes/artifacts/incoming && mkdir -p /opt/hermes/artifacts/incoming'
           sshpass -e rsync -az -e "ssh $SSHOPTS" "$MODEL_DIR/" "root@$VPS:/opt/hermes/artifacts/incoming/"
           sshpass -e ssh $SSHOPTS "root@$VPS" "cd /opt/hermes && chown -R hermes:hermes artifacts \
             && runuser -u hermes -- .venv/bin/hermes model install artifacts/incoming --to artifacts/models/champion \
+            && echo configs/$CONF.yaml > /etc/hermes/research_config \
             && systemctl enable hermes@$MODE >/dev/null && systemctl restart hermes@$MODE && echo hermes@$MODE démarré"
 
       - name: Entraînement initial (arrière-plan)
