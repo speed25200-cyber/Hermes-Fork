@@ -43,6 +43,7 @@ compris, univers point-in-time des ~30 contrats les plus liquides (15 pour le 1 
 | `research_30m_xl_lb_sres_u50_h16`, corrigé | 30 min | 8 h-48 h (détention 8 h) | 2023-07 → 2026-08 | 0,051* (16,5) | 18,8 % | 8,5 % | **+12,7 %** | **1,09** | −16 % | 0,44 | 0,08 | **0,08** | **0,55** | **1,02** | ❌ |
 | `research_30m_xl_lb_sres_gate` (garde de régime : taille ×0,5 si BTC < −15 % de son plus haut 90 j) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,045* (8,3) | 13,7 % | 5,0 % | **+10,6 %** | **1,00** | **−10,5 %** | 0,38 | **0,04** | **0,26** | **0,50** | **0,98** | ❌ |
 | `research_30m_xl_lb_sres_v2` (funding 8 h, 300 arbres, poids égaux) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,047* (9,1) | 12,0 % | 6,3 % | +8,4 % | **0,82** | **−12 %** | 0,25 | **0,04** | **0,10** | −0,01 | **0,75** | ❌ |
+| `research_30m_xl_lb_sres_pos` (positionnement des gros comptes, § 11) | 30 min | 8 h-48 h (détention 24 h) | 2023-07 → 2026-08 | 0,048* (9,2) | 13,0 % | 6,4 % | +8,3 % | 0,79 | −15 % | 0,25 | **0,04** | **0,04** | **0,16** | **0,64** | ❌ |
 
 IC : Spearman transversal à l'horizon de détention, t de Newey-West sur les IC journaliers. En gras : ce
 qui franchit son seuil (drawdown en gras : meilleur que −15 %). * IC mesuré contre la cible nette des
@@ -325,7 +326,7 @@ Les deux variables sélectionnées sur 2023-2025 entrent dans le modèle (lues u
 28 jours pour être reproductibles avec les 30 jours que sert l'API en direct), ainsi que le rang transversal
 de l'écart (la forme exacte testée ci-dessus) : essai `research_30m_xl_lb_sres_pos`.
 
-## 12. Essais du 23 septembre : ni V1 ni V2 ne font mieux
+## 12. Essais du 23 septembre : ni V1, ni V2, ni le positionnement ne font mieux
 
 | | `sres` corrigé (papier) | V1 : garde de régime | V2 : funding 8 h, 300 arbres, poids égaux |
 |---|---:|---:|---:|
@@ -345,8 +346,16 @@ données, ce résultat est de plus une borne haute. **Pas d'amélioration nette 
 L'hygiène d'ajustement relève à peine l'IC et rend le choix de réglage plus stable (PBO 0,10), mais le livre
 gagne moins et 2026 reste négatif (IC réalisé −0,023) : l'hypothèse « du bruit dans l'ajustement explique
 2026 » est écartée. Le passage de `to_funding` aux variables par contrat retire aussi cette variable du
-modèle de direction du marché (un quatrième changement, sans effet sur la porte). En cours : le
-positionnement des gros comptes (`sres_pos`).
+modèle de direction du marché (un quatrième changement, sans effet sur la porte).
+
+**Positionnement des gros comptes (`sres_pos`, 24 septembre) : pas mieux non plus.** La variable retenue au § 11
+est bien utilisée par le modèle (7ᵉ au gain moyen du GBM) et l'IC à 24 h monte à peine (0,048, t 9,2, contre
+0,045), mais le livre gagne moins : Sharpe 0,79 (intervalle à 90 % [−0,11 ; 1,86]), +8,3 %/an, drawdown −14,9 %,
+années 2023 / 2024 / 2025 / 2026 à −1,2 / +7,9 / +26,3 / −5,1 %. 2026 perd un peu moins (−5,1 % contre −6,8 %),
+l'IC réalisé de 2026 reste négatif (−0,017) ; le choix de réglage est très stable (PBO 0,04) mais les stress sont
+plus fragiles (coûts ×2 : 0,16 ; stops au pire : 0,04). **6 critères sur 9 : le modèle en papier reste `sres`.**
+Les écarts entre `sres`, V1, V2 et `sres_pos` (Sharpe 0,79 à 1,10) sont du même ordre que l'incertitude d'un seul
+backtest : aucune de ces trois variantes ne se distingue du modèle de référence.
 
 ## 13. Pré-enregistrement : l'activité au comptant face aux perpétuels (24 septembre 2026, 00 h 45 UTC)
 
@@ -394,5 +403,25 @@ d'écart). IC de rang du score du modèle sur les mêmes bougies : 0,047 (sélec
 Lecture : au-delà de ce que le modèle sait déjà, la répartition de l'activité entre comptant et perpétuel ne
 prédit rien de mesurable à 24 h. La seule piste proche du seuil (croissance du volume au comptant, t 2,1) change
 de signe en 2026. L'hypothèse de l'excès de levier est écartée pour cet horizon.
+
+## 14. Pré-enregistrement : la profondeur du carnet d'ordres (24 septembre 2026, 01 h UTC)
+
+Troisième source jamais utilisée : les archives Binance « bookDepth » (instantanés toutes les ~30 s de la valeur
+cumulée des ordres à ±1 %, ±2 %… ±5 % du prix, disponibles depuis janvier 2023). Idée : un carnet durablement
+plus garni à l'achat qu'à la vente (ou l'inverse), ou une liquidité qui se retire, annonce la suite au-delà de ce
+que le modèle voit déjà dans les prix et les volumes. **Mêmes règles qu'aux § 11 et § 13** (IC de rang partiel à
+24 h en plus du score du modèle, sélection 2023-08 → 2025-12 à |t| ≥ 3 avec même signe en 2024 et 2025, contrôle
+2026 à même signe et au moins la moitié de l'effet, un essai seulement si une variable franchit les deux). Pour
+chaque bougie de 30 min : le dernier instantané avant la clôture ; variables lues une bougie en retard ; six en
+tout (31 variables criblées au total, t de 3 ≈ p corrigée 0,08) :
+
+| Variable | Définition |
+|---|---|
+| `depth_imb_1pct` | log(ordres d'achat à −1 % / ordres de vente à +1 %), moyenne sur 1 jour |
+| `depth_imb_5pct` | même rapport à ±5 %, moyenne sur 1 jour |
+| `depth_imb_1pct_z` | `depth_imb_1pct`, z-score sur 30 jours |
+| `depth_imb_chg_1d` | `depth_imb_1pct` moins sa valeur de la veille |
+| `depth_adv_2pct` | log(profondeur totale à ±2 %, moyenne 1 jour / volume échangé sur 1 jour) |
+| `depth_chg_7d` | variation sur 7 jours du log de la profondeur totale à ±2 % (moyenne 1 jour) |
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.
