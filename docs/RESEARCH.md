@@ -79,6 +79,15 @@ cible (Gârleanu & Pedersen 2013) ; zones de non-trading (NBIM) ; covariance fac
 (Ledoit & Wolf) ; volatilité cible ; fraction de Kelly implicitement ≤ ½ ; réduction du risque en drawdown
 (Grossman & Zhou) ; plafonds par nom en part du volume quotidien.
 
+**Livre 1/N sur plusieurs réglages** (`portfolio.books`, RESULTS § 15-16). Plutôt que de choisir un horizon de
+détention et une aversion aux coûts sur un backtest (le choix a posteriori perd l'essentiel de son avance dès
+qu'on le fait sans connaître l'avenir), le capital peut être réparti à parts égales entre plusieurs réglages
+(DeMiguel, Garlappi & Uppal 2009). Chaque sous-livre garde ses positions et est réoptimisé sur sa part à partir
+de son propre signal (lissage, IC estimé et amortissement des coûts à son horizon) ; la surcouche de risque et
+les stops agissent sur la somme, et seuls les ordres nets partent, comme dans les fonds multi-stratégies qui
+compensent les ordres de leurs portefeuilles avant exécution. Le moteur en direct persiste l'état des
+sous-livres et le réconcilie à chaque décision avec les positions réellement détenues.
+
 ## 6. Exécution
 
 Les ordres taker subissent une sélection adverse liée à la latence (Albers et al. 2025) ; les ordres maker
@@ -98,6 +107,10 @@ en unités de volatilité quotidienne ; Donier & Bonart 2015).
 - Rahimikia, Ni, Wang (2025), *Re(Visiting) Time Series Foundation Models in Finance*, arXiv 2511.18578.
 - Nagel (2025), *Seemingly Virtuous Complexity in Return Prediction*, NBER w34104.
 - Kelly, Kuznetsov, Malamud, Xu (2025), *Artificial Intelligence Asset Pricing Models*, NBER w33351.
+- DeMiguel, Garlappi, Uppal (2009), *Optimal Versus Naive Diversification: How Inefficient is the 1/N Portfolio
+  Strategy?*, Review of Financial Studies.
+- Bailey, Borwein, López de Prado, Zhu (2017), *The Probability of Backtest Overfitting*, Journal of Computational
+  Finance.
 - Gârleanu, Pedersen (2013), *Dynamic Trading with Predictable Returns and Transaction Costs*, JF.
 - Jensen, Kelly, Malamud, Pedersen (2026), *Machine Learning and the Implementable Efficient Frontier*, RFS.
 - Bailey, López de Prado (2014), *The Deflated Sharpe Ratio* ; Bailey et al. (2017), *The Probability of Backtest Overfitting*.
