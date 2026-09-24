@@ -11,7 +11,7 @@ import pandas as pd
 from hermes.config import HermesConfig
 from hermes.data.panel import Panel
 from hermes.data.universe import universe_mask
-from hermes.features.library import FeatureSet, build_features
+from hermes.features.library import STORAGE_DTYPE, FeatureSet, build_features
 from hermes.labels.targets import Targets, build_targets
 from hermes.models.base import cs_gauss_rank
 from hermes.portfolio.costs import ADV_DAYS
@@ -47,7 +47,7 @@ class Dataset:
 
     def release_training_arrays(self) -> None:
         """Free what only training needs before the (forking, memory-hungry) evaluation phase."""
-        self.X = np.empty((0, self.X.shape[1]), dtype=np.float16)
+        self.X = np.empty((0, self.X.shape[1]), dtype=STORAGE_DTYPE)
         self.targets.total.clear()
         self.feats.aux.pop("r1", None)
         keep = ("open", "high", "low", "close", "quote_volume", "funding_rate", "vwap_first")
@@ -88,7 +88,7 @@ def build_dataset(panel: Panel, cfg: HermesConfig, chunk_bars: int | None = None
     y_frame = blended_target(targets, cfg.labels.horizons)
 
     # float16 storage halves the largest array; every consumer casts its slice back to float32.
-    X, mi = feats.stack(mask, dtype=np.float16)
+    X, mi = feats.stack(mask, dtype=STORAGE_DTYPE)
     t_pos = mask.index.get_indexer(mi.get_level_values(0)).astype(np.int32)
     s_pos = mask.columns.get_indexer(mi.get_level_values(1)).astype(np.int32)
     y_blend = y_frame.to_numpy()[t_pos, s_pos]
@@ -158,7 +158,7 @@ def _build_dataset_chunked(panel: Panel, mask: pd.DataFrame, cfg: HermesConfig, 
         if f.names != names:
             raise RuntimeError("feature set changed between chunks")
         rows = np.arange(c0 - a0, c1 - a0)
-        X, mi = f.stack(m_sub, rows=rows, dtype=np.float16)
+        X, mi = f.stack(m_sub, rows=rows, dtype=STORAGE_DTYPE)
         X_parts.append(X)
         t_parts.append(mask.index.get_indexer(mi.get_level_values(0)).astype(np.int32))
         s_parts.append(cols.get_indexer(mi.get_level_values(1)).astype(np.int32))

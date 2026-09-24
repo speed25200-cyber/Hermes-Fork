@@ -35,12 +35,12 @@ from hermes.data.universe import is_excluded, universe_mask
 from hermes.data.venue import OkxListing
 from hermes.execution.broker import Broker, Fill, PaperBroker, Position
 from hermes.execution.okx.instruments import okx_inst_id
-from hermes.features.library import build_features
+from hermes.features.library import STORAGE_DTYPE, FeatureSet, build_features, feature_warmup_bars
 from hermes.labels.targets import build_targets
 from hermes.live.alerts import alert
 from hermes.live.state import StateStore
 from hermes.models.bundle import ModelBundle
-from hermes.models.drift import psi
+from hermes.models.drift import DRIFT_MARKET_DAYS, drift_report
 from hermes.portfolio.alpha import (
     cs_zscore,
     estimate_ic,
@@ -92,16 +92,18 @@ def live_config(
 
 def live_history_bars(cfg: HermesConfig) -> int:
     """Base bars the live feed keeps: the research warm-up (so features equal the research values) plus a
-    day, the covariance and volume windows, and never less than ``live.history_days`` when set."""
-    f = cfg.features
-    warm = 2 * cfg.bars(f.max_lookback_minutes) + 8 * cfg.bars(f.vol_halflife_minutes)
+    week (the drift check's window of market-level features, with two bars to spare: the feed starts a bar
+    short) -- a day at 1-minute bars, whose week would weigh on a small server --, the covariance and volume
+    windows, and never less than ``live.history_days`` when set."""
+    warm = feature_warmup_bars(cfg)
+    drift = cfg.days(DRIFT_MARKET_DAYS) + 2 if cfg.bar_minutes >= 15 else cfg.bars_per_day
     cov = 2 * cfg.days(cfg.portfolio.cov_halflife_days) + 1
     # Style exposures (book and target) use the full ADV window; without them the cost model's ADV is a mean
     # over whatever history is held, which keeps the 1-minute live window small.
     styles = cfg.portfolio.style_neutral or cfg.labels.residualize == "style"
     adv = cfg.days(ADV_DAYS) + cfg.bars_per_day if styles else 0
     floor = cfg.days(cfg.live.history_days) if cfg.live.history_days else 0
-    return int(max(warm + cfg.bars_per_day, cov, adv, floor))
+    return int(max(warm + drift, cov, adv, floor))
 
 
 def intrabar_history_minutes(cfg: HermesConfig) -> int:
@@ -161,7 +163,6 @@ class LiveEngine:
         self.model_dir = Path(model_dir) if model_dir is not None else None
         self._model_mtime = self._bundle_mtime()
         self._cache: dict[str, pd.DataFrame] = {}
-        self._drift_rows: list[tuple[pd.Timestamp, np.ndarray]] = []
         self.clock = lambda: pd.Timestamp.now(tz="UTC")  # replaced in tests and demonstrations
         self.last_cycle_s: float | None = None
         self._closed_now: set[str] = set()  # contracts closed this cycle before the rebalance (stops)
@@ -313,26 +314,37 @@ class LiveEngine:
         if not set(symbols) <= traded:
             self.store.put("traded_symbols", sorted(traded | set(symbols)))
 
-    def _check_drift(self, ts: pd.Timestamp, X: np.ndarray, d: Decision) -> None:
-        """Feature drift (PSI) of the last day's member rows against the training profile of the bundle."""
+    def _check_drift(self, feats: FeatureSet, mask: pd.DataFrame, t: int, d: Decision) -> None:
+        """Feature drift against the training profile of the bundle (models/drift.py): the member rows of the
+        last day for contract-level features, one row a bar over the last week for market-level ones (shared by
+        every member), the windows the thresholds were calibrated on. Recomputed from the warmed-up panel each
+        bar, so a restart, a gap in the cycles or a new bundle needs no memory."""
         profile = self.bundle.meta.get("feature_profile")
         if not isinstance(profile, dict) or not profile:
             return
-        buf = self._drift_rows
-        buf.append((ts, np.asarray(X, dtype=np.float32)))
-        while buf and buf[0][0] < ts - pd.Timedelta(days=1):
-            buf.pop(0)
-        if len(buf) < max(4, self.bpd // 4):
-            return  # too few rows for a stable histogram yet
-        values = psi(profile, np.concatenate([x for _, x in buf]), self.bundle.feature_names)
-        if not values:
-            return
-        drifted = sorted((v, k) for k, v in values.items() if v > 0.25)
-        d.risk["psi_max"] = round(max(values.values()), 3)
-        d.risk["psi_drifted"] = float(len(drifted))
-        if len(drifted) > 0.1 * len(values):
-            worst = ", ".join(k for _, k in drifted[::-1][:3])
-            d.notes.append(f"dérive des variables face à l'entraînement : {len(drifted)} avec un PSI > 0,25 ({worst})")
+        warm = feature_warmup_bars(self.cfg)
+        names = feats.names
+        week = self.cfg.days(DRIFT_MARKET_DAYS)
+        design = self.bundle.meta.get("drift_windows")
+        same = isinstance(design, dict) and (design.get("contract_bars"), design.get("market_bars")) == (
+            self.bpd,
+            week,
+        )
+        blocks: list[tuple[np.ndarray, list[str]]] = []
+        if t + 1 - self.bpd >= warm:
+            X, _ = feats.stack(mask, rows=np.arange(t + 1 - self.bpd, t + 1), dtype=STORAGE_DTYPE)
+            cols = [j for j, k in enumerate(names) if k not in feats.market]
+            blocks.append((X[:, cols].astype(np.float32), [names[j] for j in cols]))
+        market = list(feats.market)
+        d.risk["psi_market"] = float(bool(market) and t + 1 - week >= warm)
+        d.risk["psi_market_calibrated"] = float(same and bool(design.get("market")))  # type: ignore[union-attr]
+        if d.risk["psi_market"]:
+            rows = np.arange(t + 1 - week, t + 1)
+            Xm = np.column_stack([feats.market[k].iloc[rows].to_numpy(STORAGE_DTYPE) for k in market])
+            blocks.append((Xm.astype(np.float32), market))
+        risk, notes = drift_report(profile, blocks, calibrated=same)
+        d.risk.update(risk)
+        d.notes.extend(notes)
 
     # -- score / realised-IC memory: in RAM, backed by the state store for restarts ----------------------------
     def _memory(self, name: str, ts: pd.Timestamp) -> pd.DataFrame:
@@ -523,10 +535,16 @@ class LiveEngine:
         if feats.names != self.bundle.feature_names:
             missing = set(self.bundle.feature_names) - set(feats.names)
             raise RuntimeError(f"feature mismatch with the bundle (missing {sorted(missing)[:5]}...)")
-        X, mi = feats.stack(mask, rows=np.array([t]))
+        # Rounded like the stored training rows (research/dataset.py): the models score the values they were fit on.
+        X, mi = feats.stack(mask, rows=np.array([t]), dtype=STORAGE_DTYPE)
+        X = X.astype(np.float32)
         members = list(mi.get_level_values(1))
         d.n_members = len(members)
-        self._check_drift(ts, X, d)
+        try:  # a monitoring failure must never stop the book from trading
+            self._check_drift(feats, mask, t, d)
+        except Exception:
+            log.exception("drift check failed")
+            d.risk["psi_error"] = 1.0
         scores = pd.Series(self.bundle.score(X, np.zeros(len(X), dtype=np.int64)), index=members, dtype=float)
         d.scores = {k: round(float(v), 4) for k, v in scores.items() if np.isfinite(v)}
         self.store.add_scores(ts, scores)

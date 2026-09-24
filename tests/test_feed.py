@@ -2,12 +2,14 @@
 
 import asyncio
 import io
+import sys
 import zipfile
 from datetime import UTC, datetime, timedelta
 
 import httpx
 import numpy as np
 import pandas as pd
+import pytest
 
 from hermes.data.binance_archive import BinanceArchive
 from hermes.data.live_feed import BinanceLiveFeed
@@ -61,7 +63,15 @@ def _metrics_zip(day) -> bytes:
     return buf.getvalue()
 
 
-def test_live_positioning_matches_the_archives(tmp_path):
+@pytest.mark.parametrize("clock", [None, datetime(2026, 9, 24, 15, 26, 30, tzinfo=UTC)])
+def test_live_positioning_matches_the_archives(tmp_path, monkeypatch, clock):
+    """``clock`` pins a time whose read windows used to skip a bar's closing snapshot (a gap between windows)."""
+    if clock is not None:
+        frozen = type("Frozen", (datetime,), {"now": classmethod(lambda cls, tz=None: clock)})
+        monkeypatch.setattr(sys.modules[__name__], "datetime", frozen)
+        monkeypatch.setattr("hermes.data.live_feed.time.time", clock.timestamp)
+        monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, tz=None: pd.Timestamp(clock)))
+    CALLS.clear()
     day = datetime.now(UTC).date() - timedelta(days=2)
     arch = BinanceArchive(
         tmp_path,

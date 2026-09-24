@@ -466,6 +466,15 @@ function positionsList(D) {
     <div class="phead"><span></span><span>Contrat</span><span class="r">Taille</span><span class="r">P&L latent</span></div>
     <div class="plist">${body}</div></div>`;
 }
+function driftText(r) {
+  if (r.psi_error === 1) return "Le contrôle a échoué à cette bougie (voir le journal) ; le trading continue.";
+  if (!fin(r.psi_max)) return "Pas encore lu : il faut une journée de données entièrement chauffées.";
+  const unseen = r.psi_unseen > 0 ? num(r.psi_unseen, 0) + " variable(s) avec des valeurs jamais vues à l'entraînement (manquantes ou très hors plage : défaut de données probable). " : "";
+  if (r.psi_calibrated !== 1) return unseen + "Seuils de dérive non calibrés pour ce modèle (modèle antérieur à la calibration ou historique d'entraînement trop court) : seules les valeurs jamais vues sont signalées.";
+  const market = r.psi_market !== 1 ? "Variables de marché pas encore lues (une semaine d'historique chauffé)."
+    : r.psi_market_calibrated !== 1 ? "Variables de marché non calibrées pour ce modèle." : "";
+  return num(r.psi_drifted, 0) + " variable(s) au-delà de leur seuil calibré (le PSI que des fenêtres de même forme atteignaient sur le trimestre précédant le profil) ; la plus éloignée est à " + num(r.psi_ratio_max, 2) + " fois son seuil. Alerte au-delà de 10 % des variables. " + unseen + market;
+}
 function flatReason(D) {
   const ic = D.st.ic_est;
   if (D.st.halted) return "Le moteur est arrêté : " + esc(D.st.halt_reason || "");
@@ -737,7 +746,7 @@ function vRisk(D) {
     ${flag(D.st.halted, "Arrêt du moteur", D.st.halted ? esc(D.st.halt_reason || "") : "Déclenché par le drawdown d'arrêt, la perte journalière (" + pct(dl, 0) + ") ou l'interrupteur d'urgence (hermes live kill).")}
     ${flag(r.reduce_only === 1, "Réductions seulement", "Après une perte journalière ou sur données périmées : aucune position ne grossit.")}
     ${flag(fin(r.regime_scale) && r.regime_scale < 1, "Garde de régime", fin(r.regime_scale) ? "Taille ×" + num(r.regime_scale, 2) + " quand BTC est à plus de " + pct((s.regime_gate || {}).drawdown, 0) + " sous son plus haut de " + esc((s.regime_gate || {}).lookback_days || 90) + " j." : "Désactivée pour ce modèle.")}
-    ${flag(r.psi_drifted > 0, "Dérive des variables", "PSI max " + num(r.psi_max, 2) + " (alerte au-delà de 0,25) : les données en direct ressemblent-elles à l'entraînement ?")}
+    ${flag(r.psi_alert === 1, "Dérive des variables", driftText(r))}
     <div class="stats" style="border-top:1px solid var(--line)">
      <div><div class="label">Budget de risque</div><div class="v">${pct(r.budget, 0)}</div><div class="x">selon le drawdown</div></div>
      <div><div class="label">Facteur ES</div><div class="v">×${num(r.es_scale, 2)}</div><div class="x">1 = pas de réduction</div></div>

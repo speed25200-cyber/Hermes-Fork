@@ -103,10 +103,23 @@ Il affiche aussi deux contrôles de qualité :
   de la bougie), pondéré par le notionnel, en points de base, frais exclus ; il inclut la base Binance/OKX.
   Le backtest suppose environ le demi-spread plus l'impact : un écart durablement supérieur signale une
   exécution plus chère que modélisée ;
-- **dérive des variables** (PSI) : distribution des variables des membres sur les dernières 24 h comparée
-  à celle des 90 derniers jours d'entraînement (profil stocké dans le modèle). Au-delà de 0,25 sur plus de
-  10 % des variables, une note l'indique : changement de régime ou problème de données. Simple alerte,
-  jamais une entrée de trading.
+- **dérive des variables** (PSI) : distribution des variables en direct comparée à celle des 90 derniers
+  jours d'entraînement (profil stocké dans le modèle) : les lignes des membres sur les dernières 24 h pour les
+  variables propres à chaque contrat, une ligne par bougie sur les 7 derniers jours pour les variables de
+  marché (calendrier, breadth, funding moyen : une seule valeur par bougie pour tous les contrats ; non lues
+  en bougies d'une minute). Le seuil de chaque variable est calibré à l'entraînement : le quantile 99 % du PSI
+  que ces mêmes fenêtres atteignent sur les 90 jours précédant le profil (au moins 0,25) — une référence
+  mesurée sur un trimestre passé, pas un taux de fausses alertes. Un seuil fixe prenait une variable lente ou
+  cyclique pour une dérive : 75 fausses alertes en papier, dont un PSI de 17 sur le jour de la semaine, arrondi
+  en float16 à l'entraînement et pas en direct (les lignes en direct sont désormais arrondies comme à
+  l'entraînement, et le modèle note les mêmes valeurs qu'en recherche). Au-delà du seuil sur plus de 10 % des
+  variables, une note l'indique : changement de régime ou problème de données. Une variable dont plus de la
+  moitié des valeurs est manquante là où l'entraînement n'en avait pas, ou sort de la plage d'entraînement de
+  plus que sa largeur, est signalée à part (défaut de données probable), même pour un modèle sans seuils
+  calibrés (antérieur à la calibration, ou entraîné sur trop peu d'historique : moins de 30 jours
+  disponibles avant le profil). Recalculé à chaque bougie depuis l'historique chargé (pas de mémoire à
+  reconstruire après un redémarrage). Simple alerte, jamais une entrée de trading : une erreur du contrôle
+  est journalisée et le trading continue.
 
 ## Arrêt d'urgence
 
@@ -173,7 +186,7 @@ est promue.
 | `risk.es_limit_daily` | 4 % | expected shortfall 97,5 % à un jour maximal |
 | `risk.exchange_leverage` | 5 | levier posé sur OKX (marge croisée) ; le levier *effectif* est `gross`, bien plus bas |
 | `live.capital_fraction` | 1 (0,25 en live) | part de l'équité du compte allouée à la stratégie ; drawdown et perte journalière sont mesurés sur la NAV de cette part (rendement du compte ÷ fraction), pas sur le compte dilué. Après un virement : `hermes live resume --mode <mode>` (repart de l'équité actuelle) |
-| `live.history_days` | dérivé | historique de bougies gardé en live : par défaut le préchauffage exact des variables de recherche (≈ 37 jours en 15 min, ≈ 8 jours en 1 min) |
+| `live.history_days` | dérivé | historique de bougies gardé en live : par défaut le préchauffage exact des variables de recherche plus une semaine pour le contrôle de dérive des variables de marché (un jour en 1 min) |
 
 ## Sécurité
 

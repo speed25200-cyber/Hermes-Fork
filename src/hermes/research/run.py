@@ -161,11 +161,39 @@ def train_final(
         market = RidgeModel(LinearConfig(alpha=3000.0)).fit(
             TrainData(ds.market_X[ok], ds.market_y[ok], np.zeros(len(ok), dtype=np.int64))
         )
-    # Reference distribution of the features for train/serve drift checks (most recent 90 days of training).
-    from hermes.models.drift import feature_profile
+    # Reference distribution of the features for train/serve drift checks (most recent 90 days of training),
+    # with each feature's alert threshold: the PSI that live-shaped windows of the 90 days before reach against
+    # it (one day of member rows; a week, one row a bar, for market-level features), so a slow or cyclical
+    # feature is not read as drift by construction. Rows still inside the features' warm-up are left out.
+    from hermes.features.library import feature_warmup_bars
+    from hermes.models.drift import DRIFT_MARKET_DAYS, feature_profile, null_quantiles
 
     recent = np.nonzero((ds.t_pos < last) & (ds.t_pos >= last - cfg.days(90)))[0]
     profile = feature_profile(ds.X[recent], ds.feature_names) if len(recent) else {}
+    start = max(last - cfg.days(180), feature_warmup_bars(cfg))
+    calib = np.nonzero((ds.t_pos < last - cfg.days(90)) & (ds.t_pos >= start))[0]
+    market_level = set(ds.market_names)
+    windows = {"contract_bars": cfg.bars_per_day, "market_bars": cfg.days(DRIFT_MARKET_DAYS)}
+    thresholds = null_quantiles(
+        profile,
+        ds.X[calib],
+        ds.t_pos[calib],
+        ds.feature_names,
+        market_level,
+        windows["contract_bars"],
+        windows["market_bars"],
+        min_span_bars=cfg.days(30),
+        stride=max(1, cfg.bars_per_day // 12),
+    )
+    for name, v in thresholds.items():
+        profile[name]["null_q99"] = [v]
+    drift_windows = {
+        **windows,
+        "contract": any(k not in market_level for k in thresholds),
+        "market": any(k in market_level for k in thresholds),
+    }
+    if profile and not (drift_windows["contract"] and drift_windows["market"]):
+        log.warning("drift thresholds not calibrated for every feature class (training history too short)")
     return ModelBundle(
         config=cfg,
         feature_names=ds.feature_names,
@@ -185,6 +213,7 @@ def train_final(
             "val_ic": ics,
             "evaluation": evaluation,
             "feature_profile": profile,
+            "drift_windows": drift_windows,
             **(extra_meta or {}),
         },
     )

@@ -308,7 +308,9 @@ class BinanceLiveFeed:
         """5-minute positioning snapshots from ``start_ms``, indexed by the archives' create_time.
 
         Binance answers a range of more than 500 snapshots with the *latest* 500, so the history is read in
-        bounded windows of 500 (startTime and endTime), advancing by the window whatever a page holds."""
+        bounded windows of 500 (startTime and endTime), advancing by the window whatever a page holds. The
+        windows are contiguous: the start is off the 5-minute grid, and stepping a whole snapshot past a window's
+        end skipped the one grid snapshot in between, a bar's closing value every ~41 h one time in six."""
         path, key = POSITIONING[field]
         now_ms = int(time.time() * 1000)
         values: dict[int, float] = {}
@@ -322,7 +324,7 @@ class BinanceLiveFeed:
                 )
             for r in rows or []:
                 values[int(r["timestamp"]) - API_STAMP_LAG_MS] = float(r[key])
-            s = e + SNAPSHOT_MS
+            s = e + 1
         if not values:
             return pd.Series(dtype=float)
         idx = pd.to_datetime(list(values), unit="ms", utc=True)

@@ -107,6 +107,56 @@ def test_psi_flags_a_shifted_feature_and_not_a_stable_one():
     assert out["stable"] < 0.05 and out["shifted"] > 0.25
 
 
+def test_drift_thresholds_are_calibrated_on_the_live_windows():
+    """A fixed 0.25 misreads slow and cyclical features on short windows (75 false alarms in paper): each
+    feature's threshold is the PSI unchanged data reaches on the same windows; a real shift and a broken
+    feature are still flagged, and a bundle profiled before calibration gets no drift verdict."""
+    from hermes.models.drift import drift_report, feature_profile, null_quantiles
+
+    r = np.random.default_rng(3)
+    bpd, members, days = 48, 20, 180
+    T = bpd * days
+    t_pos = np.repeat(np.arange(T), members)
+    slow = np.zeros(T)
+    phi = 0.5 ** (1 / (3 * bpd))  # market-level AR(1), half-life 3 days
+    for i, e in enumerate(r.normal(size=T)[1:], start=1):
+        slow[i] = phi * slow[i - 1] + np.sqrt(1 - phi**2) * e
+    dow = (np.arange(T) // bpd) % 7
+    X = np.column_stack(
+        [r.normal(size=T * members), np.repeat(slow, members), np.repeat(np.cos(2 * np.pi * dow / 7), members)]
+    ).astype(np.float16)
+    names, market = ["fast", "slow", "dow_cos"], {"slow", "dow_cos"}
+    ref = t_pos >= T - 90 * bpd
+    prof = feature_profile(X[ref].astype(np.float32), names)
+    q = null_quantiles(prof, X[~ref], t_pos[~ref], names, market, bpd, 7 * bpd, min_span_bars=30 * bpd, stride=4)
+    short = t_pos < 20 * bpd  # too little history to calibrate: no thresholds rather than noisy ones
+    assert null_quantiles(prof, X[short], t_pos[short], names, market, bpd, 7 * bpd, 30 * bpd) == {}
+    assert q["fast"] < 0.1 and q["dow_cos"] < 0.25 and q["slow"] > 0.5
+
+    def windows(fast_shift=0.0, fast_value=None):
+        day = np.nonzero(t_pos >= T - bpd)[0]
+        f = X[day][:, [0]].astype(np.float32) + fast_shift
+        if fast_value is not None:
+            f[:] = fast_value
+        week = np.arange(T - 7 * bpd, T) * members  # first row of each bar
+        return [(f, ["fast"]), (X[week][:, 1:].astype(np.float32), ["slow", "dow_cos"])]
+
+    risk, notes = drift_report(prof, windows())
+    assert risk["psi_calibrated"] == 0 and risk["psi_drifted"] == 0 and not notes  # no thresholds, no verdict
+    for k, v in q.items():
+        prof[k]["null_q99"] = [v]
+    risk, notes = drift_report(prof, windows())
+    assert risk["psi_calibrated"] == 1 and risk["psi_drifted"] == 0 and not notes
+    risk, notes = drift_report(prof, windows(fast_shift=1.5))
+    assert risk["psi_drifted"] == 1 and "dérive" in notes[0] and "fast" in notes[0]
+    risk, notes = drift_report(prof, windows(fast_value=np.nan))  # a feature gone missing live
+    assert risk["psi_unseen"] == 1 and any("jamais vues" in n for n in notes) and risk["psi_alert"] == 1
+    risk, _ = drift_report(prof, windows(fast_value=1e4))  # a unit bug: far outside the training range
+    assert risk["psi_unseen"] == 1
+    risk, _ = drift_report(prof, windows(fast_shift=1.5), calibrated=False)  # windows unlike the calibration's
+    assert risk["psi_calibrated"] == 0 and risk["psi_drifted"] == 0
+
+
 def test_null_permutation_is_a_stable_derangement_within_blocks():
     import pandas as pd
 

@@ -239,24 +239,14 @@ def test_changing_capital_fraction_keeps_the_drawdown(cfg_small, tmp_path):
     assert nav2 == pytest.approx(2_375.0 * 0.96)
 
 
-def test_drift_warning_and_implementation_shortfall(cfg_small, tmp_path):
+def test_implementation_shortfall(cfg_small, tmp_path):
     from hermes.execution.broker import Fill
-    from hermes.live.engine import Decision
-    from hermes.models.drift import feature_profile
 
-    r = np.random.default_rng(0)
-    names = ["a", "b"]
-    bundle = type("B", (), {"meta": {"feature_profile": feature_profile(r.normal(size=(20_000, 2)), names)}})()
-    bundle.feature_names = names
+    bundle = type("B", (), {"meta": {}})()
+    bundle.feature_names = []
     eng = LiveEngine(
         cfg_small, bundle, None, PaperBroker(tmp_path / "a.json", 1e4, 0, 0), StateStore(tmp_path / "s"), "paper"
     )
-    ts = pd.Timestamp("2026-01-01", tz="UTC")
-    d = Decision(ts=str(ts), equity=1.0, stale=False, n_members=0, ic_est=0.0)
-    for k in range(40):
-        x = np.column_stack([r.normal(size=30), r.normal(2.0, 1.0, size=30)])  # feature b has moved
-        eng._check_drift(ts + pd.Timedelta(minutes=15 * k), x, d)
-    assert d.risk["psi_drifted"] >= 1 and any("dérive" in n for n in d.notes)
     fills = [
         Fill("BTCUSDT", "buy", 1.0, 101.0, 0.0, True, notional=101.0),
         Fill("ETHUSDT", "sell", -1.0, 9.9, 0.0, False, notional=9.9),
@@ -490,6 +480,33 @@ def test_a_multi_book_champion_installs_and_hot_reloads(cfg_small, tmp_path):
     os.utime(champion / "bundle.json", (later, later))
     assert eng.maybe_reload_bundle() is True
     assert len(eng.book_settings) == 2 and len(eng.book_constructors) == 2
+
+
+@pytest.mark.slow
+def test_live_rows_are_rounded_like_training_and_drift_is_read_on_calibrated_windows(cfg_small, tmp_path):
+    """The models score float16-rounded rows, as they were fit on (float32 rows had sent a calendar feature
+    below its lowest training edge: a PSI of 17 in paper); drift reads the last day of member rows and a week
+    of market rows against per-feature thresholds, recomputed from the panel so a restart needs no memory."""
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path)
+    seen: list[np.ndarray] = []
+    score = bundle.score
+    bundle.score = lambda X, g: (seen.append(np.array(X)), score(X, g))[1]
+    assert not bundle.meta["drift_windows"]["contract"]  # 45 days of training: too short to calibrate
+    for p in bundle.meta["feature_profile"].values():
+        p["null_q99"] = [1.0]
+    bundle.meta["drift_windows"] = {"contract_bars": 96, "market_bars": 96 * 7, "contract": True, "market": True}
+    eng = LiveEngine(cfg, bundle, None, broker, store, mode="paper")
+    d = eng.decide(panel.iloc(slice(96 * 5, 96 * 58)), {}, 10_000.0)
+    X = seen[-1]
+    assert X.dtype == np.float32 and np.array_equal(X, X.astype(np.float16).astype(np.float32), equal_nan=True)
+    assert d.risk["psi_market"] == 1 and d.risk["psi_calibrated"] == 1 and d.risk["psi_market_calibrated"] == 1
+    assert d.risk["psi_unseen"] == 0 and not any("jamais vues" in n for n in d.notes)
+    short = eng.decide(panel.iloc(slice(96 * 28, 96 * 58)), {}, 10_000.0)  # under warm-up + a week: not read
+    assert short.risk["psi_market"] == 0 and "psi_max" not in short.risk
+    # A monitoring failure (here a malformed threshold) is logged and never stops the book.
+    next(iter(bundle.meta["feature_profile"].values()))["null_q99"] = ["not a number"]
+    broken = eng.decide(panel.iloc(slice(96 * 5, 96 * 58)), {}, 10_000.0)
+    assert broken.risk["psi_error"] == 1 and broken.targets == d.targets
 
 
 def test_sub_books_drift_with_prices_and_follow_the_real_positions(cfg_small, tmp_path):

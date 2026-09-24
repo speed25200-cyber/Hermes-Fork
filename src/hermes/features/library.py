@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import ndtri
 
-from hermes.config import BAR_MINUTES, FeatureConfig, bars_for
+from hermes.config import BAR_MINUTES, FeatureConfig, HermesConfig, bars_for
 from hermes.data.panel import Panel
 
 EPS = 1e-12
@@ -82,6 +82,16 @@ def rolling_beta(returns: pd.DataFrame, mkt: pd.Series, halflife: int) -> pd.Dat
     n_obs = returns.notna().astype(float).rolling(4 * halflife, min_periods=1).sum()
     w = (n_obs / (n_obs + halflife)).clip(0, 1)
     return (w * beta + (1 - w) * 1.0).clip(-1.0, 4.0)
+
+
+def feature_warmup_bars(cfg: HermesConfig) -> int:
+    """Bars of history after which every feature equals its research value."""
+    f = cfg.features
+    return 2 * cfg.bars(f.max_lookback_minutes) + 8 * cfg.bars(f.vol_halflife_minutes)
+
+
+# Precision of the stored feature rows the models are fit on (research dataset); live rows are rounded the same way.
+STORAGE_DTYPE = np.float16
 
 
 @dataclass
