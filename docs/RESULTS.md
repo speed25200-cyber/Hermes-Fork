@@ -424,7 +424,7 @@ tout (31 variables criblées au total, t de 3 ≈ p corrigée 0,08) :
 | `depth_adv_2pct` | log(profondeur totale à ±2 %, moyenne 1 jour / volume échangé sur 1 jour) |
 | `depth_chg_7d` | variation sur 7 jours du log de la profondeur totale à ±2 % (moyenne 1 jour) |
 
-## 15. Pré-enregistrement : choisir le réglage du livre sur le passé seulement (24 septembre 2026, 01 h 40 UTC)
+## 15. Pré-enregistrement : choisir le réglage du livre sur le passé seulement (24 septembre 2026, 01 h 20 UTC)
 
 Dans les quatre derniers essais sur 30 contrats (`sres` corrigé, V1, V2, `sres_pos`), la grille de construction
 place toujours en tête la détention 8 h avec une faible aversion aux coûts (Sharpe 1,55 à 1,70) ; le réglage
