@@ -238,6 +238,62 @@ def positive_year_fraction(daily: pd.Series, min_days: int = 90) -> float:
     return float(((use["prod"] - 1) > 0).mean())
 
 
+def walk_forward_selection(
+    grid_daily: pd.DataFrame,
+    default: pd.Series,
+    lookback_days: int = 365,
+    min_days: int = 180,
+    switch_cost: float = 0.001,
+    default_key: str | None = None,
+) -> dict[str, object]:
+    """Construction settings chosen month by month from the past only (nested selection over the grid).
+
+    At the first day of each calendar month, the grid column with the best Sharpe over the ``lookback_days``
+    days strictly before that day is traded for the whole month; until ``min_days`` of grid history exist, the
+    configured book (``default``) is traded. A change of setting pays ``switch_cost`` (fraction of capital) on
+    the month's first day, an upper bound on rebuilding the book (2 x gross 0.5 x 10 bp). Rules fixed before
+    any result (RESULTS § 15); a diagnostic next to the gate, never a substitute for it. ``default_key`` names the
+    grid column that is the configured book itself (choosing it is no switch)."""
+    g = grid_daily.sort_index()
+    base = default.reindex(g.index.union(default.index)).sort_index()
+    days = base.index
+    out = pd.Series(np.nan, index=days)
+    choices: dict[str, str] = {}
+    prev = "default"
+    switches = 0
+    months = days.tz_localize(None).to_period("M") if days.tz is not None else days.to_period("M")
+    for month_start, month_days in pd.Series(days, index=days).groupby(months):
+        first = month_days.index[0]
+        past = g.loc[(g.index < first) & (g.index >= first - pd.Timedelta(days=lookback_days))].dropna(how="all")
+        pick = "default"
+        if len(past) >= min_days:
+            srs = {c: sharpe(past[c].dropna().to_numpy(), 365.0) for c in past.columns}
+            pick = max(srs, key=lambda c: (srs[c], c))
+            pick = "default" if pick == default_key else pick
+        r = (base if pick == "default" else g[pick].reindex(days)).loc[month_days.index].fillna(0.0)
+        if pick != prev:
+            switches += 1
+            r.iloc[0] -= switch_cost
+        out.loc[month_days.index] = r.to_numpy()
+        choices[str(month_start)] = pick
+        prev = pick
+    out = out.dropna()
+    by_year = (1 + out).groupby(out.index.year).prod() - 1
+    eq = (1 + out).cumprod()
+    share = pd.Series(list(choices.values())).value_counts(normalize=True)
+    return {
+        "daily": out,
+        "sharpe": sharpe(out.to_numpy(), 365.0),
+        "cagr": float(eq.iloc[-1] ** (365.0 / max(len(out), 1)) - 1) if len(out) else float("nan"),
+        "max_drawdown": float((eq / eq.cummax() - 1).min()) if len(out) else float("nan"),
+        "by_year": {int(y): round(float(x), 4) for y, x in by_year.items()},
+        "switches": switches,
+        "share": {str(k): round(float(v), 3) for k, v in share.items()},
+        "choices": choices,
+        "rule": {"lookback_days": lookback_days, "min_days": min_days, "switch_cost": switch_cost},
+    }
+
+
 def _stopped_at(bt: BacktestResult) -> str | None:
     """When the main backtest stopped trading: a formal halt, or the drawdown budget falling below 5 %."""
     halt = next((str(ts) for ts, msg in bt.risk_events if msg.startswith("HALT")), None)
@@ -258,6 +314,8 @@ class Evaluation:
     null_sharpes: list[float] = field(default_factory=list)
     halted_at: str | None = None  # hard drawdown halt of the main backtest (the book stops trading)
     nohalt: dict[str, object] = field(default_factory=dict)  # diagnostic without drawdown controls
+    selection: dict[str, object] = field(default_factory=dict)  # walk-forward choice of the grid setting
+    grid_daily: pd.DataFrame = field(default_factory=pd.DataFrame)  # daily returns of every grid variant
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -271,6 +329,7 @@ class Evaluation:
             "null_sharpes": self.null_sharpes,
             "halted_at": self.halted_at,
             "nohalt": self.nohalt,
+            "selection": {k: v for k, v in self.selection.items() if k != "daily"},
         }
 
 
@@ -434,6 +493,11 @@ def evaluate(
                 "by_year": {int(y): round(float(r), 4) for y, r in by_year.items()},
             }
     grid_df = pd.DataFrame(grid_rows).set_index("config") if grid_rows else pd.DataFrame()
+    grid_all = pd.DataFrame(grid_daily).sort_index()
+    selection: dict[str, object] = {}
+    if grid_all.shape[1] >= 2:
+        own = str({"holding_horizon": cfg.portfolio.holding_horizon, "cost_aversion": cfg.portfolio.cost_aversion})
+        selection = walk_forward_selection(grid_all, daily, default_key=own if own in grid_all else None)
 
     # --- statistics -----------------------------------------------------------------------------------------
     d = daily.to_numpy()
@@ -524,8 +588,10 @@ def evaluate(
         null_sharpes=[round(x, 3) for x in null_sr],
         halted_at=_stopped_at(bt),
         nohalt=nohalt,
+        selection=selection,
+        grid_daily=grid_all,
     )
     return ev, bt
 
 
-__all__ = ["Evaluation", "block_permute", "cs_zscore", "evaluate", "make_signal"]
+__all__ = ["Evaluation", "block_permute", "cs_zscore", "evaluate", "make_signal", "walk_forward_selection"]

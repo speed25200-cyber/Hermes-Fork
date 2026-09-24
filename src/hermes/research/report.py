@@ -68,6 +68,10 @@ def write_report(
     )
     eq = pd.DataFrame({"return": daily, "equity": (1 + daily).cumprod()}).join(stats_daily)
     eq.to_csv(out / "equity_daily.csv", float_format="%.6g")
+    if len(ev.grid_daily):
+        ev.grid_daily.to_csv(out / "grid_daily.csv", float_format="%.6g")
+    if isinstance(ev.selection.get("daily"), pd.Series):
+        ev.selection["daily"].rename("return").to_csv(out / "selection_daily.csv", float_format="%.6g")
     if wf.feature_importance is not None:
         wf.feature_importance.to_csv(out / "feature_importance.csv", header=["gain_share"])
     (out / "folds.json").write_text(json.dumps(wf.folds, indent=1))
@@ -258,6 +262,24 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
                 f"{_num(row['turnover'], 0)} |"
             )
         L.append("")
+    sel = ev.selection
+    if sel:
+        rule = sel.get("rule", {})
+        years = " ; ".join(f"{y} : {_pct(r)}" for y, r in sel.get("by_year", {}).items())
+        share = ", ".join(f"`{k}` {100 * v:.0f} %" for k, v in sel.get("share", {}).items())
+        L += [
+            "### Sélection du réglage en walk-forward (diagnostic, hors porte)",
+            "",
+            f"Chaque mois, le réglage de la grille au meilleur Sharpe sur les {rule.get('lookback_days')} jours "
+            f"précédents (passé seulement ; réglage configuré tant que {rule.get('min_days')} jours d'historique "
+            f"manquent), {_pct(rule.get('switch_cost'))} du capital payé à chaque changement :",
+            "",
+            f"- Sharpe {_num(sel.get('sharpe'))}, CAGR {_pct(sel.get('cagr'))}, drawdown max "
+            f"{_pct(sel.get('max_drawdown'))}, {sel.get('switches')} changements ;",
+            f"- par année : {years} ;",
+            f"- mois par réglage : {share}.",
+            "",
+        ]
     if wf.feature_importance is not None:
         top = wf.feature_importance.head(15)
         L += [

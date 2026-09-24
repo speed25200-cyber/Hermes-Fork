@@ -424,4 +424,25 @@ tout (31 variables criblées au total, t de 3 ≈ p corrigée 0,08) :
 | `depth_adv_2pct` | log(profondeur totale à ±2 %, moyenne 1 jour / volume échangé sur 1 jour) |
 | `depth_chg_7d` | variation sur 7 jours du log de la profondeur totale à ±2 % (moyenne 1 jour) |
 
+## 15. Pré-enregistrement : choisir le réglage du livre sur le passé seulement (24 septembre 2026, 01 h 40 UTC)
+
+Dans les quatre derniers essais sur 30 contrats (`sres` corrigé, V1, V2, `sres_pos`), la grille de construction
+place toujours en tête la détention 8 h avec une faible aversion aux coûts (Sharpe 1,55 à 1,70) ; le réglage
+officiel, détention 24 h et aversion 2 (0,79 à 1,10), fixé avant tout résultat, est parmi les moins bons de ses
+voisins. **Changer le réglage après avoir vu ce tableau serait du sur-ajustement** (le § 6 l'a montré). La réponse
+propre est de laisser le système choisir lui-même, mois après mois, **avec le seul passé** : c'est ce que mesure la
+PBO, mais sans en tirer un livre. Règle fixée ici, avant tout calcul :
+
+- le premier jour de chaque mois, le réglage de la grille (3 horizons × 3 aversions, inchangée) dont le Sharpe
+  quotidien est le meilleur sur les 365 jours **précédents** est tradé tout le mois ;
+- tant que la grille a moins de 180 jours d'historique hors échantillon, le réglage configuré est tradé ;
+- chaque changement de réglage paie 0,1 % du capital (reconstruction complète d'un livre brut de 0,5 à 10 pb) ;
+- mesure : Sharpe, CAGR, drawdown et années de la série obtenue, **diagnostic à côté de la porte**, avec le même
+  livre de référence (`research_30m_xl_lb_sres`, relancé tel quel pour enregistrer les rendements quotidiens de
+  la grille). L'idée de ce test vient d'avoir vu la grille : il compte comme un essai de plus.
+
+Décision fixée d'avance : si la sélection bat le réglage fixe sur le Sharpe **et** sur 2026, elle devient une
+variante candidate (moteur à adapter, puis papier) ; sinon le réglage fixe reste, et l'écart de la grille est
+attribué au hasard du choix.
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.
