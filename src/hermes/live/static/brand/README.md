@@ -1,0 +1,7 @@
+# HERMES · Symmetry (version finale)
+
+**Concept.** Deux chevrons identiques en miroir : le Λ (le long) au-dessus, le V (le short) en dessous, séparés par la ligne zéro, c'est-à-dire l'exposition nette nulle d'un livre neutre au marché. Ensemble, ils forment un H facetté qui sert à la fois de monogramme, de bijou et de schéma long/short.
+**Construction.** Sur une grille de 64, l'encre tient dans un carré centré de 56 × 56. Flancs 1:3, jambes de 12, barres de 6, coupe de 4. Toutes les horizontales tombent sur des unités paires, donc nettes à 32 px. Des masters calés au pixel couvrent 16 px (favicon, ligne zéro sur un seul rang) et 24 px.
+**Couleur et typographie.** L'or champagne est éclairé depuis la ligne zéro (#f6e6c0 → #b08a46), de façon symétrique pour que le long et le short aient le même éclat. Jusqu'à 32 px, aplat #dcbb7a. Sur blanc, or profond (#8a6627, contraste ≥ 3,5:1). Le mot-symbole est en Inter 500, ivoire #ece4d3 (graphite #16161a sur blanc), avec un espacement optique et centré sur la ligne zéro.
+**Règles.** La ligne zéro doit toujours rester visible, et la coupe ne doit jamais être plus large qu'une barre. Jamais sur fond orange, fauve, marron ou cuir, jamais en relief ni dans un cercle, jamais avec une serif ou un « È ».
+**Usage.** `favicon.svg` pour l'onglet, `mark-16` / `mark-24` pour l'interface, `mark-flat` à 32 px (barre du dashboard), `mark.svg` à partir de 48 px, `lockup*.svg`, et `dashboard-logo.html` pour l'intégration.

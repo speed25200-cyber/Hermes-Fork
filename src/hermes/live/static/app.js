@@ -802,7 +802,8 @@ function vInactive(mode) {
   const el = $("#v-inactive");
   const live = mode === "live";
   el.innerHTML = `<div class="panel"><div class="hero">
-   <div><span class="mode-badge ${live ? "live" : ""}">${esc(MODE_LABEL[mode] || mode).toUpperCase()} · INACTIF</span>
+   <div><img class="hero-mark on-dark" src="static/brand/mark.svg" alt="" width="56" height="56"><img class="hero-mark on-light" src="static/brand/mark-light.svg" alt="" width="56" height="56">
+    <span class="mode-badge ${live ? "live" : ""}">${esc(MODE_LABEL[mode] || mode).toUpperCase()} · INACTIF</span>
     <h1>${live ? "Aucun argent réel n'est engagé." : "Aucun moteur ne tourne dans ce mode."}</h1>
     ${live ? `<p>Le mode réel est verrouillé par construction : le moteur refuse de démarrer avec un modèle qui n'a pas franchi <b>tous</b> les critères de la porte de promotion, et l'activer reste une décision humaine explicite.</p>
     <p>Le modèle actuel est en incubation en papier : il décide à chaque bougie sur les vrais prix, sans argent réel, pour vérifier que son avantage tient sur des données jamais vues.</p>` : `<p>Ce mode n'a encore publié aucun état.</p>`}

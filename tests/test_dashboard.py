@@ -79,6 +79,10 @@ def test_snapshot_modes_and_static(server):
     assert _get(server + "/api/snapshot?mode=../../etc", AUTH)[0] == 400
     for f in ("app.js", "app.css", "vendor/lightweight-charts.js", "fonts/inter-latin-wght-normal.woff2"):
         assert _get(server + "/static/" + f, AUTH)[0] == 200, f
+    for f, ctype in (("brand/favicon.svg", "image/svg+xml"), ("brand/mark.svg", "image/svg+xml"),
+                     ("brand/apple-touch-icon.png", "image/png")):  # fmt: skip
+        code, body, headers = _get(server + "/static/" + f, AUTH)
+        assert code == 200 and headers["Content-Type"] == ctype and body, f
     assert _get(server + "/static/../dashboard.py", AUTH)[0] == 404
 
 

@@ -9,7 +9,7 @@
   --line:rgba(255,255,255,.065);--line-2:rgba(255,255,255,.11);--line-3:rgba(255,255,255,.2);
   --ink:#ededee;--ink-2:#a3a3aa;--mute:#80808a;--faint:#4b4b52;
   --accent:#d4b06a;--accent-2:#b8914a;--accent-3:#f3dfae;--accent-soft:rgba(212,176,106,.11);--accent-line:rgba(212,176,106,.38);
-  --gold:linear-gradient(135deg,#f3dfae 0%,#d4b06a 48%,#9c7632 100%);
+  --gold:linear-gradient(135deg,#f3dfae 0%,#d4b06a 48%,#9c7632 100%);--mark:#dcbb7a;--brand-ink:#ece4d3;
   --long:#25d695;--short:#f0465a;--long-soft:rgba(37,214,149,.11);--short-soft:rgba(240,70,90,.11);
   --s1:#4a8ff0;--s2:#e2692f;--s3:#1fa97a;--band:rgba(74,143,240,.35);
   --good:#25d695;--warn:#ff8f3a;--crit:#ff5a5f;--warn-soft:rgba(255,143,58,.11);--crit-soft:rgba(255,90,95,.11);
@@ -25,7 +25,7 @@
   --line:rgba(20,18,12,.075);--line-2:rgba(20,18,12,.13);--line-3:rgba(20,18,12,.22);
   --ink:#131314;--ink-2:#4d4d55;--mute:#6b6b73;--faint:#a6a6ad;
   --accent:#8f6b24;--accent-2:#75561a;--accent-3:#b8914a;--accent-soft:rgba(143,107,36,.09);--accent-line:rgba(143,107,36,.35);
-  --gold:linear-gradient(135deg,#e9cf8f 0%,#b8914a 50%,#7d5c1f 100%);
+  --gold:linear-gradient(135deg,#e9cf8f 0%,#b8914a 50%,#7d5c1f 100%);--mark:#8a6627;--brand-ink:#16161a;
   --long:#08784d;--short:#c9333a;--long-soft:rgba(8,120,77,.08);--short-soft:rgba(201,51,58,.08);
   --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--band:rgba(42,120,214,.35);
   --good:#0a8f5c;--warn:#c2410c;--crit:#d92d3a;--warn-soft:rgba(194,65,12,.08);--crit-soft:rgba(217,45,58,.07);
@@ -47,9 +47,12 @@ a{color:var(--accent)}
   background:color-mix(in srgb,var(--bg) 78%,transparent);border-bottom:1px solid var(--line)}
 .top-in{max-width:1680px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 20px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0}
-.logo{width:34px;height:34px;display:grid;place-items:center;flex:none}
-.logo svg{width:34px;height:34px;display:block;filter:drop-shadow(0 6px 14px rgba(212,176,106,.22))}
-.brand b{font-weight:650;letter-spacing:.32em;font-size:13px;background:var(--gold);-webkit-background-clip:text;background-clip:text;color:transparent}
+/* Marque « Symmetry » : Λ (long) au-dessus, V (short) en dessous, séparés par la ligne zéro (exposition nette nulle).
+   À 32 px, 1 px = 2 unités de grille : arêtes et ligne zéro tombent sur des pixels entiers. Aplat, sans ombre portée
+   (elle brouille la ligne zéro) ; le dégradé est réservé aux tailles ≥ 48 px (static/brand/mark.svg). */
+.logo{width:32px;height:32px;display:block;flex:none}
+.logo svg{width:32px;height:32px;display:block;fill:var(--mark)}
+.brand b{display:block;font-weight:600;letter-spacing:.26em;font-size:13px;color:var(--brand-ink)}
 .brand small{display:block;color:var(--mute);font-size:10.5px;letter-spacing:.04em;margin-top:-1px}
 .seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:3px;gap:2px}
 .seg button{border:0;background:transparent;padding:6px 12px;border-radius:8px;cursor:pointer;color:var(--ink-2);
@@ -264,6 +267,9 @@ kbd{font:600 10px var(--mono);padding:1px 5px;border:1px solid var(--line-2);bor
 .ev .lvl.ERROR{color:var(--crit)}.ev .lvl.WARNING{color:var(--warn)}.ev .lvl.INFO{color:var(--ink-2)}
 .ev .msg{color:var(--ink);overflow-wrap:anywhere}
 .hero{padding:34px 28px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px}
+.hero-mark{display:block;width:56px;height:56px;margin:0 0 18px}
+.hero-mark.on-light,:root[data-theme="light"] .hero-mark.on-dark{display:none}
+:root[data-theme="light"] .hero-mark.on-light{display:block}
 @media (max-width:980px){.hero{grid-template-columns:1fr}}
 .hero h1{font-size:22px;margin:10px 0 8px;letter-spacing:-.01em}
 .hero p{color:var(--ink-2);margin:0 0 10px;max-width:70ch}
@@ -273,6 +279,9 @@ kbd{font:600 10px var(--mono);padding:1px 5px;border:1px solid var(--line-2);bor
 .steps .n{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font:700 11px var(--mono);flex:none}
 .foot{max-width:1680px;margin:0 auto;padding:6px 20px 28px;color:var(--mute);font-size:11px;display:flex;gap:16px;flex-wrap:wrap}
 .foot a{color:var(--mute)}
+.foot-brand{display:inline-flex;align-items:center;gap:7px;color:var(--ink-2);font-weight:600;letter-spacing:.22em;text-transform:uppercase;font-size:10px}
+/* Master calé au pixel pour 16 px : la ligne zéro occupe exactement un rang. */
+.foot-mark{width:16px;height:16px;fill:var(--mark);flex:none}
 .skeleton{background:linear-gradient(90deg,var(--hover),transparent,var(--hover));background-size:200% 100%;animation:sk 1.4s linear infinite;border-radius:6px;height:14px}
 @keyframes sk{to{background-position:-200% 0}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -299,4 +308,3 @@ details.tbl summary{cursor:pointer;color:var(--mute);font-size:11.5px;padding:10
 .tfs button[aria-pressed="true"]{color:var(--accent-3);background:var(--accent-soft)}
 :root[data-theme="light"] .tfs button[aria-pressed="true"]{color:var(--accent-2)}
 .mode-badge.paper{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
-.foot .mark{width:14px;height:14px;vertical-align:-2px;color:var(--accent)}

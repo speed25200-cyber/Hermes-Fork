@@ -5,13 +5,14 @@
 <title>Hermes — terminal</title>
 <link rel="preload" href="static/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" type="image/svg+xml" href="static/brand/favicon.svg">
+<link rel="apple-touch-icon" href="static/brand/apple-touch-icon.png">
 <link rel="stylesheet" href="static/app.css">
 </head><body>
 <header class="top">
  <div class="top-in">
   <div class="brand">
-   <div class="logo" aria-hidden="true"><!--logo--><svg viewBox="0 0 64 64"><defs><linearGradient id="hl-gold" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f3dfae"/><stop offset=".42" stop-color="#dcbb7a"/><stop offset=".7" stop-color="#c79d57"/><stop offset="1" stop-color="#9c7632"/></linearGradient></defs><path fill="url(#hl-gold)" d="M8 4 20 11 20 16 8 9ZM44 11 56 4 56 9 44 16ZM8 12 20 19 20 33 56 12 56 60 44 60 44 31 20 45 20 60 8 60Z"/></svg><!--/logo--></div>
-   <div><b>HERMES</b><small>perpétuels crypto · long / short</small></div>
+   <div class="logo" aria-hidden="true"><!--logo--><svg viewBox="0 0 64 64" width="32" height="32" focusable="false"><path d="M12.667 4H24.667L18 24H46L39.333 4H51.333L60 30H4Z"/><path d="M12.667 60H24.667L18 40H46L39.333 60H51.333L60 34H4Z"/></svg><!--/logo--></div>
+   <div><b>HERMES</b><small>Quant long / short · perpétuels crypto</small></div>
   </div>
   <div class="seg" role="tablist" aria-label="Mode" id="modes"></div>
   <div class="status" id="status" aria-live="polite"></div>
@@ -34,6 +35,7 @@
  <section class="view" id="v-inactive"></section>
 </main>
 <footer class="foot">
+ <span class="foot-brand"><svg class="foot-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 1H6L4.333 6H11.667L10 1H13L15 7H1Z"/><path d="M3 14H6L4.333 9H11.667L10 14H13L15 8H1Z"/></svg>Hermes</span>
  <span>Lecture seule : cette page ne peut passer, modifier ni annuler aucun ordre.</span>
  <span>Heures en UTC · rafraîchissement toutes les 20 s · raccourcis <kbd>1</kbd>…<kbd>8</kbd> sections, <kbd>t</kbd> thème.</span>
  <span>Graphiques : <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView Lightweight Charts™</a>, © TradingView, Inc. (Apache 2.0).</span>
