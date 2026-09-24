@@ -43,6 +43,28 @@ def test_two_identical_sub_books_are_the_single_book(market):
     np.testing.assert_allclose(both.stats["gross"].to_numpy(), single.stats["gross"].to_numpy(), atol=1e-9)
 
 
+def test_each_sub_book_keeps_its_own_positions(market):
+    """One live sub-book and one silent one (IC 0) hold half of the single book: each sub-book is re-optimised from
+    its own positions on its own capital share, and follows its own symbols' overlay ratios (an equal split of the
+    sum, or sub-books starting from the whole book, would give the silent one half the positions)."""
+    from dataclasses import replace
+
+    cfg, ds, score, prior, oos = market
+    sig = make_signal(score, ds, prior, cfg)
+    silent = replace(sig, ic_est=sig.ic_est * 0.0)
+    single = run_backtest(ds.panel, ds.mask, ds.feats.aux, sig, cfg, start=oos, record_weights=True)
+    duo = run_backtest(
+        ds.panel, ds.mask, ds.feats.aux, BookSignals([(cfg.portfolio, sig), (cfg.portfolio, silent)]), cfg,
+        start=oos, record_weights=True,
+    )  # fmt: skip
+    Ws, Wd = single.weights.to_numpy(), duo.weights.to_numpy()
+    gross = np.abs(Ws).sum(axis=1)
+    live = gross > 0.05
+    ratio = np.abs(Wd).sum(axis=1)[live] / gross[live]
+    assert 0.4 < np.median(ratio) < 0.6
+    assert np.median(np.abs(2 * Wd - Ws).sum(axis=1)[live] / gross[live]) < 0.2
+
+
 def test_one_over_n_book_nets_its_trades(market):
     cfg, ds, score, prior, oos = market
     H = sorted(ds.targets.residual)

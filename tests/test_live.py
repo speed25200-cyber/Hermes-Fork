@@ -414,3 +414,37 @@ def test_live_engine_refuses_a_multi_book_model_until_it_can_trade_it(cfg_small,
     multi = cfg.model_copy(update={"portfolio": cfg.portfolio.model_copy(update={"books": one})})
     with pytest.raises(ValueError, match=r"portfolio\.books"):
         LiveEngine(multi, bundle, FakeFeed(panel, 96 * 30 + 4, 96 * 20), broker, store, mode="paper")
+
+
+def test_a_multi_book_champion_is_refused_at_install_and_on_hot_reload(cfg_small, tmp_path):
+    """A 1/N bundle (portfolio.books) must never become a champion the engine then refuses to start: the install
+    is refused, and a hot reload keeps the running model without restarting (even when the feed would change)."""
+    import os
+
+    from typer.testing import CliRunner
+
+    from hermes.cli import app
+    from hermes.config import BookSetting
+    from hermes.models.bundle import ModelBundle
+
+    panel, bundle, broker, store, cfg = _engine(cfg_small, tmp_path, panel_bars=96 * 30)
+    champion = tmp_path / "champion"
+    bundle.save(champion)
+    books = (BookSetting(holding_horizon=4, cost_aversion=1),)
+    multi_cfg = bundle.config.model_copy(
+        update={"portfolio": bundle.config.portfolio.model_copy(update={"books": books, "cov_halflife_days": 40})}
+    )
+    ModelBundle(**{**bundle.__dict__, "config": multi_cfg}).save(tmp_path / "multi")
+
+    res = CliRunner().invoke(app, ["model", "install", str(tmp_path / "multi"), "--to", str(champion)])
+    assert res.exit_code == 2 and not (tmp_path / "champion.previous").exists()
+    assert not ModelBundle.load(champion).config.portfolio.books
+
+    feed = FakeFeed(panel, 96 * 30 + 4, 96 * 20)
+    eng = LiveEngine(cfg, bundle, feed, broker, store, mode="paper", model_dir=champion)
+    ModelBundle(**{**bundle.__dict__, "config": multi_cfg}).save(champion)  # copied over by hand
+    later = (champion / "bundle.json").stat().st_mtime + 10
+    os.utime(champion / "bundle.json", (later, later))
+    assert eng.maybe_reload_bundle() is False  # no SystemExit for the (larger) feed it would need
+    assert not eng.cfg.portfolio.books and eng.bundle is bundle
+    assert any("refusé" in e[2] and "portfolio.books" in e[2] for e in store.recent_events())

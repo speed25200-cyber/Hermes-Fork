@@ -153,6 +153,7 @@ class LiveEngine:
         self.operator_cfg = operator_cfg
         self.overrides = overrides or {}
         if cfg.portfolio.books:
+            store.event("ERROR", f"démarrage refusé : {BOOKS_UNSUPPORTED}")
             raise ValueError(BOOKS_UNSUPPORTED)
         self._set_config(cfg)
         rs = store.get("risk_state")
@@ -197,6 +198,10 @@ class LiveEngine:
             self.store.event("ERROR", f"nouveau modèle refusé : {exc}")
             self._model_mtime = m
             return False
+        if new.config.portfolio.books:  # before any check that could restart the engine on this champion
+            self.store.event("ERROR", f"nouveau modèle refusé : {BOOKS_UNSUPPORTED}")
+            self._model_mtime = m
+            return False
         if self.mode == "live" and not new.promoted and not self.cfg.live.allow_unpromoted:
             if new.meta.get("config_hash") != self.bundle.meta.get("config_hash"):
                 self.store.event("WARNING", "nouveau modèle non promu : le modèle actuel reste en service en réel")
@@ -213,10 +218,6 @@ class LiveEngine:
         ) > live_history_bars(self.cfg):
             self.store.event("WARNING", "le nouveau modèle demande un autre flux de données : redémarrage du moteur")
             raise SystemExit(3)
-        if new_cfg.portfolio.books:
-            self.store.event("ERROR", f"nouveau modèle refusé : {BOOKS_UNSUPPORTED}")
-            self._model_mtime = m
-            return False
         self.bundle, self._model_mtime = new, m
         self._set_config(new_cfg)
         set_pos = getattr(self.feed, "set_positioning", None)

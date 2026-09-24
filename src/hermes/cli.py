@@ -106,6 +106,12 @@ def model_install(
     from hermes.models.bundle import ModelBundle
 
     b = ModelBundle.load(source)  # verifies hashes
+    if b.config.portfolio.books:
+        # The live engine cannot trade a 1/N book yet: installing it would leave a champion it refuses to start.
+        from hermes.live.engine import BOOKS_UNSUPPORTED
+
+        typer.echo(f"refusé : {BOOKS_UNSUPPORTED} ; le champion actuel reste en place", err=True)
+        raise typer.Exit(2)
     if target.exists():
         backup = target.with_name(target.name + ".previous")
         shutil.rmtree(backup, ignore_errors=True)
