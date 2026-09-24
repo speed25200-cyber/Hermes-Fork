@@ -424,6 +424,27 @@ tout (31 variables criblées au total, t de 3 ≈ p corrigée 0,08) :
 | `depth_adv_2pct` | log(profondeur totale à ±2 %, moyenne 1 jour / volume échangé sur 1 jour) |
 | `depth_chg_7d` | variation sur 7 jours du log de la profondeur totale à ±2 % (moyenne 1 jour) |
 
+**Résultat (24 septembre, 03 h UTC) : aucune variable ne franchit la sélection, aucun essai n'est dépensé.**
+55 000 archives quotidiennes téléchargées sans échec (270 contrats), profondeur présente sur 99,6 % des bougies
+de l'univers ; même score de référence qu'au § 13 (IC 0,047 en sélection, 0,038 en 2026).
+
+| Variable | IC partiel 2023-25 (t) | 2024 | 2025 | 2026 (t) | Sélection |
+|---|---:|---:|---:|---:|:-:|
+| `depth_imb_1pct` | −0,004 (−0,7) | −0,016 | +0,002 | +0,010 (0,8) | ❌ |
+| `depth_imb_5pct` | −0,014 (−2,7) | −0,010 | −0,027 | −0,014 (−1,3) | ❌ (t < 3) |
+| `depth_imb_1pct_z` | −0,005 (−0,9) | +0,001 | −0,018 | −0,004 (−0,4) | ❌ |
+| `depth_imb_chg_1d` | −0,007 (−1,4) | +0,001 | −0,017 | −0,004 (−0,4) | ❌ |
+| `depth_adv_2pct` | +0,011 (2,5) | +0,009 | +0,020 | +0,008 (1,1) | ❌ (t < 3) |
+| `depth_chg_7d` | +0,007 (1,2) | +0,005 | +0,010 | +0,025 (3,5) | ❌ |
+
+Lecture : le déséquilibre du carnet près du prix (±1 %) n'annonce rien à 24 h, ce qui est attendu (son effet
+connu dure des secondes à des minutes). Deux variables gardent le même signe sur toutes les périodes sans
+atteindre le seuil : un carnet plus garni à la vente qu'à l'achat à ±5 % précède une meilleure suite (t −2,7), un
+carnet profond par rapport au volume aussi (t 2,5). Elles ne sont **pas** retenues : la règle a été fixée avant
+le résultat. `depth_chg_7d` n'est significative qu'en 2026, la période de contrôle : l'utiliser serait choisir sur
+2026. Au total, sur trois sources nouvelles (positionnement, comptant, carnet ; 31 variables), une seule variable a
+franchi la règle, et l'essai qu'elle a déclenché n'a pas fait mieux (§ 12).
+
 ## 15. Pré-enregistrement : choisir le réglage du livre sur le passé seulement (24 septembre 2026, 01 h 20 UTC)
 
 Dans les quatre derniers essais sur 30 contrats (`sres` corrigé, V1, V2, `sres_pos`), la grille de construction
@@ -444,5 +465,21 @@ PBO, mais sans en tirer un livre. Règle fixée ici, avant tout calcul :
 Décision fixée d'avance : si la sélection bat le réglage fixe sur le Sharpe **et** sur 2026, elle devient une
 variante candidate (moteur à adapter, puis papier) ; sinon le réglage fixe reste, et l'écart de la grille est
 attribué au hasard du choix.
+
+**Résultat (24 septembre, 03 h UTC) : la sélection ne franchit pas la décision fixée d'avance ; le réglage fixe
+reste.** Run `35942639721` : le livre de référence est reproduit à l'identique (Sharpe 1,096, mêmes années, 7 critères
+sur 9, DSR 0,42 avec un essai de plus au registre), ce qui vérifie au passage la reproductibilité du pipeline.
+
+| | Réglage fixe (24 h, aversion 2) | Sélection sur le passé | Meilleure ligne de la grille (a posteriori) |
+|---|---:|---:|---:|
+| Sharpe / CAGR | 1,10 / +12,6 % | **1,18** / +15,2 % | 1,62 / +21,7 % |
+| Drawdown max | **−11,0 %** | −13,7 % | −12,9 % |
+| 2023 / 2024 / 2025 / 2026 | +0,6 / +12,4 / +36,7 / **−6,8 %** | +0,6 / +9,2 / +56,1 / −9,7 % | — |
+
+La sélection a passé 71 % des mois sur la détention 8 h, avec 8 changements de réglage. Elle gagne un peu en Sharpe,
+entièrement grâce à 2025, et perd davantage en 2026 : **Sharpe mieux, 2026 moins bien, donc refusée** selon la
+règle. L'essentiel de l'écart de la grille (1,62 contre 1,10) disparaît dès qu'on choisit sans connaître l'avenir :
+c'est la mesure directe de ce que coûterait un choix fait après coup. Le code reste (diagnostic à chaque rapport,
+rendements de la grille enregistrés dans `grid_daily.csv`).
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.
