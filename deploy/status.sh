@@ -18,19 +18,17 @@ journalctl -u hermes-retrain -n 25 --no-pager 2>/dev/null | tail -25
 ls -1t /opt/hermes/reports/auto 2>/dev/null | head -3 | while read -r d; do
   echo "== rapport $d"; head -40 "/opt/hermes/reports/auto/$d/REPORT.md" 2>/dev/null
 done
-echo "== calendrier Binance (perpétuels USDT lancés depuis 14 jours, tous types)"
+echo "== calendrier Binance (12 derniers contrats USDT lancés, tous types)"
 /opt/hermes/.venv/bin/python - <<'PY' 2>&1 | tail -40
-import json, time, urllib.request
+import collections, json, time, urllib.request
 info = json.load(urllib.request.urlopen("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=20))
-now = time.time() * 1000
-rows = sorted(
-    (s["onboardDate"], s["symbol"], s.get("status"), s.get("underlyingType"))
-    for s in info["symbols"]
-    if s.get("contractType") == "PERPETUAL" and s.get("quoteAsset") == "USDT" and now - s.get("onboardDate", 0) < 14 * 864e5
-)
-for t, sym, st, ut in rows:
-    print(f"  {time.strftime('%Y-%m-%d %H:%M', time.gmtime(t / 1000))}  {sym:<16} {str(st):<16} {ut}")
-print(f"  {len(rows)} contrat(s), dont {sum(r[3] == 'COIN' for r in rows)} crypto (COIN)")
+syms = [s for s in info["symbols"] if s.get("quoteAsset") == "USDT"]
+for s in sorted(syms, key=lambda s: s.get("onboardDate", 0))[-12:]:
+    t = time.strftime("%Y-%m-%d %H:%M", time.gmtime(s.get("onboardDate", 0) / 1000))
+    print(f"  {t}  {s['symbol']:<16} {str(s.get('contractType')):<18} {str(s.get('status')):<16} {s.get('underlyingType')}")
+kinds = collections.Counter((s.get("contractType"), s.get("underlyingType")) for s in syms)
+print("  types :", ", ".join(f"{k[0]}/{k[1]} {n}" for k, n in kinds.most_common()))
+print("  heure serveur :", time.strftime("%Y-%m-%d %H:%M", time.gmtime(info.get("serverTime", 0) / 1000)))
 PY
 echo "== tableau de bord"
 systemctl --no-pager --plain list-units 'hermes-dashboard*' 2>/dev/null | head -5
