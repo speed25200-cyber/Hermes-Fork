@@ -110,3 +110,64 @@ def test_live_positioning_matches_the_archives(tmp_path, monkeypatch, clock):
     # The whole 29.5 days are read (bounded windows), not just Binance's latest 500 snapshots.
     assert held.index[0] <= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=29)
     assert len(CALLS) >= 17 and all(e - s <= 499 * STEP for s, e in CALLS)
+
+
+def test_listing_calendar_and_spot_age():
+    """Perpetual launches from exchangeInfo (USDT perpetuals trading only) and the oldest spot market's first day."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/fapi/v1/exchangeInfo":
+            sym = [
+                {
+                    "symbol": "NEWUSDT",
+                    "contractType": "PERPETUAL",
+                    "quoteAsset": "USDT",
+                    "status": "TRADING",
+                    "onboardDate": 1_790_000_000_000,
+                },
+                {
+                    "symbol": "OLDUSDC",
+                    "contractType": "PERPETUAL",
+                    "quoteAsset": "USDC",
+                    "status": "TRADING",
+                    "onboardDate": 1_700_000_000_000,
+                },
+                {
+                    "symbol": "BTCUSDT_261225",
+                    "contractType": "CURRENT_QUARTER",
+                    "quoteAsset": "USDT",
+                    "status": "TRADING",
+                    "onboardDate": 1_780_000_000_000,
+                },
+                {
+                    "symbol": "GONEUSDT",
+                    "contractType": "PERPETUAL",
+                    "quoteAsset": "USDT",
+                    "status": "SETTLING",
+                    "onboardDate": 1_780_000_000_000,
+                },
+            ]
+            return httpx.Response(200, json={"symbols": sym})
+        if request.url.path == "/api/v3/klines":
+            s = request.url.params["symbol"]
+            first = {"SPOTUSDT": 1_760_000_000_000, "SPOTBTC": 1_700_000_000_000}.get(s)
+            if first is None:
+                return httpx.Response(400, json={"code": -1121, "msg": "Invalid symbol."})
+            return httpx.Response(200, json=[[first, "1", "1", "1", "1", "1", first + 86_399_999]])
+        return httpx.Response(404)
+
+    async def run():
+        http = httpx.AsyncClient(base_url="https://fapi", transport=httpx.MockTransport(handler))
+        feed = BinanceLiveFeed("30m", history_bars=10, client=http)
+        out = (
+            await feed.perp_listings(),
+            await feed.spot_first_open("SPOTUSDT"),
+            await feed.spot_first_open("NEWUSDT"),
+        )
+        await feed.close()
+        return out
+
+    launches, spot, none = asyncio.run(run())
+    assert launches == {"NEWUSDT": 1_790_000_000_000}
+    assert spot == pd.Timestamp(1_700_000_000_000, unit="ms", tz="UTC")  # the oldest market (BTC quote)
+    assert none is None

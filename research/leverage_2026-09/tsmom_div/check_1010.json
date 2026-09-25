@@ -1,0 +1,11 @@
+{
+ "gross": 1.0134564031232136,
+ "n_okx_hourly": 18,
+ "proxy_all": -0.2597408897065949,
+ "proxy_same_coins": -0.23215229937882267,
+ "okx_hourly_mark_same_coins": -0.19786356028902513,
+ "worst_hour": "2025-10-10 21:00:00+00:00",
+ "ib_with_okx_hourly": -0.2254521506167974,
+ "maxdd_1x_proxy": 0.3565189175655543,
+ "maxdd_1x_okx_hourly_on_1010": 0.32658498804581837
+}

@@ -1,0 +1,765 @@
+{
+ "V1_notlive_exits": [
+  {
+   "day": "2022-02-26",
+   "sym": "FILUSDT",
+   "w": -0.011857348017804768,
+   "last_close": 18.902,
+   "relive": "2022-03-01",
+   "next_close": 20.956
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "FTMUSDT",
+   "w": -0.00621302320894883,
+   "last_close": 1.7203,
+   "relive": "2022-03-01",
+   "next_close": 1.829
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "LRCUSDT",
+   "w": -0.007314261164364279,
+   "last_close": 0.7768,
+   "relive": "2022-03-01",
+   "next_close": 0.8349
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "LTCUSDT",
+   "w": -0.008868793029281926,
+   "last_close": 109.17,
+   "relive": "2022-03-01",
+   "next_close": 112.57
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "LUNAUSDT",
+   "w": 0.00141999555509601,
+   "last_close": 73.019,
+   "relive": "2022-03-01",
+   "next_close": 89.611
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "MANAUSDT",
+   "w": 0.0014539537952191835,
+   "last_close": 2.7389,
+   "relive": "2022-03-01",
+   "next_close": 2.8375
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "NEARUSDT",
+   "w": -0.006821283151737273,
+   "last_close": 8.932,
+   "relive": "2022-03-01",
+   "next_close": 11.805
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "SANDUSDT",
+   "w": -0.0035890831079179687,
+   "last_close": 3.1664,
+   "relive": "2022-03-01",
+   "next_close": 3.3662
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "SOLUSDT",
+   "w": -0.009551390979866766,
+   "last_close": 92.69,
+   "relive": "2022-03-01",
+   "next_close": 98.61
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "SUSHIUSDT",
+   "w": -0.011971779738336073,
+   "last_close": 3.303,
+   "relive": "2022-03-01",
+   "next_close": 3.473
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "XRPUSDT",
+   "w": -0.001445708877691117,
+   "last_close": 0.7696,
+   "relive": "2022-03-01",
+   "next_close": 0.7836
+  },
+  {
+   "day": "2022-02-26",
+   "sym": "YFIUSDT",
+   "w": -0.01144966022771277,
+   "last_close": 20136.0,
+   "relive": "2022-03-01",
+   "next_close": 21730.0
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "FILUSDT",
+   "w": 0.01377657990596281,
+   "last_close": 24.468,
+   "relive": "2022-04-03",
+   "next_close": 25.446
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "FTMUSDT",
+   "w": -0.001239161067637664,
+   "last_close": 1.4307,
+   "relive": "2022-04-03",
+   "next_close": 1.626
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "LRCUSDT",
+   "w": 0.0064842114116379175,
+   "last_close": 1.1647,
+   "relive": "2022-04-03",
+   "next_close": 1.1876
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "LTCUSDT",
+   "w": 0.008320359598946364,
+   "last_close": 123.87,
+   "relive": "2022-04-03",
+   "next_close": 128.77
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "LUNAUSDT",
+   "w": 0.006730211766464831,
+   "last_close": 102.97,
+   "relive": "2022-04-03",
+   "next_close": 112.831
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "MANAUSDT",
+   "w": 0.00032416976890200757,
+   "last_close": 2.6142,
+   "relive": "2022-04-03",
+   "next_close": 2.7276
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "NEARUSDT",
+   "w": 0.009144250883262876,
+   "last_close": 13.306,
+   "relive": "2022-04-03",
+   "next_close": 16.802
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "SANDUSDT",
+   "w": 0.002104918934513487,
+   "last_close": 3.3891,
+   "relive": "2022-04-03",
+   "next_close": 3.5417
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "SOLUSDT",
+   "w": 0.015053564467789268,
+   "last_close": 122.85,
+   "relive": "2022-04-03",
+   "next_close": 136.85
+  },
+  {
+   "day": "2022-04-01",
+   "sym": "XRPUSDT",
+   "w": -0.0006625977206147384,
+   "last_close": 0.8146,
+   "relive": "2022-04-03",
+   "next_close": 0.8431
+  },
+  {
+   "day": "2022-05-13",
+   "sym": "LUNAUSDT",
+   "w": -2.7145337655832343e-06,
+   "last_close": 0.008,
+   "relive": null,
+   "next_close": null
+  },
+  {
+   "day": "2024-09-05",
+   "sym": "MATICUSDT",
+   "w": -0.019329450995581556,
+   "last_close": 0.3846,
+   "relive": null,
+   "next_close": null
+  },
+  {
+   "day": "2025-01-07",
+   "sym": "FTMUSDT",
+   "w": -0.028161071133838738,
+   "last_close": 0.7702,
+   "relive": null,
+   "next_close": null
+  },
+  {
+   "day": "2025-05-22",
+   "sym": "EOSUSDT",
+   "w": -0.002371481039177415,
+   "last_close": 0.746,
+   "relive": null,
+   "next_close": null
+  }
+ ],
+ "V3_V4_item1": {
+  "inv_vol_3": {
+   "weights": [
+    0.0641,
+    0.0306,
+    0.9052
+   ],
+   "base": {
+    "sharpe_oos": 4.722,
+    "y2025": 0.0709,
+    "y2026": 0.0117,
+    "pass_": true
+   },
+   "okx_funding": {
+    "sharpe_oos": 4.166,
+    "y2025": 0.0653,
+    "y2026": 0.0158,
+    "pass_": true
+   },
+   "okx_funding_book_all_taker": {
+    "sharpe_oos": 3.671,
+    "y2025": 0.0557,
+    "y2026": 0.0152,
+    "pass_": true
+   }
+  },
+  "inv_var_3": {
+   "weights": [
+    0.005,
+    0.0011,
+    0.9939
+   ],
+   "base": {
+    "sharpe_oos": 10.811,
+    "y2025": 0.0494,
+    "y2026": 0.0119,
+    "pass_": true
+   },
+   "okx_funding": {
+    "sharpe_oos": 10.061,
+    "y2025": 0.0407,
+    "y2026": 0.0163,
+    "pass_": true
+   },
+   "okx_funding_book_all_taker": {
+    "sharpe_oos": 9.913,
+    "y2025": 0.0398,
+    "y2026": 0.0163,
+    "pass_": true
+   }
+  },
+  "inv_vol_book_tsmom": {
+   "weights": [
+    0.6768,
+    0.3232,
+    0.0
+   ],
+   "base": {
+    "sharpe_oos": 1.672,
+    "y2025": 0.314,
+    "y2026": 0.0066,
+    "pass_": true
+   },
+   "okx_funding": {
+    "sharpe_oos": 1.672,
+    "y2025": 0.314,
+    "y2026": 0.0066,
+    "pass_": true
+   },
+   "okx_funding_book_all_taker": {
+    "sharpe_oos": 1.151,
+    "y2025": 0.2067,
+    "y2026": 0.0012,
+    "pass_": false
+   }
+  },
+  "equal_capital_3": {
+   "weights": [
+    0.3333,
+    0.3333,
+    0.3333
+   ],
+   "base": {
+    "sharpe_oos": 1.511,
+    "y2025": 0.1607,
+    "y2026": 0.0396,
+    "pass_": true
+   },
+   "okx_funding": {
+    "sharpe_oos": 1.499,
+    "y2025": 0.1573,
+    "y2026": 0.0412,
+    "pass_": false
+   },
+   "okx_funding_book_all_taker": {
+    "sharpe_oos": 1.15,
+    "y2025": 0.1097,
+    "y2026": 0.0384,
+    "pass_": false
+   }
+  },
+  "book_alone": {
+   "weights": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "base": {
+    "sharpe_oos": 1.801,
+    "y2025": 0.5021,
+    "y2026": -0.0738,
+    "pass_": false
+   },
+   "okx_funding": {
+    "sharpe_oos": 1.801,
+    "y2025": 0.5021,
+    "y2026": -0.0738,
+    "pass_": false
+   },
+   "okx_funding_book_all_taker": {
+    "sharpe_oos": 1.102,
+    "y2025": 0.3245,
+    "y2026": -0.0812,
+    "pass_": false
+   }
+  },
+  "book_extra_cost_all_taker_ann_oos": 0.08048792217906514,
+  "book_extra_cost_all_taker_ann_is": 0.03618311195260698
+ },
+ "V2_small_account": {
+  "inv_vol_3_E1000_L1": {
+   "tsmom_sleeve_equity": 30.6,
+   "tsmom_sharpe_oos_lots": 0.558,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.507,
+   "tsmom_y2026_lots": 0.1716,
+   "book_avg_position_usd_median": 1.24,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_3_E1000_L8": {
+   "tsmom_sleeve_equity": 30.6,
+   "tsmom_sharpe_oos_lots": 0.711,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.827,
+   "tsmom_y2026_lots": 1.944,
+   "book_avg_position_usd_median": 9.93,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_3_E3000_L1": {
+   "tsmom_sleeve_equity": 91.9,
+   "tsmom_sharpe_oos_lots": 1.026,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.851,
+   "tsmom_y2026_lots": 0.2057,
+   "book_avg_position_usd_median": 3.72,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_3_E3000_L8": {
+   "tsmom_sleeve_equity": 91.9,
+   "tsmom_sharpe_oos_lots": 0.622,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.905,
+   "tsmom_y2026_lots": 1.5269,
+   "book_avg_position_usd_median": 29.8,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_3_E10000_L1": {
+   "tsmom_sleeve_equity": 306.2,
+   "tsmom_sharpe_oos_lots": 0.471,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.969,
+   "tsmom_y2026_lots": 0.1584,
+   "book_avg_position_usd_median": 12.42,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_3_E10000_L8": {
+   "tsmom_sleeve_equity": 306.2,
+   "tsmom_sharpe_oos_lots": 0.459,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.98,
+   "tsmom_y2026_lots": 0.6693,
+   "book_avg_position_usd_median": 99.33,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_book_tsmom_E1000_L1": {
+   "tsmom_sleeve_equity": 323.2,
+   "tsmom_sharpe_oos_lots": 0.451,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.973,
+   "tsmom_y2026_lots": 0.1569,
+   "book_avg_position_usd_median": 13.1,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_book_tsmom_E1000_L3": {
+   "tsmom_sleeve_equity": 323.2,
+   "tsmom_sharpe_oos_lots": 0.505,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.989,
+   "tsmom_y2026_lots": 0.5048,
+   "book_avg_position_usd_median": 39.31,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_book_tsmom_E3000_L1": {
+   "tsmom_sleeve_equity": 969.5,
+   "tsmom_sharpe_oos_lots": 0.424,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.986,
+   "tsmom_y2026_lots": 0.1415,
+   "book_avg_position_usd_median": 39.31,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_book_tsmom_E3000_L3": {
+   "tsmom_sleeve_equity": 969.5,
+   "tsmom_sharpe_oos_lots": 0.524,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.993,
+   "tsmom_y2026_lots": 0.5116,
+   "book_avg_position_usd_median": 117.92,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_book_tsmom_E10000_L1": {
+   "tsmom_sleeve_equity": 3231.5,
+   "tsmom_sharpe_oos_lots": 0.454,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.992,
+   "tsmom_y2026_lots": 0.1609,
+   "book_avg_position_usd_median": 131.02,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "inv_vol_book_tsmom_E10000_L3": {
+   "tsmom_sleeve_equity": 3231.5,
+   "tsmom_sharpe_oos_lots": 0.538,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.998,
+   "tsmom_y2026_lots": 0.5424,
+   "book_avg_position_usd_median": 393.06,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "equal_capital_3_E1000_L1": {
+   "tsmom_sleeve_equity": 333.3,
+   "tsmom_sharpe_oos_lots": 0.434,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.973,
+   "tsmom_y2026_lots": 0.1569,
+   "book_avg_position_usd_median": 6.45,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "equal_capital_3_E1000_L3": {
+   "tsmom_sleeve_equity": 333.3,
+   "tsmom_sharpe_oos_lots": 0.513,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.99,
+   "tsmom_y2026_lots": 0.4937,
+   "book_avg_position_usd_median": 19.36,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "equal_capital_3_E3000_L1": {
+   "tsmom_sleeve_equity": 1000.0,
+   "tsmom_sharpe_oos_lots": 0.468,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.987,
+   "tsmom_y2026_lots": 0.1514,
+   "book_avg_position_usd_median": 19.36,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "equal_capital_3_E3000_L3": {
+   "tsmom_sleeve_equity": 1000.0,
+   "tsmom_sharpe_oos_lots": 0.502,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.993,
+   "tsmom_y2026_lots": 0.5125,
+   "book_avg_position_usd_median": 58.07,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "equal_capital_3_E10000_L1": {
+   "tsmom_sleeve_equity": 3333.3,
+   "tsmom_sharpe_oos_lots": 0.541,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.995,
+   "tsmom_y2026_lots": 0.1754,
+   "book_avg_position_usd_median": 64.53,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  },
+  "equal_capital_3_E10000_L3": {
+   "tsmom_sleeve_equity": 3333.3,
+   "tsmom_sharpe_oos_lots": 0.534,
+   "tsmom_sharpe_oos_nolots": 0.58,
+   "tsmom_gross_achieved_over_target": 0.998,
+   "tsmom_y2026_lots": 0.5635,
+   "book_avg_position_usd_median": 193.58,
+   "okx_min_order_usd_universe_median": 2.11,
+   "okx_min_order_usd_universe_p90": 8.2
+  }
+ },
+ "V5_grid": {
+  "equal_capital_3": {
+   "n": 72,
+   "frac_item1": 0.458,
+   "sharpe_oos_median": 1.481,
+   "frac_2026_pos": 0.722,
+   "selected": [
+    {
+     "sharpe_oos": 1.511,
+     "y2025": 0.1607,
+     "y2026": 0.0396
+    }
+   ],
+   "frac_item1_okx_funding": 0.431
+  },
+  "inv_vol_3": {
+   "n": 72,
+   "frac_item1": 1.0,
+   "sharpe_oos_median": 4.617,
+   "frac_2026_pos": 1.0,
+   "selected": [
+    {
+     "sharpe_oos": 4.722,
+     "y2025": 0.0709,
+     "y2026": 0.0117
+    }
+   ],
+   "frac_item1_okx_funding": 1.0
+  },
+  "inv_vol_book_tsmom": {
+   "n": 72,
+   "frac_item1": 0.139,
+   "sharpe_oos_median": 1.645,
+   "frac_2026_pos": 0.139,
+   "selected": [
+    {
+     "sharpe_oos": 1.6724,
+     "y2025": 0.314,
+     "y2026": 0.0066
+    }
+   ],
+   "frac_item1_okx_funding": 0.139
+  }
+ },
+ "V6_fill_delay_1h": {
+  "tsmom_sharpe_oos_base": 0.58,
+  "tsmom_sharpe_oos_fill_0100": 0.498,
+  "y2025": -0.0342,
+  "y2026": 0.1744,
+  "traded_notional_with_hourly_data": 0.9999,
+  "inv_vol_3": {
+   "sharpe_oos": 4.653,
+   "y2025": 0.0705,
+   "y2026": 0.0113,
+   "pass_": true
+  },
+  "inv_var_3": {
+   "sharpe_oos": 10.801,
+   "y2025": 0.0494,
+   "y2026": 0.0118,
+   "pass_": true
+  },
+  "inv_vol_book_tsmom": {
+   "sharpe_oos": 1.62,
+   "y2025": 0.3091,
+   "y2026": 0.0025,
+   "pass_": true
+  },
+  "equal_capital_3": {
+   "sharpe_oos": 1.437,
+   "y2025": 0.1563,
+   "y2026": 0.0352,
+   "pass_": false
+  }
+ },
+ "V7_hourly_trough": {
+  "maxdd_1x_daily_all_at_once": 0.3565,
+  "maxdd_1x_hourly_simultaneous": 0.3122,
+  "ib_20251010_daily": -0.26,
+  "ib_20251010_hourly": -0.2091,
+  "position_days_fallback_to_daily": 2
+ },
+ "V8_leverage": {
+  "tsmom_alone_hourly_trough": {
+   "1": {
+    "maxdd": 0.3122,
+    "liq": null,
+    "openable": true
+   },
+   "2": {
+    "maxdd": 0.5637,
+    "liq": null,
+    "openable": true
+   },
+   "3": {
+    "maxdd": 0.761,
+    "liq": null,
+    "openable": true
+   },
+   "5": {
+    "maxdd": 1.0,
+    "liq": "2025-10-10",
+    "openable": true
+   }
+  },
+  "tsmom_half_kelly_is": 1.642,
+  "inv_vol_book_tsmom": {
+   "hourly_tsmom_trough": {
+    "1": {
+     "maxdd": 0.0841,
+     "liq": null,
+     "openable": true
+    },
+    "2": {
+     "maxdd": 0.1634,
+     "liq": null,
+     "openable": true
+    },
+    "3": {
+     "maxdd": 0.2378,
+     "liq": null,
+     "openable": true
+    },
+    "5": {
+     "maxdd": 0.3748,
+     "liq": null,
+     "openable": true
+    },
+    "8": {
+     "maxdd": 0.5997,
+     "liq": null,
+     "openable": true
+    },
+    "10": {
+     "maxdd": 0.7496,
+     "liq": null,
+     "openable": true
+    },
+    "15": {
+     "maxdd": 1.0,
+     "liq": "2025-10-10",
+     "openable": false
+    },
+    "20": {
+     "maxdd": 1.0,
+     "liq": "2025-10-10",
+     "openable": false
+    }
+   },
+   "book_1010_shock_breaking_L3_daily_proxy": 0.04
+  },
+  "equal_capital_3": {
+   "hourly_tsmom_trough": {
+    "1": {
+     "maxdd": 0.0736,
+     "liq": null,
+     "openable": true
+    },
+    "2": {
+     "maxdd": 0.1471,
+     "liq": null,
+     "openable": true
+    },
+    "3": {
+     "maxdd": 0.2207,
+     "liq": null,
+     "openable": true
+    },
+    "5": {
+     "maxdd": 0.3679,
+     "liq": null,
+     "openable": true
+    },
+    "8": {
+     "maxdd": 0.5887,
+     "liq": null,
+     "openable": true
+    },
+    "10": {
+     "maxdd": 0.7359,
+     "liq": null,
+     "openable": true
+    },
+    "15": {
+     "maxdd": 1.0,
+     "liq": "2025-10-10",
+     "openable": false
+    },
+    "20": {
+     "maxdd": 1.0,
+     "liq": "2025-10-10",
+     "openable": false
+    }
+   },
+   "book_1010_shock_breaking_L3_daily_proxy": 0.08
+  },
+  "inv_vol_3": {
+   "hourly_tsmom_trough": {
+    "1": {
+     "maxdd": 0.0103,
+     "liq": null,
+     "openable": true
+    },
+    "2": {
+     "maxdd": 0.0261,
+     "liq": null,
+     "openable": true
+    },
+    "3": {
+     "maxdd": 0.0441,
+     "liq": null,
+     "openable": true
+    },
+    "5": {
+     "maxdd": 0.0793,
+     "liq": null,
+     "openable": true
+    },
+    "8": {
+     "maxdd": 0.1298,
+     "liq": null,
+     "openable": true
+    },
+    "10": {
+     "maxdd": 0.162,
+     "liq": null,
+     "openable": false
+    },
+    "15": {
+     "maxdd": 0.2379,
+     "liq": null,
+     "openable": false
+    },
+    "20": {
+     "maxdd": 0.3073,
+     "liq": null,
+     "openable": false
+    }
+   },
+   "book_1010_shock_breaking_L8_daily_proxy": null
+  }
+ }
+}

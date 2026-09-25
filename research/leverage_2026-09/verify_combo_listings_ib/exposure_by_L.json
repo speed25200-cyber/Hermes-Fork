@@ -1,0 +1,50 @@
+{
+ "1": {
+  "book_gross_mean": 0.36,
+  "book_gross_max": 1.27,
+  "listing_slot_max_frac": 0.079,
+  "slot_usdt_10k": 794.0,
+  "frac_new_listings_t1cap_below_slot_10k": 0.0,
+  "im_use_max": 0.067
+ },
+ "2": {
+  "book_gross_mean": 0.71,
+  "book_gross_max": 2.54,
+  "listing_slot_max_frac": 0.159,
+  "slot_usdt_10k": 1589.0,
+  "frac_new_listings_t1cap_below_slot_10k": 0.015,
+  "im_use_max": 0.137
+ },
+ "3": {
+  "book_gross_mean": 1.07,
+  "book_gross_max": 3.81,
+  "listing_slot_max_frac": 0.238,
+  "slot_usdt_10k": 2383.0,
+  "frac_new_listings_t1cap_below_slot_10k": 0.023,
+  "im_use_max": 0.215
+ },
+ "4": {
+  "book_gross_mean": 1.42,
+  "book_gross_max": 5.08,
+  "listing_slot_max_frac": 0.318,
+  "slot_usdt_10k": 3178.0,
+  "frac_new_listings_t1cap_below_slot_10k": 0.023,
+  "im_use_max": 0.301
+ },
+ "5": {
+  "book_gross_mean": 1.78,
+  "book_gross_max": 6.35,
+  "listing_slot_max_frac": 0.397,
+  "slot_usdt_10k": 3973.0,
+  "frac_new_listings_t1cap_below_slot_10k": 0.053,
+  "im_use_max": 0.396
+ },
+ "8": {
+  "book_gross_mean": 2.85,
+  "book_gross_max": 10.16,
+  "listing_slot_max_frac": 0.636,
+  "slot_usdt_10k": 6360.0,
+  "frac_new_listings_t1cap_below_slot_10k": 0.214,
+  "im_use_max": 0.748
+ }
+}

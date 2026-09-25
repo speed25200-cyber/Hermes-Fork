@@ -1,0 +1,156 @@
+{
+ "selection": {
+  "sel_TAIL": {
+   "R": 24,
+   "signal": "m30d",
+   "neutral": "dollar",
+   "hyst": 1,
+   "is_sharpe": 0.4220408826743861,
+   "oos_sharpe": -1.1532642227613308
+  },
+  "n_grid_TAIL": 192,
+  "oos_median_TAIL": -2.453471543395006,
+  "oos_frac_pos_TAIL": 0.0,
+  "hindsight_bar1_TAIL": 0,
+  "sel_TOP30": {
+   "R": 24,
+   "signal": "COMBO3:age+fund+r1h",
+   "neutral": "beta",
+   "hyst": 1,
+   "is_sharpe": 1.9174182817393897,
+   "oos_sharpe": 1.450061221178282
+  },
+  "n_grid_TOP30": 192,
+  "oos_median_TOP30": -1.3119288536126983,
+  "oos_frac_pos_TOP30": 0.22916666666666666,
+  "hindsight_bar1_TOP30": 0,
+  "maker_n_TAIL": 576,
+  "maker_hindsight_bar1_TAIL": 0,
+  "maker_oos_median_TAIL": -0.9507792487271304,
+  "maker_n_TOP30": 576,
+  "maker_hindsight_bar1_TOP30": 0,
+  "maker_oos_median_TOP30": -0.92414912811392
+ },
+ "repro": {
+  "TAIL": {
+   "is_sharpe": 0.4185878716141556,
+   "oos_sharpe": -1.1532642227613308,
+   "y": {
+    "2025": -0.23513113617510162,
+    "2026": -0.05566895914734793
+   },
+   "cagr": -0.17752600315492184,
+   "mdd_ib": 0.43751943797006576,
+   "lomo_min": -1.4545895498353545,
+   "stress": -1.3510559758447285,
+   "half_kelly_is": 1.6728146260040788,
+   "ladder": {
+    "1": {
+     "mdd_close_hourly": 0.3042,
+     "mdd_ib": 0.4375,
+     "liq": ""
+    },
+    "2": {
+     "mdd_close_hourly": 0.5354,
+     "mdd_ib": 0.7511,
+     "liq": ""
+    },
+    "3": {
+     "mdd_close_hourly": 0.7031,
+     "mdd_ib": 0.955,
+     "liq": ""
+    },
+    "5": {
+     "mdd_close_hourly": 1.0,
+     "mdd_ib": 1.0,
+     "liq": "2025-10-10 22:00:00+00:00"
+    }
+   },
+   "cost_frac": 0.05207264846906172,
+   "turn": 64.91969843653169
+  },
+  "TOP30": {
+   "is_sharpe": 1.9131628683411486,
+   "oos_sharpe": 1.450061221178282,
+   "y": {
+    "2025": 0.6931489013694807,
+    "2026": -0.08349649853774543
+   },
+   "cagr": 0.30208341668260785,
+   "mdd_ib": 0.25847225617869785,
+   "lomo_min": 1.053857076364238,
+   "stress": 1.107934482688584,
+   "half_kelly_is": 5.51807498738077,
+   "ladder": {
+    "1": {
+     "mdd_close_hourly": 0.2345,
+     "mdd_ib": 0.2585,
+     "liq": ""
+    },
+    "2": {
+     "mdd_close_hourly": 0.4215,
+     "mdd_ib": 0.5162,
+     "liq": ""
+    },
+    "3": {
+     "mdd_close_hourly": 0.569,
+     "mdd_ib": 0.7676,
+     "liq": ""
+    },
+    "5": {
+     "mdd_close_hourly": 1.0,
+     "mdd_ib": 1.0,
+     "liq": "2025-10-10 22:00:00+00:00"
+    }
+   },
+   "cost_frac": 0.1329270953027271,
+   "turn": 210.72320936995382
+  },
+  "MAKER_TAIL": {
+   "is_sharpe": 1.6288069676894765,
+   "oos_sharpe": -0.42906724235068655,
+   "y": {
+    "2025": 0.05476432565118716,
+    "2026": -0.23852709327282484
+   },
+   "cagr": -0.12337171410768488,
+   "mdd_ib": 0.41031768325550044,
+   "lomo_min": -0.8609394363405145,
+   "stress": -1.3232335496531258,
+   "half_kelly_is": 3.2448157110572002,
+   "ladder": {
+    "1": {
+     "mdd_close_hourly": 0.3842,
+     "mdd_ib": 0.4103,
+     "liq": ""
+    },
+    "2": {
+     "mdd_close_hourly": 0.6457,
+     "mdd_ib": 0.6785,
+     "liq": ""
+    },
+    "3": {
+     "mdd_close_hourly": 0.8105,
+     "mdd_ib": 0.8546,
+     "liq": ""
+    },
+    "5": {
+     "mdd_close_hourly": 1.0,
+     "mdd_ib": 1.0,
+     "liq": "2025-10-10 22:00:00+00:00"
+    }
+   },
+   "cost_frac": 0.030887345142513213,
+   "turn": 154.43672571256658
+  },
+  "vectorised_TAIL": {
+   "sharpe_net": NaN,
+   "sharpe_gross": -0.8430316330468927,
+   "sharpe_gross_minus_fund": -0.8369593311464438,
+   "mean_cost_per_day": NaN,
+   "ann_cost": NaN,
+   "y2025": 0.0,
+   "y2026": 0.0
+  }
+ }
+}

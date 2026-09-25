@@ -20,6 +20,14 @@ Second tour :
 - `fundevent/`, `verify_fundevent/` : événements de funding (versement, dérive, portage lent des funding extrêmes).
 - `eventrange/`, `eventrange_verify/` : contre-tendance après cascade, robot grid, cassures de session.
 
+Troisième tour (petit capital, RESULTS § 18) :
+- `longtail/`, `longtail_verify/` : signaux transversaux sur la longue traîne (rangs 31-150).
+- `newlisting/`, `verify_listings/`, `lens_regime/` : court sur les nouvelles cotations (grille, sélection,
+  ensembles, régimes, couverture OKX).
+- `tsmom_div/`, `verify_combo_tsmom/` : tendance multi-coins et diversification.
+- `cascade/`, `verify_dislocations/` : décrochages des alts OKX pendant les cascades.
+- `verify_combo_listings_ib/`, `lens_skeptic_combo/` : livre + poche combinés, risque intrabougie et levier.
+
 Les données (archives data.binance.vision, API publiques OKX) ne sont pas versionnées : chaque dossier les
 télécharge (`download.py`, `fetch_data.py`, `build_panel.py`) ; les chemins absolus des scripts pointent vers le
 dossier de travail d'origine et sont à adapter.

@@ -1,0 +1,8 @@
+{
+ "per_family": {
+  "A": "A|univ=TOP20|w=1|k=6|a=0.03|vr=5|gate=mkt|side=long_only|H=60|s=none",
+  "B": "B|univ=ALL|k=100|gate=casc|mode=perp_only|side=one|exit=full|H=240",
+  "C": "C|univ=TOP20|k=30|gate=coin|mode=okx_only|side=one|exit=full|H=240"
+ },
+ "overall": "C|univ=TOP20|k=30|gate=coin|mode=okx_only|side=one|exit=full|H=240"
+}

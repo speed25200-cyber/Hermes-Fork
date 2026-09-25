@@ -6,5 +6,10 @@ live:
   model_dir: artifacts/models/champion
   paper_initial_equity: 10000
   capital_fraction: 1.0
+  # Poche « nouvelles cotations » (docs/RESULTS.md § 18) : test prospectif en papier, à côté du livre.
+  # Plafond 0,8x de la NAV : le levier combiné défendable est de 2x au départ, 3x au plus après confirmation.
+  listing_sleeve:
+    enabled: true
+    leverage: 0.8
 risk:
   kill_switch_file: state/KILL

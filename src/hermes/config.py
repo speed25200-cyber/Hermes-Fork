@@ -285,6 +285,33 @@ class ExecutionConfig(_Strict):
     order_tag: str = "hermes"
 
 
+class ListingSleeveConfig(_Strict):
+    """New-listing short sleeve (live/listing_sleeve.py): off by default, never in live mode."""
+
+    enabled: bool = False
+    leverage: float = Field(1.0, gt=0, le=3, description="Cap of the sleeve's short notional, multiple of the NAV")
+    slots: int = Field(5, ge=1, le=20, description="Listings held at once; each gets leverage/slots of the NAV")
+    entries: tuple[float, ...] = Field(
+        (24.0, 72.0), min_length=1, description="Tranche entries, hours after the perpetual's launch"
+    )
+    entry_grace_hours: float = Field(3.0, gt=0, description="A tranche enters only this soon after its hour")
+    exit_hours: float = Field(168, gt=0, description="Exit of every tranche, hours after the perpetual's launch")
+    stop: float = Field(0.5, ge=0, description="Stop above the first tranche's entry price (0 = none)")
+    hedge_beta: float = Field(1.0, ge=0, description="BTC long per unit of short notional")
+    new_token_days: float = Field(30, ge=0, description="A token is new if its first Binance spot market is younger")
+    sigma_ref: float = Field(0.124, gt=0, description="Daily volatility of full size (research's in-sample median)")
+    kill_trades: int = Field(25, ge=0, description="Kill rule window: closed trades judged together (0 = off)")
+    kill_loss: float = Field(0.10, gt=0, description="Kill rule: loss over the window, share of the sleeve's cap")
+    coin_cost: float = Field(0.0015, ge=0, description="Cost per side on the coin leg in the sleeve's own P&L")
+    hedge_cost: float = Field(0.0006, ge=0, description="Cost per side on the BTC hedge in the sleeve's own P&L")
+
+    @model_validator(mode="after")
+    def _window(self) -> ListingSleeveConfig:
+        if self.exit_hours <= max(self.entries) or min(self.entries) < 0:
+            raise ValueError("listing_sleeve: every entry must fall between the launch and exit_hours")
+        return self
+
+
 class LiveConfig(_Strict):
     state_dir: Path = Path("state")
     model_dir: Path = Path("artifacts/models/champion")
@@ -296,6 +323,7 @@ class LiveConfig(_Strict):
     )
     candidates: int = Field(80, ge=5, description="Most traded contracts considered each day")
     allow_unpromoted: bool = Field(False, description="DANGER: trade real money with a model that failed the gate")
+    listing_sleeve: ListingSleeveConfig = ListingSleeveConfig()
     paper_nominal_size: bool = Field(
         True,
         description="Paper mode only: size the book as if the IC were at least research's (per horizon), so that "

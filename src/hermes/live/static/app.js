@@ -594,12 +594,46 @@ function vPositions(D) {
      <div><div class="label">Stops posés</div><div class="v">${stopsN} / ${D.pos.length}</div><div class="x">un stop catastrophe par position</div></div>
      <div><div class="label">Take-profit</div><div class="v muted">aucun</div><div class="x">sorties par rééquilibrage</div></div>
    </div></div></div>
+   ${sleevePanel(D)}
    <div class="c12"><div class="panel"><div class="ph"><h2>Contribution au P&L latent</h2><span class="sub">par position, en USDT, au prix de marque</span></div>${contribution(D)}</div></div>
    <div class="c12"><div class="panel"><div class="ph"><h2>Toutes les positions ouvertes</h2><span class="sub">Cliquer une ligne l'ouvre dans le graphique.</span></div>
     <div class="tw">${table("t-pos-all", cols, D.pos, {click: true, sort: {k: "notional", dir: "desc"}, empty: `<b>Livre à plat</b>${flatReason(D)}`})}</div>
     <p class="cap" style="padding:12px 16px 0">Le stop est un ordre stop-marché posé côté bourse à ${num(D.strat.stop_sigmas, 0)} volatilités journalières du prix d'ouverture (entre 3 % et 50 %) : un garde-fou contre les krachs, pas une règle de sortie. La stratégie ne pose pas de take-profit : chaque position vit tant que le modèle la classe parmi les meilleures (ou les pires, pour un short) et le livre est rééquilibré toutes les ${D.barMin * (D.strat.rebalance_every || 1)} minutes.</p></div></div>
   </div>`;
   wireTables(el);
+}
+
+function sleevePanel(D) {
+  const L = D.st.listing_sleeve || {};
+  if (!L.enabled) return "";
+  const openT = L.open || [], cov = L.coverage || {}, watch = Object.keys(L.watch || {}).length;
+  const ent = Array.isArray(L.entries) && L.entries.length ? L.entries : [24, 72], killN = fin(L.kill_trades) ? L.kill_trades : 25;
+  const markOf = sym => {const p = posOf(D, sym); return p && fin(p.mark) ? p.mark : null};
+  const rows = openT.map(t => {
+    const m = markOf(t.symbol), pnl = fin(m) ? t.qty * (m - t.entry_px) : null;
+    return {symbol: t.symbol, tranche: t.tranche, entry: t.entry, entry_px: t.entry_px, mark: m, notional: Math.abs(t.qty * t.entry_px), pnl, stop: t.stop_px, exit_due: t.exit_due};
+  });
+  const cols = [
+    {k: "symbol", h: "Contrat", l: true, cl: "sym"},
+    {k: "tranche", h: "Entrée", l: true, f: r => fin(ent[r.tranche]) ? "+" + num(ent[r.tranche], 0) + " h" : "n°" + (r.tranche + 1)},
+    {k: "entry", h: "Ouverte", cl: "num", v: r => toMs(r.entry), f: r => dt(r.entry)},
+    {k: "notional", h: "Short", cl: "num", f: r => usd(r.notional, 0)},
+    {k: "entry_px", h: "Prix d'entrée", cl: "num", f: r => price(r.entry_px)},
+    {k: "mark", h: "Prix", cl: "num", f: r => price(r.mark)},
+    {k: "pnl", h: "P&L (hors couverture)", cl: "num", f: r => `<span class="${cls(r.pnl)}">${usd(r.pnl, 2, true)}</span>`},
+    {k: "stop", h: "Stop", cl: "num", f: r => price(r.stop)},
+    {k: "exit_due", h: "Sortie prévue", cl: "num", v: r => toMs(r.exit_due), f: r => dt(r.exit_due)},
+  ];
+  return `<div class="c12"><div class="panel"><div class="ph"><h2>Poche « nouvelles cotations »</h2><span class="sub">${esc(L.rule || "")}</span></div>
+   <div class="stats">
+    <div><div class="label">Tokens shortés</div><div class="v">${num(fin(L.tokens_open) ? L.tokens_open : openT.length, 0)}</div><div class="x">${openT.length} tranche(s) · ${watch} nouveau(x) token(s) surveillé(s)</div></div>
+    <div><div class="label">P&L ouvert</div><div class="v ${cls(L.open_pnl)}">${usd(L.open_pnl, 2, true)}</div><div class="x">couverture BTC, funding et coûts compris</div></div>
+    <div><div class="label">P&L réalisé</div><div class="v ${cls(L.closed_pnl)}">${usd(L.closed_pnl, 2, true)}</div><div class="x">${(L.closed || []).length} opération(s) récente(s)</div></div>
+    <div><div class="label">Couverture OKX</div><div class="v">${num(cov.on_okx || 0, 0)} / ${num(cov.new_tokens_due || 0, 0)}</div><div class="x">nouveaux tokens cotés sur OKX à l'échéance</div></div>
+    <div><div class="label">État</div><div class="v ${L.suspended ? "down" : ""}">${L.suspended ? "suspendue" : "active"}</div><div class="x">${L.suspended ? "règle d'arrêt : " + killN + " dernières opérations perdantes" : "règle d'arrêt fixée d'avance"}</div></div>
+   </div>
+   <div class="tw">${table("t-sleeve", cols, rows, {sort: {k: "entry", dir: "desc"}, empty: "<b>Aucun short ouvert</b>La poche entre sur un nouveau token " + ent.map(h => num(h, 0) + " h").join(" puis ") + " après la cotation de son perpétuel, s'il est coté sur OKX."})}</div>
+   <p class="cap" style="padding:12px 16px 0">Court sur chaque nouveau token coté en perpétuel sur Binance et présent sur OKX, en tranches (${ent.map(h => num(h, 0) + " h").join(" et ")} après la cotation, chacune dans les 3 heures, jamais rattrapée), fermées 7 jours après, couvertes par un long BTC de même montant, stop à +50 % de la première entrée. Test en papier : Sharpe hors échantillon 2,1 en recherche, attendu plutôt autour de 1 ; le P&L de la poche compte le funding et des coûts de recherche (0,15 % par côté), et elle s'arrête d'elle-même si ses ${killN} dernières opérations perdent en moyenne.</p></div></div>`;
 }
 
 function contribution(D) {

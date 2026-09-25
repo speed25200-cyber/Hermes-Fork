@@ -1,0 +1,122 @@
+{
+ "B|univ=ALL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|all|lat1_cost1.0": {
+  "sh_is": 1.7002076973819824,
+  "sh_oos": 7.4490499242988335,
+  "n_is": 368,
+  "n_oos": 388,
+  "bp_is": 60.3864973828005,
+  "bp_oos": 82.62289141320832,
+  "ret25": 0.3829623516554723,
+  "ret26": 0.36941290087259904
+ },
+ "B|univ=ALL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|all|lat2_cost1.5": {
+  "sh_is": 0.7174354008053343,
+  "sh_oos": 1.5337909694505714,
+  "n_is": 366,
+  "n_oos": 385,
+  "bp_is": 22.96851981875061,
+  "bp_oos": 29.178444468231326,
+  "ret25": 0.07117418000011844,
+  "ret26": 0.16079584151518178
+ },
+ "B|univ=ALL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|margin_pair_today|lat1_cost1.0": {
+  "sh_is": 1.6877457338278274,
+  "sh_oos": 1.297710439148868,
+  "n_is": 335,
+  "n_oos": 247,
+  "bp_is": 64.53379294586493,
+  "bp_oos": 46.194916165238475,
+  "ret25": 0.025240000222244596,
+  "ret26": 0.2131433004173633
+ },
+ "B|univ=ALL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|margin_pair_today|lat2_cost1.5": {
+  "sh_is": 0.821340152791584,
+  "sh_oos": -0.03169695908355089,
+  "n_is": 332,
+  "n_oos": 244,
+  "bp_is": 28.35086133540094,
+  "bp_oos": -1.5395089389801633,
+  "ret25": -0.11565231792763397,
+  "ret26": 0.10114447302476859
+ },
+ "B|univ=ALL|k=150|gate=coin|mode=hedged|side=one|exit=full|H=240|all|lat1_cost1.0": {
+  "sh_is": 1.45696705011013,
+  "sh_oos": 5.768552893265117,
+  "n_is": 187,
+  "n_oos": 229,
+  "bp_is": 89.47790066016353,
+  "bp_oos": 92.35338716881212,
+  "ret25": 0.24033238817678804,
+  "ret26": 0.22856735422040475
+ },
+ "B|univ=ALL|k=150|gate=coin|mode=hedged|side=one|exit=full|H=240|all|lat2_cost1.5": {
+  "sh_is": 0.7161294106607071,
+  "sh_oos": 1.062551906963941,
+  "n_is": 186,
+  "n_oos": 226,
+  "bp_is": 42.657514720999394,
+  "bp_oos": 29.8674216491972,
+  "ret25": 0.022632930782639837,
+  "ret26": 0.11354059200402666
+ },
+ "B|univ=ALL|k=150|gate=coin|mode=hedged|side=one|exit=full|H=240|margin_pair_today|lat1_cost1.0": {
+  "sh_is": 1.4048723909978722,
+  "sh_oos": 0.5137515012794354,
+  "n_is": 163,
+  "n_oos": 149,
+  "bp_is": 95.49642686249126,
+  "bp_oos": 27.417681124372006,
+  "ret25": -0.040696978975061526,
+  "ret26": 0.12195616480932614
+ },
+ "B|univ=ALL|k=150|gate=coin|mode=hedged|side=one|exit=full|H=240|margin_pair_today|lat2_cost1.5": {
+  "sh_is": 0.7680429919975127,
+  "sh_oos": -0.35636570016607594,
+  "n_is": 161,
+  "n_oos": 146,
+  "bp_is": 51.17940326986445,
+  "bp_oos": -26.690003200759218,
+  "ret25": -0.13167506985196964,
+  "ret26": 0.04829120357551098
+ },
+ "B|univ=TAIL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|all|lat1_cost1.0": {
+  "sh_is": 1.1047035375497996,
+  "sh_oos": 6.406215431056416,
+  "n_is": 232,
+  "n_oos": 318,
+  "bp_is": 54.370334525207255,
+  "bp_oos": 85.4075441650961,
+  "ret25": 0.3005903845535618,
+  "ret26": 0.3204775998492553
+ },
+ "B|univ=TAIL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|all|lat2_cost1.5": {
+  "sh_is": 0.24529478066673552,
+  "sh_oos": 1.4531996284698137,
+  "n_is": 231,
+  "n_oos": 318,
+  "bp_is": 11.186694942640976,
+  "bp_oos": 27.68742098644405,
+  "ret25": 0.04670153037700353,
+  "ret26": 0.1341162327715988
+ },
+ "B|univ=TAIL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|margin_pair_today|lat1_cost1.0": {
+  "sh_is": 1.1189877336375718,
+  "sh_oos": 1.2319957015976442,
+  "n_is": 201,
+  "n_oos": 188,
+  "bp_is": 62.09784308434011,
+  "bp_oos": 43.00096580640834,
+  "ret25": -0.005355231790953763,
+  "ret26": 0.17536320893525503
+ },
+ "B|univ=TAIL|k=150|gate=none|mode=hedged|side=one|exit=full|H=240|margin_pair_today|lat2_cost1.5": {
+  "sh_is": 0.35103232955505864,
+  "sh_oos": -0.22576027146898645,
+  "n_is": 200,
+  "n_oos": 188,
+  "bp_is": 18.023416094217293,
+  "bp_oos": -12.174084158466764,
+  "ret25": -0.12760293508608556,
+  "ret26": 0.08010789592775125
+ }
+}

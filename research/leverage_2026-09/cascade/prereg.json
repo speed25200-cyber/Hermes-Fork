@@ -1,0 +1,177 @@
+{
+ "written": "2026-09-25 ~01:35 UTC, before any strategy return was computed (only the universe list, OKX archive probes and cost-model inputs looked at)",
+ "direction": "Rare cascade events on OKX alts: (A) fade extreme 1m/5m/15m moves (vol-scaled threshold and stop), (B) OKX perp vs OKX spot basis dislocations, (C) OKX perp vs Binance perp gaps (two-leg = two accounts, or OKX-only using Binance as fair-value signal)",
+ "periods": {
+  "IS": "2022-01-01..2024-12-31 (every choice)",
+  "OOS": "2025-01-01..2026-08-31 (never used for any choice)"
+ },
+ "data": {
+  "okx": "OKX 1m last-price candles, SWAP and SPOT, static.okx.com monthly candlestick archive (open_time UTC ms)",
+  "binance": "Binance USDT-M 1m klines (data.binance.vision monthly); price divided by the 1000/1M factor",
+  "funding": "OKX realized funding (static archive, to 2025-09-07), Binance funding as proxy afterwards; charged if a trade spans a funding timestamp"
+ },
+ "universe": "month m: coins with trailing-30d Binance quote-volume rank <= 60 on the last day of m-1 among coins OKX-listed that day (longtail/data/ranks.parquet, PIT, delisted coins included); coin-months without an OKX archive file are skipped and counted. Sub-universes: TOP20 = rank 1..20, TAIL = 21..60, ALL = 1..60",
+ "features": {
+  "sigma": "std of 1m log returns over the 1440 minutes ending at t-15 (min 720 valid), floor 1 bp",
+  "R_w": "log(C_t / C_{t-w}), w in {1,5,15}; z_w = R_w / (sigma * sqrt(w))",
+  "vr_w": "volume in (t-w, t] / (w * mean 1m volume over the 1440 minutes ending at t-15)",
+  "db": "log(perp_close/spot_close) minus its rolling median over the 1440 minutes ending at t-15 (spot must have traded in minute t)",
+  "dx": "log(okx_perp_close/binance_perp_close) minus its rolling median over the 1440 minutes ending at t-15 (both traded in minute t)",
+  "breadth": "fraction of universe coins with valid data whose z_5 <= -3 (down) or >= +3 (up) at minute t",
+  "gate_mkt": "breadth (same direction as the coin move for A; either direction for B/C) >= 0.25 at some minute in [t-15, t]",
+  "gate_coin": "|z_5| >= 4 at some minute in [t-15, t] (B/C only)"
+ },
+ "execution": {
+  "latency": "signal at close of minute t; base fill at close of minute t+1 (60 s); stress = close of t+2; lat0 (close of t) reported as an optimistic reference only",
+  "fees": "OKX VIP0 perp taker 5 bp maker 2 bp; spot taker 10 bp maker 8 bp; Binance USDT-M taker 5 bp",
+  "slippage_per_side": "max(floor, exp(6.745 - 0.438 ln ADV30 + 0.317 ln order_USDT)) + 0.05 * (high-low)/close of the fill minute, in bp; floor 1 bp (BTC, ETH), 3 bp (other rank <= 20), 6 bp (rank 21..60); spot legs x1.5; ADV30 = trailing 30-day Binance quote volume (to D-1); order size = L*A/K per leg with A = 5000 USDT for the grid",
+  "stops": "exchange-side stop-market: triggered when the minute low (long) / high (short) crosses the stop; fill at min(stop, open) for longs (max for shorts) minus taker slippage",
+  "take_profit": "none in the grid",
+  "maker": "not used in the grid (taker everywhere)",
+  "cross_venue": "family C two-leg requires one OKX and one Binance account; capital split equally is NOT assumed in 1x returns (returns are per unit of per-leg notional), noted as executability caveat"
+ },
+ "portfolio": {
+  "slots": "K = 5 concurrent positions (one per coin), each with per-leg notional L*E/K; new signals at the same minute ranked by |z| (A) or |db|/|dx| (B/C); signals while all slots are full are dropped",
+  "returns": "grid: each trade's net return x L/K booked on its exit day (UTC); selected configs: minute-level mark-to-market with intrabar extremes",
+  "liquidation": "cross margin; equity at the joint intrabar adverse extreme of all open legs (lows for longs, highs for shorts) <= sum(tier-1 MMR x notional) + taker close fee -> liquidated, account ends; instrument max leverage from OKX (IMR = notional/maxLever, sum IMR <= equity else order rejected)"
+ },
+ "grid": {
+  "A_fade": {
+   "univ": [
+    "TOP20",
+    "TAIL",
+    "ALL"
+   ],
+   "w": [
+    1,
+    5,
+    15
+   ],
+   "k": [
+    6,
+    10
+   ],
+   "a_min_move": [
+    0.01,
+    0.03
+   ],
+   "vr_min": [
+    0,
+    5
+   ],
+   "gate": [
+    "none",
+    "mkt",
+    "mkt2",
+    "casc"
+   ],
+   "side": [
+    "long_only",
+    "both"
+   ],
+   "H_min": [
+    15,
+    60,
+    240
+   ],
+   "stop_x_move": [
+    0.5,
+    1.0,
+    "none"
+   ]
+  },
+  "B_basis": {
+   "univ": [
+    "TOP20",
+    "TAIL",
+    "ALL"
+   ],
+   "k_bp": [
+    30,
+    60,
+    100,
+    150
+   ],
+   "gate": [
+    "none",
+    "coin",
+    "mkt",
+    "mkt2",
+    "casc"
+   ],
+   "mode": [
+    "hedged (perp + opposite spot)",
+    "perp_only"
+   ],
+   "side": [
+    "perp_discount_only",
+    "both"
+   ],
+   "exit": [
+    "full (db back to entry-time median)",
+    "half (|db| <= k/2)"
+   ],
+   "H_max": [
+    30,
+    240
+   ]
+  },
+  "C_xvenue": {
+   "univ": [
+    "TOP20",
+    "TAIL",
+    "ALL"
+   ],
+   "k_bp": [
+    30,
+    60,
+    100,
+    150
+   ],
+   "gate": [
+    "none",
+    "coin",
+    "mkt",
+    "mkt2",
+    "casc"
+   ],
+   "mode": [
+    "two_leg (OKX vs Binance)",
+    "okx_only"
+   ],
+   "side": [
+    "okx_cheap_only",
+    "both"
+   ],
+   "exit": [
+    "full",
+    "half"
+   ],
+   "H_max": [
+    30,
+    240
+   ]
+  }
+ },
+ "selection": "within each family, the config with the highest IS net Sharpe at 1x among configs with >= 30 IS trades; overall pick = highest IS Sharpe of the three family picks. OOS evaluated only after selection. Whole grid distribution reported.",
+ "metrics": "daily UTC returns including zero days; Sharpe = mean/std*sqrt(365); IS half-Kelly = 0.5*mean/var of IS daily returns at 1x",
+ "success_bar": {
+  "1": "OOS 2025-01-01..2026-08-31 net Sharpe >= 1.5 at 1x, 2025 and 2026(Jan-Aug) both positive",
+  "2": "leave-one-month-out and leave-one-coin-out OOS Sharpe >= 1.0; costs x1.5 + one extra bar of latency OOS Sharpe >= 0.8",
+  "3": "executable by 1k-10k USDT on OKX (listed at the time, lots/minSz, VIP0 fees, slippage)",
+  "4": "largest L in {1,2,3,5,8,10,15,20} with OOS intrabar MDD <= 35% and no liquidation AND L <= IS half-Kelly"
+ },
+ "amendment_1": {
+  "written": "2026-09-25 ~02:20 UTC, before the full grid was run and before any OOS number was computed",
+  "reason": "on a smoke test with 63 coins the 25% breadth gate was active on ~4.6% of minutes (about 66 min/day): a market-stress filter, not a liquidation-cascade detector as the direction requires. A stricter level is added as an extra grid value (nothing removed).",
+  "change": "gate values: A: ['none','mkt','mkt2']; B/C: ['none','coin','mkt','mkt2']; mkt2 = breadth >= 0.50 at some minute in [t-15, t] (same direction for A, either direction for B/C)",
+  "also_seen": "the smoke test printed IS stats of 14 random configs on 63-90 coins; no OOS statistic was computed or printed"
+ },
+ "amendment_2": {
+  "written": "2026-09-25 ~02:05 UTC, before the full grid was run and before any OOS number was computed",
+  "reason": "on the full universe the z-based breadth gates are active on 80-90% of IS days (mkt: 990/1096 days, mkt2: 881/1096): z5 is scaled by the prior-day 1m sigma, so ordinary 0.5-1% market moves after quiet days count as '3 sigma'. Neither is a liquidation-cascade detector. An absolute-move cascade gate is added (nothing removed).",
+  "rule_for_the_level": "pre-stated target ~20 down-cascade days per IS year; among breadth definitions R5 or R15 beyond 2/3/5/8 % on >= 25%/50% of universe coins, IS day counts only (no returns): R15 5% @ 50% = 16.0 dn / 7.0 up days per year, R15 5% @ 25% = 24.0 / 8.7 (tie on distance to 20; the stricter one taken), R5 3% @ 50% = 26.7 / 14.0",
+  "change": "new gate value 'casc' for A, B and C: at some minute in [t-15, t], >= 50% of universe coins (>= 10 valid) have a 15-minute log return <= -5% (down cascade; A long entries) or >= +5% (up cascade; A short entries); B/C use either direction. Grid: A gate in [none, mkt, mkt2, casc]; B/C gate in [none, coin, mkt, mkt2, casc]",
+  "also_seen": "only gate frequencies (IS) were computed; no strategy return was computed on the full universe before this amendment"
+ }
+}

@@ -1,0 +1,44 @@
+{
+  "written": "2026-09-25 00:15 UTC, before any strategy return was computed (only data loading, OKX listing calendar and OKX cost snapshot done)",
+  "direction": "Long-tail cross-sectional market-neutral perps: PIT OKX-listed ranks 31-150 by trailing-30d Binance quote volume; top-30 as comparison",
+  "periods": {"IS": "2022-01-01..2024-12-31 (every choice)", "OOS": "2025-01-01..2026-08-31 (never used for any choice)"},
+  "universe": {
+    "rank": "daily; trailing 30-day mean Binance USDT-M quote volume (min 7 days), data up to D-1; eligible if >=14 days of Binance history and OKX-listed on D-1 (static.okx.com per-instrument daily trade archive calendar, Hermes OkxListing); stable/index/tradfi excluded",
+    "TAIL": "rank 31..150", "TOP30": "rank 1..30"
+  },
+  "signals": {
+    "r1h": "-log C[k]/C[k-1]", "r4h": "-log C[k]/C[k-4]", "r1d": "-log C[k]/C[k-24]",
+    "m3d": "log C[k]/C[k-72]", "m7d": "log C[k-24]/C[k-168]", "m30d": "log C[k-24]/C[k-720]",
+    "fund": "-sum funding last 24h", "dfund": "-(sum funding 24h - sum funding 7d / 7)",
+    "vshock": "log(quote vol 24h / (quote vol 30d / 30))", "age": "log days since first Binance trading day",
+    "rr1d": "-(1d log return - beta*market 1d log return), beta on 720h hourly returns vs equal-weight panel market",
+    "rm7d": "residual 7d-skip-1d momentum (same beta)",
+    "sign": "per (signal, universe, R): sign of the IS mean cross-sectional Spearman IC with the next-R-hour log return"
+  },
+  "portfolio": {
+    "R_hours": [4, 8, 24], "decision_times": "UTC multiples of R, at bar close",
+    "legs": "long top 25% / short bottom 25% of the eligible universe by score",
+    "weights": "inverse 7-day hourly vol within each leg (vol floored at the cross-sectional 20th pct), cap 2x equal weight, each leg 0.5 of gross",
+    "neutral": ["dollar", "beta (legs rescaled so sum w*beta = 0, gross kept 1; betas clipped to [0.2,3])"],
+    "hysteresis": ["off", "on: a held name stays while its percentile stays within the top/bottom 50%"],
+    "min_names": 8
+  },
+  "combos": {
+    "COMBOk": "equal-weight average of signed percentile ranks of the k best single signals by IS net Sharpe at the same (universe, R, neutral, hysteresis); k in {2,3,5}",
+    "LGBM": "LightGBM regressor, fixed params (num_leaves 15, lr 0.05, 300 trees, min_data_in_leaf 1000, feature_fraction 0.8, bagging 0.8), features = 12 signals as cross-sectional percentiles + log ADV pct + vol pct; target = cross-sectional percentile of next-R-hour log return; expanding window, retrained monthly, purge R hours; first prediction 2022-07-01 (IS Sharpe measured 2022-07..2024-12)"
+  },
+  "execution_costs": {
+    "base": "trade at decision bar close (Binance 1h close), OKX VIP0 taker fee 5 bp/side + slippage vs mid",
+    "slippage": "max(floor, exp(6.745 - 0.438 ln ADV30_binance + 0.317 ln order_USDT)) bp; fitted on OKX order books 2026-09-25 (283 swaps, 50..10000 USDT market orders); floor 1 bp TOP30, 3 bp TAIL",
+    "funding": "Binance funding rates (OKX archive ends 2025-09-07; checked separately)",
+    "stress": "costs x1.5 and one extra 1h bar of latency",
+    "account": "5,000 USDT; OKX ctVal/lotSz/minSz (current instruments, price-scaled); names absent from OKX today assume 1 USDT lots"
+  },
+  "selection": "per universe, the configuration with highest IS net Sharpe (1x) over the whole grid (singles, combos, LGBM); OOS evaluated after selection",
+  "success_bar": {
+    "1": "OOS 2025-01-01..2026-08-31 net Sharpe >= 1.5 at 1x, 2025 and 2026(Jan-Aug) both positive",
+    "2": "LOMO and LOCO OOS Sharpe >= 1.0; costs x1.5 + 1 bar latency OOS Sharpe >= 0.8",
+    "3": "executable by 1k-10k USDT on OKX (listing, lots, VIP0 fees, slippage)",
+    "4": "largest L in {1,2,3,5,8,10,15,20} with OOS intrabar MDD <= 35% and no liquidation (OKX tiers, intrabar extremes) and L <= IS half-Kelly"
+  }
+}

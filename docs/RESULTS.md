@@ -585,4 +585,52 @@ Au total, huit familles et plus de 200 000 simulations : **aucune stratégie ne 
 réel trouvé (décrochages Binance) est réservé à un robot à la seconde près sur Binance, rare (quelques
 transactions par an) et ne tient pas au-delà de ≈ 5×.
 
+## 18. Petit capital : ce qui justifie un peu plus de levier (25 septembre 2026)
+
+Objectif de l'utilisateur : faire avec 1 000 à 10 000 USDT et plus de levier. Barre fixée d'avance pour chaque
+piste : Sharpe hors échantillon (2025-01 → 2026-08, jamais utilisé pour choisir) ≥ 1,5 avec 2025 et 2026
+positifs ; retrait d'un mois ou d'un contrat ≥ 1,0 ; coûts ×1,5 et une bougie de retard ≥ 0,8 ; exécutable sur
+OKX par un petit compte ; levier supportable = le plus grand avec une baisse intrabougie ≤ 35 % sans liquidation
+et au plus le demi-Kelly en échantillon. Chaque piste a été rejouée par un vérificateur adverse.
+
+| Piste (avantage propre aux petits comptes) | Résultat vérifié | Barre |
+|---|---|:-:|
+| Longue traîne (rangs 31-150 par liquidité, 1 536 réglages, LightGBM compris) | IC plus forts et stables qu'au top-30, mais aucun réglage net positif hors échantillon (médiane −2,45) : les coûts (8 pb par côté) et les envolées de la jambe courte mangent l'avantage | ❌ |
+| Nouvelles cotations : court sur les nouveaux tokens, couvert BTC | Réglage choisi : Sharpe 1,40 hors échantillon (2025 +37 %, 2026 +27 %), retrait d'un mois 0,78 → échoue de peu ; l'ensemble des réglages voisins (entrée J+1 ou J+3, sortie J+7), qu'on pouvait fixer d'avance : 2,1, retrait d'un mois 1,5, bootstrap 90 % [0,7 ; 3,6] | ≈ |
+| Tendance multi-coins et diversification (livre + tendance + portage) | Tendance seule 0,58 ; les flux se diversifient (corrélation 0,13) mais la diversification seule n'achète pas de levier | ❌ |
+| Décrochages pendant les cascades sur les alts OKX | 0,17 à 0,87 hors échantillon, concentré sur trois journées ; baisse de 54 % dès 1× | ❌ |
+
+**L'effet « nouvelles cotations » est réel** : de J+1/J+3 à J+7, un nouveau token a perdu 7 à 16 % de plus que BTC
+par opération chaque année de 2023 à 2026 (t de 2 à 4), dont une petite part seulement est le bêta des alts
+(ventes d'airdrops et déblocages). **Mais son avenir est plus mince que son passé** : Binance cote moins de nouveaux
+tokens crypto (74 de janvier à août 2026 contre 228 en 2025 ; OKX en cote environ 28 % à J+3, une part stable depuis
+2025 — le « 10 % en 2026 » d'abord mesuré comptait les perpétuels sur actions et matières premières), soit 25 à 33
+opérations par an au lieu de 61, et la queue des squeezes s'est alourdie (13 % des opérations montent de plus de
+50 % hors échantillon, contre 2 % avant). Sharpe attendu pour la suite : environ 1 (0,5 à 1,5).
+
+**Combinée au livre** (corrélation −0,09, pertes simultanées pas plus fréquentes que le hasard), la paire fait
+un Sharpe de 2,25 hors échantillon, mais ce chiffre hérite du 2025 du livre, qui n'est pas un échantillon propre
+(configuration choisie sur 2023-2026) ; avec une décote honnête du livre, le Sharpe attendu de la paire est de 1,0
+à 1,6. Levier combiné supportable (baisse intrabougie ≤ 35 %) : **3× au plus** (4× et 5× échouent une fois la
+trajectoire intrajournalière du livre prise en compte, 10 octobre 2025 et 31 décembre 2025 en tête), **2× au
+départ** tant que la poche n'a pas fait ses preuves en direct. C'est plus que ce que chaque stratégie supporte seule
+de façon robuste, mais loin des 10-20×.
+
+**Décision** : la poche est construite (`live/listing_sleeve.py`) sous la forme la plus robuste, deux tranches
+d'entrée (J+1 et J+3, chacune dans les 3 heures qui suivent, jamais rattrapée) fermées à J+7, couverture BTC 1:1,
+un stop à +50 % de la première entrée, cinq nouveaux tokens au plus, taille inversement proportionnelle à la
+volatilité, plafond 0,8× de la NAV, et tourne en papier à côté du livre depuis le 25 septembre 2026. Rejouée sur les
+données de recherche avec exactement ces règles : Sharpe hors échantillon 2,09, retrait d'un mois 1,47 (l'ensemble
+avec une moitié sans stop ferait 2,22 ; des entrées rattrapées en retard l'auraient ramenée à 1,81). Une relecture
+adverse du code a fait corriger avant le déploiement : la couverture BTC orpheline après un stop, l'arrêt d'urgence
+qui ne fermait pas la poche, les limites de risque du livre (perte journalière, budget de drawdown) qui ne freinaient
+pas ses entrées, les entrées tardives, et les jetons préfixés « 1000 » pris pour neufs. Règles d'arrêt fixées d'avance : la poche s'arrête si ses 25 dernières
+opérations perdent en moyenne ou plus de 10 % de son plafond ; revue après 12 mois et au moins 30 opérations ; le
+passage en argent réel n'est envisageable qu'à 2× combiné, puis 3× si le Sharpe prospectif dépasse 1.
+
+**Capital minimal** : le livre tient 28 de ses 30 positions sur OKX dès 1 000 USDT, mais la moitié de ses
+rééquilibrages par bougie y tombent sous la taille minimale d'ordre ; 3 000 USDT est un plancher raisonnable,
+10 000 USDT le rend fidèle au backtest. Code et résultats des quatre pistes et des vérifications :
+`research/leverage_2026-09/` (dossiers `longtail`, `newlisting`, `tsmom_div`, `cascade` et leurs vérifications).
+
 Ce document est mis à jour avec chaque résultat, favorable ou non.

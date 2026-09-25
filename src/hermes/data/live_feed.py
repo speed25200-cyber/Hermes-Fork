@@ -22,10 +22,12 @@ import pandas as pd
 from hermes.config import BAR_MINUTES
 from hermes.data.intrabar import intrabar_aggregates
 from hermes.data.panel import BAR_TO_OFFSET, Panel, clean_panel
+from hermes.execution.okx.instruments import base_asset
 
 log = logging.getLogger(__name__)
 
 FAPI = "https://fapi.binance.com"
+SPOT_API = "https://api.binance.com"
 WEIGHT_BUDGET = 1800  # of Binance's 2400 per minute and IP: headroom for the other processes on the host
 # Positioning snapshots (the live side of the archives' "metrics"): endpoint and value per panel field. Binance
 # serves the last 30 days of 5-minute snapshots, the archives' own granularity.
@@ -131,6 +133,46 @@ class BinanceLiveFeed:
             await asyncio.sleep(60.5 - time.time() % 60)
             self._weight_minute, self._weight_used = int(time.time() // 60), 0
         self._weight_used += weight
+
+    async def perp_listings(self) -> dict[str, int]:
+        """USDT-margined perpetuals trading on Binance with their launch time (ms), from exchangeInfo."""
+        info: dict = await self._get("/fapi/v1/exchangeInfo", {}, weight=1)  # type: ignore[assignment,type-arg]
+        return {
+            str(s["symbol"]): int(s["onboardDate"])
+            for s in info.get("symbols", [])
+            if s.get("contractType") == "PERPETUAL"
+            and s.get("quoteAsset") == "USDT"
+            and s.get("status") == "TRADING"
+            and s.get("underlyingType", "COIN") == "COIN"  # not the stock, commodity or index perpetuals
+            and s.get("onboardDate")
+        }
+
+    async def first_trade(self, symbol: str) -> pd.Timestamp | None:
+        """Open of the contract's first 1-minute candle (its real start of trading)."""
+        rows = await self._get("/fapi/v1/klines", {"symbol": symbol, "interval": "1m", "startTime": 0, "limit": 1})
+        return pd.Timestamp(int(rows[0][0]), unit="ms", tz="UTC") if rows else None
+
+    async def spot_first_open(self, symbol: str) -> pd.Timestamp | None:
+        """Open of the first daily candle of the token's oldest Binance spot market (USDT, FDUSD, USDC, BTC, BNB or
+        TRY quote, under the base with and without a 1000/1M prefix), or None when Binance has none."""
+        raw = symbol[:-4] if symbol.endswith("USDT") else symbol
+        first: pd.Timestamp | None = None
+        for base in dict.fromkeys((base_asset(symbol), raw)):  # 1000PEPE's spot market is PEPE's
+            for quote in ("USDT", "FDUSD", "USDC", "BTC", "BNB", "TRY"):
+                try:
+                    rows = await self._get(
+                        f"{SPOT_API}/api/v3/klines",
+                        {"symbol": base + quote, "interval": "1d", "startTime": 0, "limit": 1},
+                        weight=2,
+                    )
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == 400:  # no such market
+                        continue
+                    raise
+                if rows:
+                    t = pd.Timestamp(int(rows[0][0]), unit="ms", tz="UTC")
+                    first = t if first is None or t < first else first
+        return first
 
     async def top_symbols(self, n: int) -> list[str]:
         """Current most traded USDT perpetuals (24h quote volume)."""

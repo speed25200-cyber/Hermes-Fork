@@ -1,0 +1,99 @@
+{
+ "n": 121,
+ "unit_usdt_q": {
+  "0.5": 2.465,
+  "0.9": 6.112,
+  "0.99": 10.4498,
+  "1.0": 11.204
+ },
+ "E1000_tranches16_scale0.25": {
+  "tranche_usdt": 3.125,
+  "frac_infeasible": 0.3305785123966942,
+  "frac_rounding_gt_20pct": 0.5702479338842975
+ },
+ "E1000_tranches16_scale0.5": {
+  "tranche_usdt": 6.25,
+  "frac_infeasible": 0.0743801652892562,
+  "frac_rounding_gt_20pct": 0.3305785123966942
+ },
+ "E1000_tranches16_scale1.0": {
+  "tranche_usdt": 12.5,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.14049586776859505
+ },
+ "E1000_tranches4_scale0.25": {
+  "tranche_usdt": 12.5,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.14049586776859505
+ },
+ "E1000_tranches4_scale0.5": {
+  "tranche_usdt": 25.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.024793388429752067
+ },
+ "E1000_tranches4_scale1.0": {
+  "tranche_usdt": 50.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ },
+ "E3000_tranches16_scale0.25": {
+  "tranche_usdt": 9.375,
+  "frac_infeasible": 0.03305785123966942,
+  "frac_rounding_gt_20pct": 0.256198347107438
+ },
+ "E3000_tranches16_scale0.5": {
+  "tranche_usdt": 18.75,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.08264462809917356
+ },
+ "E3000_tranches16_scale1.0": {
+  "tranche_usdt": 37.5,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.008264462809917356
+ },
+ "E3000_tranches4_scale0.25": {
+  "tranche_usdt": 37.5,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.008264462809917356
+ },
+ "E3000_tranches4_scale0.5": {
+  "tranche_usdt": 75.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ },
+ "E3000_tranches4_scale1.0": {
+  "tranche_usdt": 150.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ },
+ "E10000_tranches16_scale0.25": {
+  "tranche_usdt": 31.25,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.024793388429752067
+ },
+ "E10000_tranches16_scale0.5": {
+  "tranche_usdt": 62.5,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ },
+ "E10000_tranches16_scale1.0": {
+  "tranche_usdt": 125.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ },
+ "E10000_tranches4_scale0.25": {
+  "tranche_usdt": 125.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ },
+ "E10000_tranches4_scale0.5": {
+  "tranche_usdt": 250.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ },
+ "E10000_tranches4_scale1.0": {
+  "tranche_usdt": 500.0,
+  "frac_infeasible": 0.0,
+  "frac_rounding_gt_20pct": 0.0
+ }
+}

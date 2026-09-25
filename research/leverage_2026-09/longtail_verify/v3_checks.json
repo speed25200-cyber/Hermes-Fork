@@ -1,0 +1,120 @@
+{
+ "listing_vs_today_crosstab": {
+  "false": {
+   "false": 86,
+   "true": 0
+  },
+  "true": {
+   "false": 3,
+   "true": 256
+  }
+ },
+ "cal_not_listed_but_live_today": [
+  "LUNAUSDT",
+  "OLUSDT",
+  "RLSUSDT"
+ ],
+ "cal_listed_but_not_live_today": [],
+ "tail_rowfrac_on_names_not_on_okx_today_IS": 0.267351787782524,
+ "tail_rowfrac_on_names_not_on_okx_today_OOS": 0.10125619358950637,
+ "TAIL_close_only_L1": {
+  "mdd_ib": 0.3041,
+  "liq": "",
+  "cagr": -0.1775
+ },
+ "TAIL_close_only_L2": {
+  "mdd_ib": 0.5353,
+  "liq": "",
+  "cagr": -0.3401
+ },
+ "TAIL_close_only_L3": {
+  "mdd_ib": 0.703,
+  "liq": "",
+  "cagr": -0.4854
+ },
+ "TAIL_close_only_L5": {
+  "mdd_ib": 0.896,
+  "liq": "",
+  "cagr": -0.7141
+ },
+ "TAIL_close_only_L8": {
+  "mdd_ib": 0.982,
+  "liq": "",
+  "cagr": -0.8949
+ },
+ "TAIL_mark_worstcase_L1": {
+  "mdd_ib": 0.4375,
+  "liq": "",
+  "cagr": -0.1775
+ },
+ "TAIL_mark_worstcase_L2": {
+  "mdd_ib": 0.7511,
+  "liq": "",
+  "cagr": -0.3401
+ },
+ "TAIL_mark_worstcase_L3": {
+  "mdd_ib": 0.955,
+  "liq": "",
+  "cagr": -0.4854
+ },
+ "TAIL_mark_worstcase_L5": {
+  "mdd_ib": 1.0,
+  "liq": "2025-10-10 22:00:00+00:00",
+  "cagr": -1.0
+ },
+ "TAIL_mark_worstcase_L8": {
+  "mdd_ib": 1.0,
+  "liq": "2025-10-10 22:00:00+00:00",
+  "cagr": -1.0
+ },
+ "TOP30_close_only_L1": {
+  "mdd_ib": 0.2345,
+  "liq": "",
+  "cagr": 0.3021
+ },
+ "TOP30_close_only_L2": {
+  "mdd_ib": 0.4215,
+  "liq": "",
+  "cagr": 0.6149
+ },
+ "TOP30_close_only_L3": {
+  "mdd_ib": 0.569,
+  "liq": "",
+  "cagr": 0.8955
+ },
+ "TOP30_close_only_L5": {
+  "mdd_ib": 0.7694,
+  "liq": "",
+  "cagr": 1.2279
+ },
+ "TOP30_close_only_L8": {
+  "mdd_ib": 0.9298,
+  "liq": "",
+  "cagr": 0.9388
+ },
+ "TOP30_mark_worstcase_L1": {
+  "mdd_ib": 0.2585,
+  "liq": "",
+  "cagr": 0.3021
+ },
+ "TOP30_mark_worstcase_L2": {
+  "mdd_ib": 0.5162,
+  "liq": "",
+  "cagr": 0.6149
+ },
+ "TOP30_mark_worstcase_L3": {
+  "mdd_ib": 0.7676,
+  "liq": "",
+  "cagr": 0.8955
+ },
+ "TOP30_mark_worstcase_L5": {
+  "mdd_ib": 1.0,
+  "liq": "2025-10-10 22:00:00+00:00",
+  "cagr": -1.0
+ },
+ "TOP30_mark_worstcase_L8": {
+  "mdd_ib": 1.0,
+  "liq": "2025-10-10 22:00:00+00:00",
+  "cagr": -1.0
+ }
+}

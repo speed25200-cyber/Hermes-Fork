@@ -1,0 +1,54 @@
+{
+ "HUSDT": {
+  "pnl": -178.5,
+  "loco_sharpe": -0.961
+ },
+ "MERLUSDT": {
+  "pnl": -136.3,
+  "loco_sharpe": -1.044
+ },
+ "MOODENGUSDT": {
+  "pnl": -132.8,
+  "loco_sharpe": -1.111
+ },
+ "TURBOUSDT": {
+  "pnl": -115.5,
+  "loco_sharpe": -1.132
+ },
+ "SUSDT": {
+  "pnl": -112.9,
+  "loco_sharpe": -1.121
+ },
+ "IPUSDT": {
+  "pnl": -105.4,
+  "loco_sharpe": -1.127
+ },
+ "JTOUSDT": {
+  "pnl": -102.3,
+  "loco_sharpe": -1.086
+ },
+ "BOMEUSDT": {
+  "pnl": -99.1,
+  "loco_sharpe": -1.093
+ },
+ "SOONUSDT": {
+  "pnl": -96.0,
+  "loco_sharpe": -1.081
+ },
+ "PENDLEUSDT": {
+  "pnl": 94.2,
+  "loco_sharpe": -1.211
+ },
+ "GMTUSDT": {
+  "pnl": -93.7,
+  "loco_sharpe": -1.117
+ },
+ "TIAUSDT": {
+  "pnl": 90.6,
+  "loco_sharpe": -1.166
+ },
+ "DASHUSDT": {
+  "pnl": 34.5,
+  "loco_sharpe": -1.236
+ }
+}

@@ -1,0 +1,79 @@
+{
+ "IS": {
+  "trades": 53,
+  "okx_live_now": 39,
+  "okx_candles": 39,
+  "mean_ret_binance_same": 0.05742770220606145,
+  "mean_ret_okx": 0.057347292466873916,
+  "corr": 0.999986488477609,
+  "median_abs_entry_gap_bp": 7.457121551079915,
+  "p90_abs_entry_gap_bp": 13.787097731257528,
+  "stop_disagreements": 0,
+  "mean_abs_ret_diff": 0.0007940076205209615
+ },
+ "OOS": {
+  "trades": 83,
+  "okx_live_now": 67,
+  "okx_candles": 65,
+  "mean_ret_binance_same": 0.07048805897081162,
+  "mean_ret_okx": 0.05785634133128516,
+  "corr": 0.9567493768182006,
+  "median_abs_entry_gap_bp": 11.254924029262536,
+  "p90_abs_entry_gap_bp": 53.28672410136792,
+  "stop_disagreements": 2,
+  "mean_abs_ret_diff": 0.0137779721804554
+ },
+ "lots": {
+  "1000_L1": {
+   "n": 106,
+   "feasible": 106,
+   "min_target_usdt": 62.188449904382296,
+   "median_contract_usdt": 2.5755,
+   "max_contract_usdt": 69.33,
+   "median_rounding_err": 0.004809999066637765,
+   "p90_rounding_err": 0.022020198986010413,
+   "btc_hedge_min_usdt": 10.0,
+   "btc_hedge_median_rounding_err": 0.02389755973751105
+  },
+  "1000_L2": {
+   "n": 106,
+   "feasible": 106,
+   "min_target_usdt": 124.37689980876459,
+   "median_contract_usdt": 2.5755,
+   "max_contract_usdt": 69.33,
+   "median_rounding_err": 0.002647495139483991,
+   "p90_rounding_err": 0.009640598793244071,
+   "btc_hedge_min_usdt": 10.0,
+   "btc_hedge_median_rounding_err": 0.012470781035809585
+  },
+  "10000_L1": {
+   "n": 106,
+   "feasible": 106,
+   "min_target_usdt": 621.884499043823,
+   "median_contract_usdt": 2.5755,
+   "max_contract_usdt": 69.33,
+   "median_rounding_err": 0.0005803441150856281,
+   "p90_rounding_err": 0.0020719036844960093,
+   "btc_hedge_min_usdt": 10.0,
+   "btc_hedge_median_rounding_err": 0.0027169217348907582
+  },
+  "10000_L2": {
+   "n": 106,
+   "feasible": 106,
+   "min_target_usdt": 1243.768998087646,
+   "median_contract_usdt": 2.5755,
+   "max_contract_usdt": 69.33,
+   "median_rounding_err": 0.00022075650647419858,
+   "p90_rounding_err": 0.0010760203273809023,
+   "btc_hedge_min_usdt": 10.0,
+   "btc_hedge_median_rounding_err": 0.0012723128075755466
+  }
+ },
+ "okx_lever": {
+  "min": 10.0,
+  "median": 20.0,
+  "frac_ge_10": 1.0,
+  "tier1_mmr_max": 0.05,
+  "tier1_maxSz_usdt_min": 1546.0
+ }
+}

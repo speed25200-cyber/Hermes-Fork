@@ -121,6 +121,22 @@ Il affiche aussi deux contrôles de qualité :
   reconstruire après un redémarrage). Simple alerte, jamais une entrée de trading : une erreur du contrôle
   est journalisée et le trading continue.
 
+## Poche « nouvelles cotations » (papier)
+
+`live.listing_sleeve` (activée dans `configs/paper.yaml`, jamais en mode réel) : court sur chaque nouveau
+perpétuel USDT-M de Binance dont le token est neuf (aucun marché au comptant Binance, ou ouvert depuis moins de
+30 jours) et qu'OKX cote, en deux tranches (24 h et 72 h après la cotation), fermées 7 jours après, couvertes par un
+long BTC de même montant, avec un stop à +50 % de la première entrée ; une tranche n'entre que dans les 3 heures qui
+suivent son heure (jamais rattrapée après un redémarrage) ; cinq nouveaux tokens au plus, plafond 0,8× de la NAV
+(docs/RESULTS.md § 18). Aucune entrée tant que le livre est restreint (données périmées, arrêt, disjoncteur de perte
+journalière, budget de drawdown entamé) ; un arrêt ferme aussi la poche. Le calendrier vient de `exchangeInfo` de Binance (relu toutes les six heures,
+mis en cache avec les opérations dans la base d'état) ; le livre est décidé sur le compte net des jambes de la
+poche, les deux listes de cibles sont additionnées avant exécution ; une panne de la poche ne bloque jamais le
+livre. Le tableau de bord (onglet Positions) montre les shorts ouverts, le P&L, la couverture OKX (combien de
+nouveaux tokens sont cotés sur OKX à l'échéance) et l'état. **Règle d'arrêt** : plus aucune entrée si les 25
+dernières opérations perdent en moyenne ou plus de 10 % du plafond (P&L net du funding et de coûts de recherche,
+0,15 % par côté sur le token, 0,06 % sur BTC) ; revue après 12 mois et 30 opérations.
+
 ## Arrêt d'urgence
 
 ```bash
