@@ -1,0 +1,30 @@
+{
+ "okx_extra PROS+DATA newtok all 2022-2026": {
+  "sharpe": 0.68,
+  "n": 150,
+  "mean": 0.0463,
+  "t": 1.94,
+  "maxdd": 0.352
+ },
+ "okx_extra PROS+DATA newtok 2022-2024": {
+  "sharpe": 0.135,
+  "n": 94,
+  "mean": 0.0023,
+  "t": 0.08,
+  "maxdd": 0.308
+ },
+ "okx_extra PROS+DATA newtok 2025-2026": {
+  "sharpe": 1.724,
+  "n": 56,
+  "mean": 0.12,
+  "t": 3.32,
+  "maxdd": 0.115
+ },
+ "okx_extra PROS+DATA newtok 2026": {
+  "sharpe": 2.556,
+  "n": 34,
+  "mean": 0.1154,
+  "t": 2.68,
+  "maxdd": 0.074
+ }
+}

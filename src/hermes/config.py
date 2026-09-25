@@ -300,8 +300,12 @@ class ListingSleeveConfig(_Strict):
     hedge_beta: float = Field(1.0, ge=0, description="BTC long per unit of short notional")
     new_token_days: float = Field(30, ge=0, description="A token is new if its first Binance spot market is younger")
     sigma_ref: float = Field(0.124, gt=0, description="Daily volatility of full size (research's in-sample median)")
-    kill_trades: int = Field(25, ge=0, description="Kill rule window: closed trades judged together (0 = off)")
-    kill_loss: float = Field(0.10, gt=0, description="Kill rule: loss over the window, share of the sleeve's cap")
+    # Kill rule calibrated on the research trades (RESULTS § 19): with the honest post-launch edge (+5.8 % net per
+    # trade, 30 % dispersion) it stops a working sleeve within two years in ~21 % of bootstrap paths (3.5 % with the
+    # pre-market perps it also trades) and a dead one in ~70 % (median 67 trades); "last 25 losing" stopped 92 %.
+    kill_trades: int = Field(60, ge=0, description="Kill rule window: closed trades judged together (0 = off)")
+    kill_mean: float = Field(-0.03, le=0, description="Kill rule: mean net return per trade over the window")
+    kill_loss: float = Field(0.15, gt=0, description="Kill rule: loss over the window, share of the sleeve's cap")
     coin_cost: float = Field(0.0015, ge=0, description="Cost per side on the coin leg in the sleeve's own P&L")
     hedge_cost: float = Field(0.0006, ge=0, description="Cost per side on the BTC hedge in the sleeve's own P&L")
 

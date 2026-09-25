@@ -27,6 +27,8 @@ Troisième tour (petit capital, RESULTS § 18) :
 - `tsmom_div/`, `verify_combo_tsmom/` : tendance multi-coins et diversification.
 - `cascade/`, `verify_dislocations/` : décrochages des alts OKX pendant les cascades.
 - `verify_combo_listings_ib/`, `lens_skeptic_combo/` : livre + poche combinés, risque intrabougie et levier.
+- `okx_listings/` : cotations propres à OKX comme événements supplémentaires (non retenues), perpétuels de
+  pré-marché dans le résultat hors échantillon, calibrage de la règle d'arrêt (RESULTS § 19).
 
 Les données (archives data.binance.vision, API publiques OKX) ne sont pas versionnées : chaque dossier les
 télécharge (`download.py`, `fetch_data.py`, `build_panel.py`) ; les chemins absolus des scripts pointent vers le

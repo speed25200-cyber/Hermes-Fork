@@ -132,11 +132,14 @@ def test_funding_close_all_and_reconcile(tmp_path):
 
 
 def test_kill_rule_stops_new_entries(tmp_path):
-    """Fixed in advance: the last 25 closed trades losing on average (or > 10 % of the sleeve's cap) end entries."""
+    """The last ``kill_trades`` closed trades losing more than 3 % on average (or > ``kill_loss`` of the sleeve's cap)
+    end entries; a slightly negative mean alone does not (the edge is too noisy per trade for that)."""
     sl = _sleeve(tmp_path, kill_trades=3, kill_loss=0.10, leverage=1.0)
     win = {"symbol": "W", "tranche": 0, "notional": 100.0, "pnl": 10.0, "nav": 1_000.0, "reason": "end"}
     lose = dict(win, pnl=-20.0)
     sl.done = [win, win, dict(lose, pnl=-15.0)]  # mean return > 0, small loss: keeps trading
+    assert not sl.suspended()
+    sl.done = [win, dict(win, pnl=-12.0), dict(win, pnl=-1.0)]  # mean -1 %: within the noise, keeps trading
     assert not sl.suspended()
     sl.done = [win, lose, lose]  # mean return < 0
     assert sl.suspended()

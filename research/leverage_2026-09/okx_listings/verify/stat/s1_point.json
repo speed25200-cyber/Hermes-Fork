@@ -1,0 +1,1518 @@
+{
+ "binance_only | 2022-2024": {
+  "sharpe": 2.413,
+  "maxdd": 0.098,
+  "final": 2.236,
+  "vol": 0.114,
+  "trades": 101,
+  "okx_trades": 0,
+  "blocked_bn": 0
+ },
+ "union | 2022-2024": {
+  "sharpe": 1.569,
+  "maxdd": 0.311,
+  "final": 2.286,
+  "vol": 0.187,
+  "trades": 195,
+  "okx_trades": 94,
+  "blocked_bn": 0,
+  "d_sharpe": -0.844,
+  "boot_block10": {
+   "se": 0.596,
+   "ci90": [
+    -1.54,
+    0.43
+   ],
+   "ci95": [
+    -1.73,
+    0.58
+   ],
+   "p_two_sided": 0.1524,
+   "share_draws_below_0": 0.799
+  },
+  "boot_block21": {
+   "se": 0.573,
+   "ci90": [
+    -1.47,
+    0.39
+   ],
+   "ci95": [
+    -1.63,
+    0.56
+   ],
+   "p_two_sided": 0.14,
+   "share_draws_below_0": 0.808
+  },
+  "boot_block63": {
+   "se": 0.522,
+   "ci90": [
+    -1.18,
+    0.52
+   ],
+   "ci95": [
+    -1.33,
+    0.66
+   ],
+   "p_two_sided": 0.1012,
+   "share_draws_below_0": 0.698
+  },
+  "boot_month": {
+   "se": 0.578,
+   "ci90": [
+    -1.71,
+    0.2
+   ],
+   "ci95": [
+    -1.88,
+    0.35
+   ],
+   "p_two_sided": 0.1484,
+   "share_draws_below_0": 0.9
+  },
+  "okx_alone": {
+   "sharpe": 0.135,
+   "trades": 94,
+   "maxdd": 0.308,
+   "mean_ret": 0.0023,
+   "mean_net": 0.0067,
+   "corr_with_binance_only": 0.06,
+   "alpha_ann_vs_bn": -0.0016,
+   "alpha_t_nw10": -0.02,
+   "beta_vs_bn": 0.076,
+   "needed_sr_for_gain": 0.146
+  }
+ },
+ "okx_half | 2022-2024": {
+  "sharpe": 2.076,
+  "maxdd": 0.17,
+  "final": 2.286,
+  "vol": 0.137,
+  "trades": 195,
+  "okx_trades": 94,
+  "blocked_bn": 0,
+  "d_sharpe": -0.338,
+  "boot_block10": {
+   "se": 0.357,
+   "ci90": [
+    -0.76,
+    0.42
+   ],
+   "ci95": [
+    -0.89,
+    0.5
+   ],
+   "p_two_sided": 0.34,
+   "share_draws_below_0": 0.626
+  },
+  "boot_block21": {
+   "se": 0.342,
+   "ci90": [
+    -0.69,
+    0.42
+   ],
+   "ci95": [
+    -0.81,
+    0.51
+   ],
+   "p_two_sided": 0.3242,
+   "share_draws_below_0": 0.609
+  },
+  "boot_block63": {
+   "se": 0.303,
+   "ci90": [
+    -0.48,
+    0.5
+   ],
+   "ci95": [
+    -0.58,
+    0.59
+   ],
+   "p_two_sided": 0.2656,
+   "share_draws_below_0": 0.446
+  },
+  "boot_month": {
+   "se": 0.368,
+   "ci90": [
+    -0.91,
+    0.31
+   ],
+   "ci95": [
+    -1.03,
+    0.4
+   ],
+   "p_two_sided": 0.3656,
+   "share_draws_below_0": 0.792
+  },
+  "okx_alone": {
+   "sharpe": 0.151,
+   "trades": 94,
+   "maxdd": 0.162,
+   "mean_ret": 0.0023,
+   "mean_net": 0.0067,
+   "corr_with_binance_only": 0.061,
+   "alpha_ann_vs_bn": 0.0002,
+   "alpha_t_nw10": 0.0,
+   "beta_vs_bn": 0.038,
+   "needed_sr_for_gain": 0.148
+  }
+ },
+ "okx_nobn | 2022-2024": {
+  "sharpe": 1.538,
+  "maxdd": 0.314,
+  "final": 2.232,
+  "vol": 0.185,
+  "trades": 192,
+  "okx_trades": 91,
+  "blocked_bn": 3,
+  "d_sharpe": -0.875,
+  "boot_block10": {
+   "se": 0.602,
+   "ci90": [
+    -1.57,
+    0.4
+   ],
+   "ci95": [
+    -1.77,
+    0.57
+   ],
+   "p_two_sided": 0.1436,
+   "share_draws_below_0": 0.81
+  },
+  "boot_block21": {
+   "se": 0.579,
+   "ci90": [
+    -1.5,
+    0.38
+   ],
+   "ci95": [
+    -1.67,
+    0.54
+   ],
+   "p_two_sided": 0.1292,
+   "share_draws_below_0": 0.822
+  },
+  "boot_block63": {
+   "se": 0.526,
+   "ci90": [
+    -1.21,
+    0.5
+   ],
+   "ci95": [
+    -1.36,
+    0.65
+   ],
+   "p_two_sided": 0.0912,
+   "share_draws_below_0": 0.718
+  },
+  "boot_month": {
+   "se": 0.577,
+   "ci90": [
+    -1.73,
+    0.18
+   ],
+   "ci95": [
+    -1.91,
+    0.34
+   ],
+   "p_two_sided": 0.1352,
+   "share_draws_below_0": 0.906
+  },
+  "okx_alone": {
+   "sharpe": 0.077,
+   "trades": 91,
+   "maxdd": 0.311,
+   "mean_ret": -0.0041,
+   "mean_net": 0.0011,
+   "corr_with_binance_only": 0.049,
+   "alpha_ann_vs_bn": -0.0057,
+   "alpha_t_nw10": -0.06,
+   "beta_vs_bn": 0.06,
+   "needed_sr_for_gain": 0.117
+  }
+ },
+ "okx_nobn_half | 2022-2024": {
+  "sharpe": 2.059,
+  "maxdd": 0.172,
+  "final": 2.259,
+  "vol": 0.136,
+  "trades": 192,
+  "okx_trades": 91,
+  "blocked_bn": 3,
+  "d_sharpe": -0.354,
+  "boot_block10": {
+   "se": 0.36,
+   "ci90": [
+    -0.78,
+    0.41
+   ],
+   "ci95": [
+    -0.91,
+    0.5
+   ],
+   "p_two_sided": 0.319,
+   "share_draws_below_0": 0.642
+  },
+  "boot_block21": {
+   "se": 0.344,
+   "ci90": [
+    -0.71,
+    0.41
+   ],
+   "ci95": [
+    -0.82,
+    0.5
+   ],
+   "p_two_sided": 0.303,
+   "share_draws_below_0": 0.625
+  },
+  "boot_block63": {
+   "se": 0.304,
+   "ci90": [
+    -0.5,
+    0.5
+   ],
+   "ci95": [
+    -0.6,
+    0.58
+   ],
+   "p_two_sided": 0.2462,
+   "share_draws_below_0": 0.463
+  },
+  "boot_month": {
+   "se": 0.368,
+   "ci90": [
+    -0.92,
+    0.31
+   ],
+   "ci95": [
+    -1.04,
+    0.39
+   ],
+   "p_two_sided": 0.3386,
+   "share_draws_below_0": 0.806
+  },
+  "okx_alone": {
+   "sharpe": 0.093,
+   "trades": 91,
+   "maxdd": 0.163,
+   "mean_ret": -0.0041,
+   "mean_net": 0.0011,
+   "corr_with_binance_only": 0.049,
+   "alpha_ann_vs_bn": -0.0018,
+   "alpha_t_nw10": -0.04,
+   "beta_vs_bn": 0.03,
+   "needed_sr_for_gain": 0.119
+  }
+ },
+ "okx_exit_bn24 | 2022-2024": {
+  "sharpe": 1.653,
+  "maxdd": 0.297,
+  "final": 2.351,
+  "vol": 0.183,
+  "trades": 191,
+  "okx_trades": 90,
+  "blocked_bn": 4,
+  "d_sharpe": -0.761,
+  "boot_block10": {
+   "se": 0.566,
+   "ci90": [
+    -1.39,
+    0.47
+   ],
+   "ci95": [
+    -1.56,
+    0.63
+   ],
+   "p_two_sided": 0.1798,
+   "share_draws_below_0": 0.758
+  },
+  "boot_block21": {
+   "se": 0.543,
+   "ci90": [
+    -1.31,
+    0.46
+   ],
+   "ci95": [
+    -1.5,
+    0.62
+   ],
+   "p_two_sided": 0.16,
+   "share_draws_below_0": 0.772
+  },
+  "boot_block63": {
+   "se": 0.5,
+   "ci90": [
+    -1.06,
+    0.59
+   ],
+   "ci95": [
+    -1.19,
+    0.72
+   ],
+   "p_two_sided": 0.129,
+   "share_draws_below_0": 0.65
+  },
+  "boot_month": {
+   "se": 0.549,
+   "ci90": [
+    -1.57,
+    0.25
+   ],
+   "ci95": [
+    -1.74,
+    0.39
+   ],
+   "p_two_sided": 0.1724,
+   "share_draws_below_0": 0.887
+  },
+  "okx_alone": {
+   "sharpe": 0.201,
+   "trades": 90,
+   "maxdd": 0.293,
+   "mean_ret": 0.0074,
+   "mean_net": 0.0122,
+   "corr_with_binance_only": 0.05,
+   "alpha_ann_vs_bn": 0.011,
+   "alpha_t_nw10": 0.12,
+   "beta_vs_bn": 0.061,
+   "needed_sr_for_gain": 0.121
+  }
+ },
+ "binance_only | 2025-2026": {
+  "sharpe": 2.06,
+  "maxdd": 0.167,
+  "final": 2.088,
+  "vol": 0.227,
+  "trades": 152,
+  "okx_trades": 0,
+  "blocked_bn": 0
+ },
+ "union | 2025-2026": {
+  "sharpe": 2.379,
+  "maxdd": 0.194,
+  "final": 2.654,
+  "vol": 0.261,
+  "trades": 193,
+  "okx_trades": 42,
+  "blocked_bn": 0,
+  "d_sharpe": 0.32,
+  "boot_block10": {
+   "se": 0.318,
+   "ci90": [
+    -0.15,
+    0.88
+   ],
+   "ci95": [
+    -0.24,
+    0.99
+   ],
+   "p_two_sided": 0.3172,
+   "share_draws_below_0": 0.142
+  },
+  "boot_block21": {
+   "se": 0.335,
+   "ci90": [
+    -0.17,
+    0.92
+   ],
+   "ci95": [
+    -0.26,
+    1.04
+   ],
+   "p_two_sided": 0.3382,
+   "share_draws_below_0": 0.136
+  },
+  "boot_block63": {
+   "se": 0.286,
+   "ci90": [
+    -0.24,
+    0.69
+   ],
+   "ci95": [
+    -0.33,
+    0.79
+   ],
+   "p_two_sided": 0.2598,
+   "share_draws_below_0": 0.239
+  },
+  "boot_month": {
+   "se": 0.277,
+   "ci90": [
+    -0.15,
+    0.76
+   ],
+   "ci95": [
+    -0.24,
+    0.84
+   ],
+   "p_two_sided": 0.2538,
+   "share_draws_below_0": 0.138
+  },
+  "okx_alone": {
+   "sharpe": 1.43,
+   "trades": 42,
+   "maxdd": 0.115,
+   "mean_ret": 0.1165,
+   "mean_net": 0.0793,
+   "corr_with_binance_only": 0.079,
+   "alpha_ann_vs_bn": 0.1482,
+   "alpha_t_nw10": 1.73,
+   "beta_vs_bn": 0.041,
+   "needed_sr_for_gain": 0.164
+  }
+ },
+ "okx_half | 2025-2026": {
+  "sharpe": 2.273,
+  "maxdd": 0.18,
+  "final": 2.337,
+  "vol": 0.237,
+  "trades": 193,
+  "okx_trades": 42,
+  "blocked_bn": 0,
+  "d_sharpe": 0.214,
+  "boot_block10": {
+   "se": 0.183,
+   "ci90": [
+    -0.05,
+    0.55
+   ],
+   "ci95": [
+    -0.09,
+    0.61
+   ],
+   "p_two_sided": 0.2428,
+   "share_draws_below_0": 0.095
+  },
+  "boot_block21": {
+   "se": 0.196,
+   "ci90": [
+    -0.06,
+    0.58
+   ],
+   "ci95": [
+    -0.11,
+    0.65
+   ],
+   "p_two_sided": 0.2626,
+   "share_draws_below_0": 0.099
+  },
+  "boot_block63": {
+   "se": 0.16,
+   "ci90": [
+    -0.1,
+    0.42
+   ],
+   "ci95": [
+    -0.15,
+    0.48
+   ],
+   "p_two_sided": 0.1734,
+   "share_draws_below_0": 0.18
+  },
+  "boot_month": {
+   "se": 0.17,
+   "ci90": [
+    -0.06,
+    0.5
+   ],
+   "ci95": [
+    -0.1,
+    0.55
+   ],
+   "p_two_sided": 0.2072,
+   "share_draws_below_0": 0.1
+  },
+  "okx_alone": {
+   "sharpe": 1.425,
+   "trades": 42,
+   "maxdd": 0.059,
+   "mean_ret": 0.1165,
+   "mean_net": 0.0793,
+   "corr_with_binance_only": 0.078,
+   "alpha_ann_vs_bn": 0.0742,
+   "alpha_t_nw10": 1.72,
+   "beta_vs_bn": 0.02,
+   "needed_sr_for_gain": 0.161
+  }
+ },
+ "okx_nobn | 2025-2026": {
+  "sharpe": 2.358,
+  "maxdd": 0.194,
+  "final": 2.605,
+  "vol": 0.258,
+  "trades": 189,
+  "okx_trades": 38,
+  "blocked_bn": 4,
+  "d_sharpe": 0.298,
+  "boot_block10": {
+   "se": 0.319,
+   "ci90": [
+    -0.17,
+    0.86
+   ],
+   "ci95": [
+    -0.26,
+    0.97
+   ],
+   "p_two_sided": 0.3544,
+   "share_draws_below_0": 0.157
+  },
+  "boot_block21": {
+   "se": 0.338,
+   "ci90": [
+    -0.19,
+    0.91
+   ],
+   "ci95": [
+    -0.29,
+    1.04
+   ],
+   "p_two_sided": 0.3774,
+   "share_draws_below_0": 0.152
+  },
+  "boot_block63": {
+   "se": 0.288,
+   "ci90": [
+    -0.26,
+    0.68
+   ],
+   "ci95": [
+    -0.35,
+    0.78
+   ],
+   "p_two_sided": 0.2934,
+   "share_draws_below_0": 0.256
+  },
+  "boot_month": {
+   "se": 0.282,
+   "ci90": [
+    -0.18,
+    0.74
+   ],
+   "ci95": [
+    -0.28,
+    0.83
+   ],
+   "p_two_sided": 0.2938,
+   "share_draws_below_0": 0.16
+  },
+  "okx_alone": {
+   "sharpe": 1.342,
+   "trades": 38,
+   "maxdd": 0.115,
+   "mean_ret": 0.1146,
+   "mean_net": 0.0793,
+   "corr_with_binance_only": 0.06,
+   "alpha_ann_vs_bn": 0.1411,
+   "alpha_t_nw10": 1.65,
+   "beta_vs_bn": 0.03,
+   "needed_sr_for_gain": 0.123
+  }
+ },
+ "okx_nobn_half | 2025-2026": {
+  "sharpe": 2.261,
+  "maxdd": 0.18,
+  "final": 2.315,
+  "vol": 0.235,
+  "trades": 189,
+  "okx_trades": 38,
+  "blocked_bn": 4,
+  "d_sharpe": 0.201,
+  "boot_block10": {
+   "se": 0.183,
+   "ci90": [
+    -0.06,
+    0.54
+   ],
+   "ci95": [
+    -0.11,
+    0.6
+   ],
+   "p_two_sided": 0.273,
+   "share_draws_below_0": 0.112
+  },
+  "boot_block21": {
+   "se": 0.197,
+   "ci90": [
+    -0.07,
+    0.57
+   ],
+   "ci95": [
+    -0.12,
+    0.64
+   ],
+   "p_two_sided": 0.2966,
+   "share_draws_below_0": 0.111
+  },
+  "boot_block63": {
+   "se": 0.161,
+   "ci90": [
+    -0.11,
+    0.41
+   ],
+   "ci95": [
+    -0.16,
+    0.48
+   ],
+   "p_two_sided": 0.2012,
+   "share_draws_below_0": 0.196
+  },
+  "boot_month": {
+   "se": 0.172,
+   "ci90": [
+    -0.07,
+    0.49
+   ],
+   "ci95": [
+    -0.12,
+    0.55
+   ],
+   "p_two_sided": 0.2454,
+   "share_draws_below_0": 0.118
+  },
+  "okx_alone": {
+   "sharpe": 1.338,
+   "trades": 38,
+   "maxdd": 0.059,
+   "mean_ret": 0.1146,
+   "mean_net": 0.0793,
+   "corr_with_binance_only": 0.058,
+   "alpha_ann_vs_bn": 0.0706,
+   "alpha_t_nw10": 1.64,
+   "beta_vs_bn": 0.015,
+   "needed_sr_for_gain": 0.12
+  }
+ },
+ "okx_exit_bn24 | 2025-2026": {
+  "sharpe": 2.447,
+  "maxdd": 0.194,
+  "final": 2.612,
+  "vol": 0.248,
+  "trades": 186,
+  "okx_trades": 34,
+  "blocked_bn": 8,
+  "d_sharpe": 0.388,
+  "boot_block10": {
+   "se": 0.317,
+   "ci90": [
+    -0.1,
+    0.93
+   ],
+   "ci95": [
+    -0.2,
+    1.03
+   ],
+   "p_two_sided": 0.2258,
+   "share_draws_below_0": 0.102
+  },
+  "boot_block21": {
+   "se": 0.342,
+   "ci90": [
+    -0.15,
+    0.96
+   ],
+   "ci95": [
+    -0.26,
+    1.09
+   ],
+   "p_two_sided": 0.2578,
+   "share_draws_below_0": 0.121
+  },
+  "boot_block63": {
+   "se": 0.302,
+   "ci90": [
+    -0.21,
+    0.78
+   ],
+   "ci95": [
+    -0.3,
+    0.87
+   ],
+   "p_two_sided": 0.1948,
+   "share_draws_below_0": 0.186
+  },
+  "boot_month": {
+   "se": 0.331,
+   "ci90": [
+    -0.16,
+    0.94
+   ],
+   "ci95": [
+    -0.25,
+    1.02
+   ],
+   "p_two_sided": 0.2466,
+   "share_draws_below_0": 0.125
+  },
+  "okx_alone": {
+   "sharpe": 1.475,
+   "trades": 34,
+   "maxdd": 0.115,
+   "mean_ret": 0.117,
+   "mean_net": 0.085,
+   "corr_with_binance_only": 0.018,
+   "alpha_ann_vs_bn": 0.1383,
+   "alpha_t_nw10": 1.62,
+   "beta_vs_bn": 0.008,
+   "needed_sr_for_gain": 0.037
+  }
+ },
+ "binance_only | 2026 Jan-Aug": {
+  "sharpe": 2.693,
+  "maxdd": 0.11,
+  "final": 1.319,
+  "vol": 0.159,
+  "trades": 40,
+  "okx_trades": 0,
+  "blocked_bn": 0
+ },
+ "union | 2026 Jan-Aug": {
+  "sharpe": 3.353,
+  "maxdd": 0.122,
+  "final": 1.495,
+  "vol": 0.185,
+  "trades": 60,
+  "okx_trades": 20,
+  "blocked_bn": 0,
+  "d_sharpe": 0.66,
+  "boot_block10": {
+   "se": 0.554,
+   "ci90": [
+    -0.21,
+    1.62
+   ],
+   "ci95": [
+    -0.37,
+    1.82
+   ],
+   "p_two_sided": 0.2248,
+   "share_draws_below_0": 0.1
+  },
+  "boot_block21": {
+   "se": 0.6,
+   "ci90": [
+    -0.19,
+    1.78
+   ],
+   "ci95": [
+    -0.39,
+    2.01
+   ],
+   "p_two_sided": 0.2638,
+   "share_draws_below_0": 0.095
+  },
+  "boot_block63": {
+   "se": 0.593,
+   "ci90": [
+    -0.24,
+    1.71
+   ],
+   "ci95": [
+    -0.44,
+    1.94
+   ],
+   "p_two_sided": 0.2494,
+   "share_draws_below_0": 0.119
+  },
+  "boot_month": {
+   "se": 0.493,
+   "ci90": [
+    -0.06,
+    1.53
+   ],
+   "ci95": [
+    -0.2,
+    1.71
+   ],
+   "p_two_sided": 0.1834,
+   "share_draws_below_0": 0.07
+  },
+  "okx_alone": {
+   "sharpe": 2.119,
+   "trades": 20,
+   "maxdd": 0.053,
+   "mean_ret": 0.1049,
+   "mean_net": 0.0907,
+   "corr_with_binance_only": 0.027,
+   "alpha_ann_vs_bn": 0.1866,
+   "alpha_t_nw10": 1.9,
+   "beta_vs_bn": 0.016,
+   "needed_sr_for_gain": 0.074
+  }
+ },
+ "okx_half | 2026 Jan-Aug": {
+  "sharpe": 3.149,
+  "maxdd": 0.116,
+  "final": 1.405,
+  "vol": 0.167,
+  "trades": 60,
+  "okx_trades": 20,
+  "blocked_bn": 0,
+  "d_sharpe": 0.456,
+  "boot_block10": {
+   "se": 0.314,
+   "ci90": [
+    0.0,
+    1.03
+   ],
+   "ci95": [
+    -0.08,
+    1.16
+   ],
+   "p_two_sided": 0.139,
+   "share_draws_below_0": 0.049
+  },
+  "boot_block21": {
+   "se": 0.342,
+   "ci90": [
+    0.01,
+    1.13
+   ],
+   "ci95": [
+    -0.07,
+    1.27
+   ],
+   "p_two_sided": 0.175,
+   "share_draws_below_0": 0.046
+  },
+  "boot_block63": {
+   "se": 0.339,
+   "ci90": [
+    -0.02,
+    1.1
+   ],
+   "ci95": [
+    -0.08,
+    1.25
+   ],
+   "p_two_sided": 0.1722,
+   "share_draws_below_0": 0.06
+  },
+  "boot_month": {
+   "se": 0.279,
+   "ci90": [
+    0.07,
+    0.98
+   ],
+   "ci95": [
+    0.01,
+    1.09
+   ],
+   "p_two_sided": 0.0974,
+   "share_draws_below_0": 0.023
+  },
+  "okx_alone": {
+   "sharpe": 2.109,
+   "trades": 20,
+   "maxdd": 0.027,
+   "mean_ret": 0.1049,
+   "mean_net": 0.0907,
+   "corr_with_binance_only": 0.028,
+   "alpha_ann_vs_bn": 0.0931,
+   "alpha_t_nw10": 1.89,
+   "beta_vs_bn": 0.008,
+   "needed_sr_for_gain": 0.074
+  }
+ },
+ "okx_nobn | 2026 Jan-Aug": {
+  "sharpe": 3.375,
+  "maxdd": 0.114,
+  "final": 1.483,
+  "vol": 0.18,
+  "trades": 57,
+  "okx_trades": 17,
+  "blocked_bn": 3,
+  "d_sharpe": 0.681,
+  "boot_block10": {
+   "se": 0.558,
+   "ci90": [
+    -0.2,
+    1.63
+   ],
+   "ci95": [
+    -0.39,
+    1.84
+   ],
+   "p_two_sided": 0.2128,
+   "share_draws_below_0": 0.095
+  },
+  "boot_block21": {
+   "se": 0.603,
+   "ci90": [
+    -0.2,
+    1.79
+   ],
+   "ci95": [
+    -0.4,
+    2.02
+   ],
+   "p_two_sided": 0.248,
+   "share_draws_below_0": 0.093
+  },
+  "boot_block63": {
+   "se": 0.594,
+   "ci90": [
+    -0.26,
+    1.71
+   ],
+   "ci95": [
+    -0.47,
+    1.93
+   ],
+   "p_two_sided": 0.2368,
+   "share_draws_below_0": 0.119
+  },
+  "boot_month": {
+   "se": 0.497,
+   "ci90": [
+    -0.07,
+    1.55
+   ],
+   "ci95": [
+    -0.21,
+    1.72
+   ],
+   "p_two_sided": 0.1728,
+   "share_draws_below_0": 0.07
+  },
+  "okx_alone": {
+   "sharpe": 2.018,
+   "trades": 17,
+   "maxdd": 0.049,
+   "mean_ret": 0.1063,
+   "mean_net": 0.0975,
+   "corr_with_binance_only": -0.026,
+   "alpha_ann_vs_bn": 0.1869,
+   "alpha_t_nw10": 1.97,
+   "beta_vs_bn": -0.015,
+   "needed_sr_for_gain": -0.07
+  }
+ },
+ "okx_nobn_half | 2026 Jan-Aug": {
+  "sharpe": 3.159,
+  "maxdd": 0.112,
+  "final": 1.4,
+  "vol": 0.164,
+  "trades": 57,
+  "okx_trades": 17,
+  "blocked_bn": 3,
+  "d_sharpe": 0.465,
+  "boot_block10": {
+   "se": 0.311,
+   "ci90": [
+    0.01,
+    1.03
+   ],
+   "ci95": [
+    -0.07,
+    1.17
+   ],
+   "p_two_sided": 0.1288,
+   "share_draws_below_0": 0.046
+  },
+  "boot_block21": {
+   "se": 0.338,
+   "ci90": [
+    0.02,
+    1.13
+   ],
+   "ci95": [
+    -0.05,
+    1.27
+   ],
+   "p_two_sided": 0.1602,
+   "share_draws_below_0": 0.041
+  },
+  "boot_block63": {
+   "se": 0.332,
+   "ci90": [
+    -0.0,
+    1.09
+   ],
+   "ci95": [
+    -0.07,
+    1.24
+   ],
+   "p_two_sided": 0.155,
+   "share_draws_below_0": 0.05
+  },
+  "boot_month": {
+   "se": 0.276,
+   "ci90": [
+    0.08,
+    0.98
+   ],
+   "ci95": [
+    0.02,
+    1.08
+   ],
+   "p_two_sided": 0.0836,
+   "share_draws_below_0": 0.019
+  },
+  "okx_alone": {
+   "sharpe": 2.009,
+   "trades": 17,
+   "maxdd": 0.025,
+   "mean_ret": 0.1063,
+   "mean_net": 0.0975,
+   "corr_with_binance_only": -0.026,
+   "alpha_ann_vs_bn": 0.0933,
+   "alpha_t_nw10": 1.95,
+   "beta_vs_bn": -0.007,
+   "needed_sr_for_gain": -0.069
+  }
+ },
+ "okx_exit_bn24 | 2026 Jan-Aug": {
+  "sharpe": 3.607,
+  "maxdd": 0.11,
+  "final": 1.487,
+  "vol": 0.169,
+  "trades": 54,
+  "okx_trades": 14,
+  "blocked_bn": 6,
+  "d_sharpe": 0.914,
+  "boot_block10": {
+   "se": 0.449,
+   "ci90": [
+    0.29,
+    1.75
+   ],
+   "ci95": [
+    0.2,
+    1.94
+   ],
+   "p_two_sided": 0.0376,
+   "share_draws_below_0": 0.003
+  },
+  "boot_block21": {
+   "se": 0.457,
+   "ci90": [
+    0.34,
+    1.82
+   ],
+   "ci95": [
+    0.24,
+    1.99
+   ],
+   "p_two_sided": 0.039,
+   "share_draws_below_0": 0.002
+  },
+  "boot_block63": {
+   "se": 0.472,
+   "ci90": [
+    0.44,
+    1.99
+   ],
+   "ci95": [
+    0.35,
+    2.15
+   ],
+   "p_two_sided": 0.0436,
+   "share_draws_below_0": 0.001
+  },
+  "boot_month": {
+   "se": 0.392,
+   "ci90": [
+    0.32,
+    1.61
+   ],
+   "ci95": [
+    0.23,
+    1.75
+   ],
+   "p_two_sided": 0.0158,
+   "share_draws_below_0": 0.0
+  },
+  "okx_alone": {
+   "sharpe": 2.682,
+   "trades": 14,
+   "maxdd": 0.033,
+   "mean_ret": 0.1327,
+   "mean_net": 0.1317,
+   "corr_with_binance_only": -0.06,
+   "alpha_ann_vs_bn": 0.1939,
+   "alpha_t_nw10": 2.15,
+   "beta_vs_bn": -0.026,
+   "needed_sr_for_gain": -0.163
+  }
+ },
+ "binance_only | 2022-2026": {
+  "sharpe": 2.1,
+  "maxdd": 0.167,
+  "final": 4.67,
+  "vol": 0.164,
+  "trades": 253,
+  "okx_trades": 0,
+  "blocked_bn": 0
+ },
+ "union | 2022-2026": {
+  "sharpe": 1.896,
+  "maxdd": 0.34,
+  "final": 6.067,
+  "vol": 0.216,
+  "trades": 388,
+  "okx_trades": 136,
+  "blocked_bn": 0,
+  "d_sharpe": -0.205,
+  "boot_block10": {
+   "se": 0.377,
+   "ci90": [
+    -0.85,
+    0.4
+   ],
+   "ci95": [
+    -0.98,
+    0.51
+   ],
+   "p_two_sided": 0.5856,
+   "share_draws_below_0": 0.689
+  },
+  "boot_block21": {
+   "se": 0.372,
+   "ci90": [
+    -0.81,
+    0.4
+   ],
+   "ci95": [
+    -0.94,
+    0.49
+   ],
+   "p_two_sided": 0.5838,
+   "share_draws_below_0": 0.694
+  },
+  "boot_block63": {
+   "se": 0.387,
+   "ci90": [
+    -0.9,
+    0.37
+   ],
+   "ci95": [
+    -1.03,
+    0.46
+   ],
+   "p_two_sided": 0.6076,
+   "share_draws_below_0": 0.7
+  },
+  "boot_month": {
+   "se": 0.373,
+   "ci90": [
+    -0.84,
+    0.39
+   ],
+   "ci95": [
+    -0.98,
+    0.48
+   ],
+   "p_two_sided": 0.5918,
+   "share_draws_below_0": 0.682
+  },
+  "okx_alone": {
+   "sharpe": 0.539,
+   "trades": 136,
+   "maxdd": 0.352,
+   "mean_ret": 0.0376,
+   "mean_net": 0.0291,
+   "corr_with_binance_only": 0.064,
+   "alpha_ann_vs_bn": 0.054,
+   "alpha_t_nw10": 0.82,
+   "beta_vs_bn": 0.052,
+   "needed_sr_for_gain": 0.134
+  }
+ },
+ "okx_half | 2022-2026": {
+  "sharpe": 2.094,
+  "maxdd": 0.208,
+  "final": 5.344,
+  "vol": 0.179,
+  "trades": 388,
+  "okx_trades": 136,
+  "blocked_bn": 0,
+  "d_sharpe": -0.007,
+  "boot_block10": {
+   "se": 0.207,
+   "ci90": [
+    -0.36,
+    0.32
+   ],
+   "ci95": [
+    -0.44,
+    0.38
+   ],
+   "p_two_sided": 0.9726,
+   "share_draws_below_0": 0.489
+  },
+  "boot_block21": {
+   "se": 0.205,
+   "ci90": [
+    -0.34,
+    0.33
+   ],
+   "ci95": [
+    -0.42,
+    0.38
+   ],
+   "p_two_sided": 0.9712,
+   "share_draws_below_0": 0.496
+  },
+  "boot_block63": {
+   "se": 0.21,
+   "ci90": [
+    -0.39,
+    0.29
+   ],
+   "ci95": [
+    -0.47,
+    0.35
+   ],
+   "p_two_sided": 0.9746,
+   "share_draws_below_0": 0.515
+  },
+  "boot_month": {
+   "se": 0.206,
+   "ci90": [
+    -0.36,
+    0.32
+   ],
+   "ci95": [
+    -0.44,
+    0.37
+   ],
+   "p_two_sided": 0.972,
+   "share_draws_below_0": 0.482
+  },
+  "okx_alone": {
+   "sharpe": 0.551,
+   "trades": 136,
+   "maxdd": 0.188,
+   "mean_ret": 0.0376,
+   "mean_net": 0.0291,
+   "corr_with_binance_only": 0.064,
+   "alpha_ann_vs_bn": 0.0277,
+   "alpha_t_nw10": 0.84,
+   "beta_vs_bn": 0.026,
+   "needed_sr_for_gain": 0.135
+  }
+ },
+ "okx_nobn | 2022-2026": {
+  "sharpe": 1.869,
+  "maxdd": 0.343,
+  "final": 5.814,
+  "vol": 0.214,
+  "trades": 381,
+  "okx_trades": 129,
+  "blocked_bn": 7,
+  "d_sharpe": -0.231,
+  "boot_block10": {
+   "se": 0.381,
+   "ci90": [
+    -0.88,
+    0.38
+   ],
+   "ci95": [
+    -1.01,
+    0.48
+   ],
+   "p_two_sided": 0.5498,
+   "share_draws_below_0": 0.712
+  },
+  "boot_block21": {
+   "se": 0.375,
+   "ci90": [
+    -0.84,
+    0.38
+   ],
+   "ci95": [
+    -0.97,
+    0.48
+   ],
+   "p_two_sided": 0.5398,
+   "share_draws_below_0": 0.713
+  },
+  "boot_block63": {
+   "se": 0.391,
+   "ci90": [
+    -0.93,
+    0.36
+   ],
+   "ci95": [
+    -1.06,
+    0.45
+   ],
+   "p_two_sided": 0.5664,
+   "share_draws_below_0": 0.719
+  },
+  "boot_month": {
+   "se": 0.376,
+   "ci90": [
+    -0.87,
+    0.37
+   ],
+   "ci95": [
+    -1.01,
+    0.46
+   ],
+   "p_two_sided": 0.5452,
+   "share_draws_below_0": 0.708
+  },
+  "okx_alone": {
+   "sharpe": 0.47,
+   "trades": 129,
+   "maxdd": 0.355,
+   "mean_ret": 0.0309,
+   "mean_net": 0.0241,
+   "corr_with_binance_only": 0.05,
+   "alpha_ann_vs_bn": 0.0486,
+   "alpha_t_nw10": 0.73,
+   "beta_vs_bn": 0.04,
+   "needed_sr_for_gain": 0.104
+  }
+ },
+ "okx_nobn_half | 2022-2026": {
+  "sharpe": 2.079,
+  "maxdd": 0.21,
+  "final": 5.23,
+  "vol": 0.178,
+  "trades": 381,
+  "okx_trades": 129,
+  "blocked_bn": 7,
+  "d_sharpe": -0.021,
+  "boot_block10": {
+   "se": 0.209,
+   "ci90": [
+    -0.38,
+    0.31
+   ],
+   "ci95": [
+    -0.45,
+    0.37
+   ],
+   "p_two_sided": 0.9162,
+   "share_draws_below_0": 0.519
+  },
+  "boot_block21": {
+   "se": 0.207,
+   "ci90": [
+    -0.36,
+    0.32
+   ],
+   "ci95": [
+    -0.43,
+    0.37
+   ],
+   "p_two_sided": 0.915,
+   "share_draws_below_0": 0.524
+  },
+  "boot_block63": {
+   "se": 0.212,
+   "ci90": [
+    -0.41,
+    0.28
+   ],
+   "ci95": [
+    -0.49,
+    0.34
+   ],
+   "p_two_sided": 0.9182,
+   "share_draws_below_0": 0.541
+  },
+  "boot_month": {
+   "se": 0.208,
+   "ci90": [
+    -0.38,
+    0.31
+   ],
+   "ci95": [
+    -0.46,
+    0.36
+   ],
+   "p_two_sided": 0.9116,
+   "share_draws_below_0": 0.513
+  },
+  "okx_alone": {
+   "sharpe": 0.483,
+   "trades": 129,
+   "maxdd": 0.19,
+   "mean_ret": 0.0309,
+   "mean_net": 0.0241,
+   "corr_with_binance_only": 0.05,
+   "alpha_ann_vs_bn": 0.025,
+   "alpha_t_nw10": 0.76,
+   "beta_vs_bn": 0.02,
+   "needed_sr_for_gain": 0.104
+  }
+ },
+ "okx_exit_bn24 | 2022-2026": {
+  "sharpe": 1.971,
+  "maxdd": 0.322,
+  "final": 6.142,
+  "vol": 0.209,
+  "trades": 377,
+  "okx_trades": 124,
+  "blocked_bn": 12,
+  "d_sharpe": -0.13,
+  "boot_block10": {
+   "se": 0.368,
+   "ci90": [
+    -0.75,
+    0.46
+   ],
+   "ci95": [
+    -0.88,
+    0.58
+   ],
+   "p_two_sided": 0.729,
+   "share_draws_below_0": 0.612
+  },
+  "boot_block21": {
+   "se": 0.358,
+   "ci90": [
+    -0.71,
+    0.46
+   ],
+   "ci95": [
+    -0.83,
+    0.55
+   ],
+   "p_two_sided": 0.7126,
+   "share_draws_below_0": 0.623
+  },
+  "boot_block63": {
+   "se": 0.368,
+   "ci90": [
+    -0.76,
+    0.45
+   ],
+   "ci95": [
+    -0.88,
+    0.53
+   ],
+   "p_two_sided": 0.7318,
+   "share_draws_below_0": 0.615
+  },
+  "boot_month": {
+   "se": 0.369,
+   "ci90": [
+    -0.74,
+    0.47
+   ],
+   "ci95": [
+    -0.87,
+    0.57
+   ],
+   "p_two_sided": 0.7254,
+   "share_draws_below_0": 0.61
+  },
+  "okx_alone": {
+   "sharpe": 0.549,
+   "trades": 124,
+   "maxdd": 0.311,
+   "mean_ret": 0.0375,
+   "mean_net": 0.0322,
+   "corr_with_binance_only": 0.032,
+   "alpha_ann_vs_bn": 0.0599,
+   "alpha_t_nw10": 0.94,
+   "beta_vs_bn": 0.025,
+   "needed_sr_for_gain": 0.068
+  }
+ }
+}

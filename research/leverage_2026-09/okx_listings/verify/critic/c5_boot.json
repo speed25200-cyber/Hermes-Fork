@@ -1,0 +1,74 @@
+{
+ "union vs bn_only 2025-26": {
+  "dSR": 0.32,
+  "se": 0.331,
+  "z": 0.97,
+  "p_le0": 0.171
+ },
+ "union vs bn_only 2026JanAug": {
+  "dSR": 0.66,
+  "se": 0.603,
+  "z": 1.09,
+  "p_le0": 0.135
+ },
+ "union vs bn_only 2022-26": {
+  "dSR": -0.205,
+  "se": 0.371,
+  "z": -0.55,
+  "p_le0": 0.689
+ },
+ "union_dedupe168 vs bn_only 2025-26": {
+  "dSR": 0.047,
+  "se": 0.354,
+  "z": 0.13,
+  "p_le0": 0.465
+ },
+ "union_dedupe168 vs bn_only 2026JanAug": {
+  "dSR": 0.623,
+  "se": 0.631,
+  "z": 0.99,
+  "p_le0": 0.15
+ },
+ "union_dedupe168 vs bn_only 2022-26": {
+  "dSR": -0.355,
+  "se": 0.398,
+  "z": -0.89,
+  "p_le0": 0.812
+ },
+ "union_exPM vs bn_only_exPM 2025-26": {
+  "dSR": 0.433,
+  "se": 0.361,
+  "z": 1.2,
+  "p_le0": 0.11
+ },
+ "union_exPM vs bn_only_exPM 2026JanAug": {
+  "dSR": 1.168,
+  "se": 0.553,
+  "z": 2.11,
+  "p_le0": 0.006
+ },
+ "union_exPM vs bn_only_exPM 2022-26": {
+  "dSR": -0.17,
+  "se": 0.398,
+  "z": -0.43,
+  "p_le0": 0.652
+ },
+ "union_exPM_dedupe168 vs bn_only_exPM 2025-26": {
+  "dSR": 0.201,
+  "se": 0.371,
+  "z": 0.54,
+  "p_le0": 0.315
+ },
+ "union_exPM_dedupe168 vs bn_only_exPM 2026JanAug": {
+  "dSR": 1.012,
+  "se": 0.574,
+  "z": 1.76,
+  "p_le0": 0.035
+ },
+ "union_exPM_dedupe168 vs bn_only_exPM 2022-26": {
+  "dSR": -0.297,
+  "se": 0.408,
+  "z": -0.73,
+  "p_le0": 0.771
+ }
+}

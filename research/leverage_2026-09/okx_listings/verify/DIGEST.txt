@@ -1,0 +1,307 @@
+====================================================================================================
+PRICE AND TIMING DATA QUALITY (OKX-extra new-listing events: prices, stops, t0, gap-filling, funding alignment) | results_hold_with_caveats
+- [info] Entry, exit and stop prices of the 20 extreme trades check out: independently rebuilt data match exactly and other venues agree
+    IMPACT: None. I found no bad prints, no unit or ctVal mismatch, and no misaligned hours in the trades behind the reported worst and best outcomes.
+    FIX: None needed.
+- [minor] Every stop in the sample is backed by real trading; none gapped through; OL is the only marginal case
+    IMPACT: Negligible. OL's outcome is unchanged. The stop-fill optimism of about 0.5% on 24 stops of about 7% notional each is roughly 0.1% of equity in total.
+    FIX: Optionally trigger stops in the sim on mark or index price where available, to match the live broker, and add about 0.5% extra slippage on stop fills.
+- [minor] MEMEFI -86.6% was not a gap-through; it is the inherited shared stop (by design)
+    IMPACT: No numbers change. The author's description ('stop gap-through') is wrong, and it hides a structural fact: with shared_stop, a second tranche entered below the first can lose far more than 50% (mean of the 9 inherited-stop tranche-1 stops is -45%, max -87%).
+    FIX: Correct the write-up. If a tail loss of 87% per tranche is unwanted, consider a per-tranche cap (e.g. min(shared stop, 1.5 × own entry)). That is a rule change, and it would need to be evaluated in-sample.
+- [minor] Funding timestamps: diff-based shift puts payments one interval late for 4h-interval contracts
+    IMPACT: Immaterial. Re-run with corrected funding (monthly files / fixed -8h / hour-rounded; verify/fix_funding.py, rerun.py): OKX-only Sharpe 2022-26 0.628→0.627, 2022-24 0.135→0.133, 2025-26 1.577→1.576, 2026 2.207→2.199. Union 2022-24 1.569→1.567, 2025-26 2.379→2.379, 2026 Jan-Aug 3.353→3.353, 2022-26 1.896→1.895.
+    FIX: Use funding_time - 8h (fixed) for the all-swaps daily files, or the per-instrument monthly files, which carry settlement time. Round settlement times to the hour before mapping them to bars.
+- [minor] The REST funding fallback is not paginated, so the 2026-09 events miss up to 144h of funding
+    IMPACT: Immaterial (included in the corrected run above; 2026 Sharpe 2.207→2.199 with both funding fixes).
+    FIX: Page REST funding history with 'after' until the record before t0 is reached.
+- [minor] Entry clock: the sim floors t0 to the hour; live enters at the first decision ≥ first-minute + 24h
+    IMPACT: Small but systematic and in the optimistic direction for the sim: about -0.05 Sharpe in 2025-26 and -0.15 in 2026.
+    FIX: Align the sim clock with live (ceil to the engine decision grid from the first-minute launch time), or report the +1h variant alongside.
+- [minor] t0 is correct; ZK and OL listTime mismatches come from instrument-ID reuse, and ZK is mis-classed
+    IMPACT: No effect on prices or P&L. ZK's 2 trades are probably counted in the wrong class (okx_first instead of okx_only), which slightly moves the class-split statistics.
+    FIX: Detect instrument-ID reuse (funding gap > 3 days, listTime ≫ t0, or a price break) and classify on the token rather than the ticker.
+- [info] Gap-filling logic is correct and never used on traded events; there is no coverage for trading halts
+    IMPACT: None.
+    FIX: Drop TESTPM* instruments from the calendar.
+- [info] BTC hedge funding is not charged, and 26 of 146 trades have no independent price reference
+    IMPACT: Negligible.
+    FIX: Optionally charge the hedge leg's funding.
+CORRECTED: Exact reproduction of the author's figures: OKX-only Sharpe 2022-26 0.628 / 2022-24 0.135 / 2025-26 1.577 / 2026 2.207. Union 2022-24 1.569, 2025-26 2.379, 2026 Jan-Aug 3.353, 2022-26 1.896.
+
+With corrected funding (fixed -8h label shift, monthly per-instrument files, paginated REST, hour-rounded settlement times): OKX-only 0.627 / 0.133 / 1.576 / 2.199 (maxDD 2022-26 0.353). Union 1.567 / 2.379 / 3.353 / 1.895.
+
+Corrected funding plus the live entry clock (+1h for the 73/99 events launching at a minute other than HH:00, an upper bound): OKX-only 0.605 / 0.125 / 1.528 / 2.055. Mean trade 2022-26 +4.25% (t 1.70), 2025-26 +11.97% (t 3.10).
+
+Trade prices themselves need no correction: 0.0 difference against an independent rebuild from the trade archive, and every stop is backed by index or mark data.
+SUMMARY: Through the price and timing lens the OKX-extra results hold. The data under the headline trades is clean, and what I found moves Sharpe by less than about 0.15.
+
+**Prices.** I re-downloaded 140 OKX daily trade-archive files and rebuilt the hourly bars myself for the 17 instruments behind the 12 worst and 8 best trades. They match the author's panel exactly: 0.0 difference on open/high/low/close for hours 0-171. That includes the 6 contracts priced from OKX REST candles, so REST equals the archive. t0 also matches to the millisecond.
+- Other sources agree, within:
+  - ±0.7% against OKX index candles (one exception: ZEUS entry, where the OKX perp sat 4.2% below the index).
+  - 0.14% against OKX mark price.
+  - ±0.65% against Bybit trade archives.
+- No unit or contract-size mismatches: PEPE matches Bybit's 1000PEPE/1000 within 0.55%, and AIDOGE's 5.5e-10 price equals the index.
+- One name collision: Bybit's GPTUSDT is a different token from OKX GPT, so I used the index there.
+
+**Stops.** None of the 24 stops filled above the stop level. 20 of 23 are confirmed by the index in the same hour and 1 an hour earlier; 10 of 10 are confirmed by mark price. The one weak case is OL: last price crossed by only 0.25% for 2 minutes while the index stayed 0.1% below. The live broker triggers on mark (`okx_broker.py:490`), so live probably would not have stopped there. But the index went 22% above the stop later in the hold, so the outcome is the same.
+- The -86.6% MEMEFI trade was not a gap-through. The second tranche inherits the first tranche's stop (1.5 × 0.006585) and entered 20% lower. That is the shared-stop rule working as designed, and it means a second tranche can lose far more than 50%.
+- The sim fills exactly at the stop. Real prints 1-5 seconds after the cross were about +0.2% to +0.5% higher, which is negligible.
+
+**Funding.** Sign and bar timing in the simulator are correct: shorts receive positive funding. Two real bugs, both small in effect:
+- `age_funding.py:97-98` shifts the all-swaps daily-file timestamps by the gap to the previous record. The files actually stamp settlement + 8h, fixed: this matches 12,582 of 12,583 per-instrument records. For the 18 contracts on 4h funding intervals, each payment therefore lands 4h late.
+- The REST fallback is not paginated, so 5 September-2026 events are missing up to 144h of funding.
+
+Fixing both moves Sharpe by at most 0.008: 0.628→0.627, 2025-26 1.577→1.576, 2026 2.207→2.199; union unchanged within 0.002.
+
+**Entry
+====================================================================================================
+METHODOLOGY AND LOOK-AHEAD | results_hold_with_caveats
+- [major] Union double-counts 11 tokens listed on both venues within the 168h hold; the claimed 2025-26 union gain comes mostly from the duplicates
+    IMPACT: Union with first-venue-wins dedupe (drop the later Binance event; ex-ante feasible) vs author: 2025-26 Sharpe 2.106 vs 2.379 (Binance-only 2.060). 2026 Jan-Aug 3.317 vs 3.353 (Binance-only 2.693). 2022-24 1.511 vs 1.569. 2022-26 1.746 vs 1.896, maxDD 32.7% vs 34.0% (Binance-only 2.100 / 16.7%). So the union improves 2025-26 by only +0.05, not +0.32, and is worse than Binance-only over 2022-26 by 0.35 Sharpe. Dropping the OKX event instead gives 2022-26 2.189 / maxDD 21.4%, but that is look-ahead: at the OKX tranche-1 entry Binance had not yet listed.
+    FIX: De-duplicate by base asset in the union: an OKX or Binance listing of a token whose other-venue event is still inside its 168h window is not a new listing (first venue wins), matching live symbol keying. Report union numbers on that basis (verify/v3_dedupe.py).
+- [major] All 99 OKX events are out-of-sample; the pooled 2022-26 test is weak, and the 2025-26/2026 figures are a favorable sub-period
+    IMPACT: The fresh-OOS evidence for the OKX-extra sleeve as a whole does not reject zero (t 1.37 to 1.50). The 2025-26 and 2026 Sharpes (1.58, 2.21) rest on 26 and 15 events. The author reports every period, but '2025-26 = validation' is not a valid reading for these events.
+    FIX: Headline the pooled 2022-26 OKX-extra result with event-clustered t-stats. Treat 2025-26 as a sub-period, not an OOS window. Align end dates across the OKX-alone and union tables.
+- [minor] Frozen replay omits the live kill rule (and the paper leverage of 0.8)
+    IMPACT: No look-ahead, but a live paper run of the union would have been suspended about 5 months earlier than the Binance-only sleeve, during the 2024 OKX drawdown (OKX-alone 2024: -17.5%). The kill rule looks too tight even for the validated Binance replay.
+    FIX: Report replay results with and without the kill rule, and reconsider the kill parameters before extending the event source.
+- [minor] OKX-event newtok is not the live rule's definition; handling of post-t0 spot listings is correct
+    IMPACT: 2025-26 and 2026 are robust to the definition. 2022-24 and 2022-26 move by up to 0.33 Sharpe, and the author's definition is the most favorable of those tested.
+    FIX: State that the OKX extension needs a new live calendar and a new newtok definition. Freeze that definition before any further OKX runs, and report the literal-live variant as a sensitivity.
+- [minor] bn_covered 24h cut is measured from the first funding stamp, not the first trade (effective about 34h); ZETA wrongly excluded
+    IMPACT: With ZETA added (trades +24.5% and +10.5%): OKX-alone 2022-26 Sharpe 0.628 to 0.650, 2022-24 0.135 to 0.170 (verify/v8_zeta.json). Conservative and immaterial.
+    FIX: Classify against the exact first trade (ev_t0.csv) for all candidates, or against the tranche-1 entry time.
+- [minor] okx_first/okx_only split is ex-post (right-censored Binance status), unstable, partly mislabeled, and one reported figure is not reproducible
+    IMPACT: Using okx_only as a filter would be look-ahead, and the class effect is not stable anyway. Pooled results are unaffected.
+    FIX: Drop class-based conclusions, or recompute them with ex-ante labels (Binance status at entry time). Fix the PONS label and publish the script behind the -11% figure.
+- [minor] Calendar survivorship after 2025-09-07 (likely conservative)
+    IMPACT: Missing events are probably favorable to the short, so the 2025-26 and 2026 OKX-alone numbers are more likely understated than overstated. Size is unknown (a rough estimate is ~2-5 missing events).
+    FIX: Find another delisted-inclusive calendar for 2025-09 onward (e.g. probe OKX trade archives for OKX announcement tickers), or flag the gap in the results.
+- [minor] Entry timing: t0 floored to the hour enters up to 1h earlier than the live clock allows
+    IMPACT: Small downward adjustment of 0.04-0.12 Sharpe.
+    FIX: Use ceil(t0_exact) as the event clock, or add the lag, when replaying live timing.
+- [info] Checks that passed: frozen rule equals live rule, truncation, sigma_ref, hedge source, data quality; plus two reporting nits
+    IMPACT: None material; each item is below 0.03 Sharpe or reporting-only.
+    FIX: Fix the print alignment in panel.py, drop TESTPM* contracts, and add BTC funding on the hedge leg to livesim.
+CORRECTED: Reproduced exactly: OKX-alone Sharpe 0.628 (2022-26, 146 trades) / 0.135 (2022-24) / 1.577 (2025-26, 52 trades, mean +12.1%) / 2.207 (2026). Union vs Binance-only: 1.569 vs 2.413 / 2.379 vs 2.060 / 3.353 vs 2.693 / 1.896 vs 2.100. The independent simulator matches.
+Union de-duplicated, first venue wins (ex-ante): 2022-24 1.511 (maxDD 29.7%); 2025-26 2.106 (vs Binance-only 2.060); 2026 Jan-Aug 3.317; 2022-26 1.746 (maxDD 32.7% vs Binance-only 16.7%).
+OKX-alone significance: 2022-26 event-clustered t 1.50 (daily t 1.37); 2025-26 event t 2.41 (26 events); 2026 event t 1.89 (15 events). Ending 2026-09-01: 2025-26 1.430, 2022-26 0.539, 2026 Jan-Aug 2.119.
+Sensitivities (2022-26 / 2022-24 / 2025-26 / 2026): literal live newtok 0.373 / -0.193 / 1.580 / 2.207; +1h live entry lag 0.590 / 0.096 / 1.539 / 2.086; with ZETA added 0.650 / 0.170 (2022-26 / 2022-24 only); BTC-hedge funding 0.617 / 0.122 / 1.570 / 2.203.
+Kill rule (25 trades, 10%): OKX-alone suspended 2024-11-26 (2022-26 Sharpe 0.462); union suspended 2024-11-27 (1.680); Binance-only 2022-26 suspended 2025-04-28 (1.977).
+SUMMARY: I found no material look-ahead in how OKX-extra events are selected, and the OKX-alone numbers reproduce exactly (Sharpe 0.628 / 0.135 / 1.577 / 2.207). An independent simulator written from listing_sleeve.py matches livesim to 1e-10 on all 16 runs, and nothing was tuned on OKX events.
+
+- **Selection is ex-ante:** the 24h bn_covered cut is known at OKX tranche-1 time. It is measured from the funding stamp (about 11h after the first trade), which wrongly excludes one event, ZETA; adding it raises 2022-26 Sharpe from 0.628 to 0.650. newtok handles spot listings opened after t0 correctly.
+- **Class split is ex-post:** okx_first vs okx_only depends on Binance status as of 2026-08-31. It is not used as a filter, and it flips sign between 2022-24 and 2025-26. PONS is mislabeled (Binance listed it 27h after OKX). The "-11% on 17 trades" figure is not reproducible.
+
+**Main correction (major):** the union counts 11 tokens twice when they list on both venues within the 168h hold. In the 2022-26 run, 7 of them held simultaneous OKX and Binance shorts (20 overlapping position pairs). With the ex-ante "first venue wins" dedupe that the live symbol keying implies, union 2025-26 Sharpe falls from 2.38 to 2.11 (Binance-only 2.06), and 2022-26 from 1.90 to 1.75 (maxDD 33% vs 17%). The 2026 Jan-Aug gain holds (3.32 vs 2.69).
+
+**Interpretation (major):** every OKX event is out-of-sample, and the pooled 2022-26 test is weak (event-clustered t 1.50). The 2025-26 result rests on 26 events.
+
+**Minor:**
+- The replay omits the live kill rule, which would have suspended the OKX-alone sleeve on 2024-11-26 and the union on 2024-11-27.
+- The literal live newtok definition (Binance spot only) cuts 2022-26 Sharpe to 0.37. The live code also has no OKX listing calendar at all.
+- A realistic 1h live entry lag costs 0.04-0.12 Sharpe.
+- After 2025-09-07, delisted OKX-only listings can't be found. The bias is likely conservative: such events averaged +17% per trade in the fully observed period.
+- The panel.py count of 69 new tokens is a print bug (the sim uses 75).
+- MEMEFI's -86.6% is the shared-stop mechanic, not a gap-through.
+
+All scripts and outputs are in /tmp/claude-0/-home-user/f7826394-e5e3-5463-a537-6672931e9cc4/scratchpad/xlist/verify/: v_common.py, indep.py, v1_repro.py through v8_zeta.py, and the matching .json/.csv files.
+====================================================================================================
+Pre-market contracts and token launch timing. Each perp's t0 was checked against the token's first spot trade on several venues: the OKX spot trade archive (probe days -3 to +540), the 10th trade in the Bybit public spot archive, Gate buy_start, day-precise Binance spot, OKX preMktSwTime/ruleType, the OKX listing announcements API (back to 2025-06), and CoinGecko first prices (last 365 days only). This covered all 99 OKX-extra events and the 137 Binance events the frozen rule trades. I then re-ran run.py/combo.py logic in three variants: excluding pre-market starts, re-anchoring t0 at TGE, and excluding pre-market starts plus the GRAM rename. All work is in SP/xlist/verify/premkt/. | results_hold_with_caveats
+- [major] The Binance event set, which is both the rule's OOS validation and the union's comparator, has 15 traded pre-market perp starts, all from 2025-08 to 2026-03 and none in 2022-24
+    IMPACT: Binance-only 2025-26 Sharpe falls from 2.06 to 1.565 when these events are excluded, and to 1.337 when entries are re-timed to TGE. Re-timed, the same events give 30 trades with mean +4.0% (t 0.88). 2026 Jan-Aug falls from 2.69 to 1.66 (excluded) and 0.66 (re-anchored). 2022-26 falls from 2.10 to 1.90 and 1.73. 2022-24 is unchanged at 2.41. The validated OOS of about 2.06 therefore mixes in a pre-market-convergence mechanism that was absent from the 2022-24 selection data.
+    FIX: Add a pre-market flag and a TGE time to the event tables (OKX preMktSwTime, then the earliest of Gate/Bybit/OKX spot). Report OOS with pre-market events split out. Decide explicitly whether pre-market perps belong in the live universe and on what anchor. If they stay, size and stop them with the pre
+- [major] Union vs Binance-only: absolute 2025-26 and 2026 Sharpe falls a lot once pre-market events are removed or re-anchored, but the union's edge over Binance-only holds
+    IMPACT: The headline union claims (2.38 in 2025-26, 3.35 in 2026) overstate the post-launch effect by about 0.4-1.7 Sharpe. The claim that adding OKX events helps in 2025-26 and 2026 survives in every variant, and the gap even widens (2026: +0.66 base, +1.17 excluded, +1.07 re-anchored).
+    FIX: Quote the union results with and without pre-market starts, and deduplicate tokens that appear in both sets (MET, RE).
+- [minor] The OKX-extra set has only two real pre-market starts, MET and RE; the OKX-extra headline is robust to them
+    IMPACT: OKX-extra Sharpe as all / 2022-24 / 2025-26 / 2026. Base: 0.628 / 0.135 / 1.577 / 2.207. Excluding MET and RE: 0.626 / 0.135 / 1.600 / 2.509. Re-anchored at TGE: 0.666 / 0.135 / 1.690 / 2.682; the re-anchored trades are MET +14.5%/+8.5% and RE +26.8%/+43.4%. okx_first mean per trade: -3.4% base, -3.9% excluded, -2.1% re-anchored.
+    FIX: None needed for the headline. Drop TESTPM002 and delisted instruments with no category in events_a.py.
+- [minor] GRAM is Toncoin renamed, not a token launch, yet both sets treat it as a new token
+    IMPACT: Small. With pre-market events and GRAM both excluded: OKX-extra 2025-26 1.595 and 2026 2.498; Binance-only 1.519 and 1.478; union 1.954 and 2.665.
+    FIX: Detect renames and migrations: price continuity with a contract delisted within a few days, or migration announcements.
+- [minor] Ticker collisions wrongly mark two genuine 2026 launches as old tokens (PROS, DATA)
+    IMPACT: With newtok set True for both, OKX-extra becomes 0.680 all / 1.724 2025-26 / 2.556 2026, adding 4 trades: PROS +30.3%/-1.6%, DATA +9.9%/+4.6%. This slightly understates the OKX-extra results.
+    FIX: Determine token age by token identity (name or contract), not by ticker alone.
+- [info] OKX-event spot_first uses month-start dates for Binance spot, making tokens look up to 29 days older
+    IMPACT: No newtok flips among the current 99 events (checked). It is a latent bias toward calling tokens old, and it makes RE look as if it had spot 16 days before its perp.
+    FIX: Read the first kline timestamp, as newlisting/dl_spot.py does.
+- [info] Extending the live universe to OKX listings needs an explicit pre-market and pre-IPO filter
+    IMPACT: No backtest impact. It is a live-implementation risk for the OKX extension.
+    FIX: In the live OKX feed, require instCategory == 1, and handle ruleType == 'pre_market' / preMktSwTime explicitly: either skip until preMktSwTime, or anchor t0 there.
+CORRECTED: All numbers below are Sharpe unless marked otherwise.
+
+OKX-extra (all 2022-26 / 2022-24 / 2025-26 / 2026):
+- Base, reproduced: 0.628 / 0.135 / 1.577 (52 trades, mean +12.1%, t 3.13) / 2.207.
+- Excluding MET and RE: 0.626 / 0.135 / 1.600 (48 trades, mean +12.9%, t 3.24) / 2.509.
+- Re-anchored at TGE: 0.666 / 0.135 / 1.690 (mean +13.7%, t 3.68) / 2.682.
+- Excluding pre-market plus GRAM: 0.624 / 0.135 / 1.595 / 2.498.
+
+Binance-only (2022-24 / 2025-26 / 2026 Jan-Aug / 2022-26):
+- Base: 2.413 / 2.060 / 2.693 / 2.100.
+- Excluding the 15 pre-market events: 2.413 / 1.565 / 1.659 / 1.904.
+- Re-anchored at TGE: 2.413 / 1.337 / 0.662 / 1.726.
+- Excluding pre-market plus GRAM: 2.413 / 1.519 / 1.478 / 1.883.
+
+Union (same periods):
+- Base: 1.569 / 2.379 / 3.353 / 1.896.
+- Excluding pre-market: 1.569 / 1.998 / 2.827 / 1.735.
+- Re-anchored: 1.569 / 1.802 / 1.737 / 1.647; with MET and RE deduplicated: 1.569 / 1.770 / 1.643 / 1.635.
+- Excluding pre-market plus GRAM: 1.569 / 1.954 / 2.665 / 1.717.
+
+Binance pre-market trades (all OOS):
+- As simulated: 27 trades, mean +16.4% (t 3.54).
+- Re-anchored at TGE: 30 trades, mean +4.0% (t 0.88).
+- For comparison, the other 125 trades in 2025-26 average +8.8%.
+SUMMARY: The OKX-extra results survive this check. Of its 99 events, only MET (318h of pre-market, holding period entirely before TGE) and RE (28h of pre-market, tranche 1 entered before TGE) were real pre-market starts, and TESTPM002 is a test contract that never traded. Excluding MET and RE, or re-timing them to TGE, leaves the OKX-extra headline unchanged or slightly better: 2025-26 Sharpe goes from 1.58 to 1.60 or 1.69, and 2026 from 2.21 to 2.51 or 2.68.
+
+The bigger problem is in the Binance event set, which is both the rule's OOS validation and the union's comparator. 15 of its 137 traded events started as pre-market perps (WLFI, LINEA, MON, YB, MET, KITE, CC, SENT, BREV, ZAMA, FOGO, ESP, AZTEC, OPN, KAT), all between 2025-08 and 2026-03 and none in the 2022-24 selection period. Their 27 trades averaged +16.4% (t 3.54), mostly from shorts held entirely before TGE. The live code anchors t0 on the Binance perp's first 1m candle, so the baseline does reflect what live will trade. But the validated OOS Sharpe of about 2.06 depends on a mechanism the rule was never selected on: it drops to 1.57 when these events are excluded and to 1.34 when entries are re-timed to TGE (2026 Jan-Aug: 2.69 to 1.66 or 0.66).
+
+For the union, 2025-26 goes from 2.38 to 2.00 (excluded) or 1.80 (re-anchored), and 2026 from 3.35 to 2.83 or 1.74. Its advantage over Binance-only persists in every variant.
+
+Side findings:
+- GRAM is Toncoin renamed but counts as a new token in both sets.
+- PROS (Pharos) and DATA (DATA Network) are wrongly marked as old tokens because their tickers collide with older Binance tokens.
+- Binance spot dates for OKX events are truncated to the month start.
+
+Coverage caveats:
+- OKX's preMktSwTime and announcements only cover 2025-08 onward.
+- CoinGecko history is limited to the last 365 days.
+- AI16Z, BUZZ, LAUNCHCOIN and CAT are treated as existing DEX tokens on knowledge, not on data I verified.
+
+Outputs are in /tmp/claude-0/-home-user/f7826394-e5e3-5463-a537-6672931e9cc4/scratchpad/xlist/verify/premkt/: okx_premarket_classification.csv, bn_premarket_classification.csv, bn_pm_anchor.csv, rerun.json, rerun2.json, rerun3.json, rerun.log, decompose.py, and the panel copies sim_okx_excl, sim_okx_excl2 and sim_okx_reanchor.
+====================================================================================================
+Statistical evidence and decision: whether union vs Binance-only is distinguishable from noise, how significant the OKX-extra results are once trades are clustered, the ex-ante variants, and a decision recommendation | results_hold_with_caveats
+- [info] The author's numbers reproduce exactly (a check, not a defect)
+    IMPACT: None. Every number below is on the same basis as the author's.
+    FIX: None.
+- [major] No period's union-minus-Binance Sharpe difference is distinguishable from noise
+    IMPACT: 'Union 2.38 vs 2.06' in 2025-26 and '3.35 vs 2.69' in 2026 are within about 1.0-1.5 standard errors of zero, and so is the 2022-24 loss. The only defensible reading is that the extension has not been shown to change the Sharpe. MaxDD is not noise, though: it roughly doubles, from 0.167 to 0.340.
+    FIX: State ΔSR with its SE in every table. Do not quote subperiod Sharpe ratios as evidence of improvement.
+- [major] The 'bad 2022-24, good 2025-26' story comes from where the period split falls
+    IMPACT: Almost all of the full-sample evidence rests on one three-month memecoin/AI-agent mania episode. The '2025-26 recovery' (1.43 to 1.58 depending on end date) is half made of that episode's rebound. The rest of 2025-26 runs at SR about 0.87. In effect there is about one tail event in 4.7 years, so neither the mean nor the tail is well estimated.
+    FIX: Report results with the Nov 2024-Jan 2025 episode shown separately, and show split-date sensitivity. Treat okx_first tokens during listing manias as a distinct tail risk.
+- [major] OKX-extra alone: full-sample Sharpe not significant; 2025-26 marginal after clustering and net of hedge
+    IMPACT: Two tranches of one token count as one observation. With that and net returns, the author's '2025-26 t 3.1' becomes about 1.7. The pre-specified full-sample test is t about 1.1-1.4. 2025-26 was singled out after 2022-24 failed, and on its own it still falls short of 5% two-sided significance on a net, clustered basis.
+    FIX: Report net-of-hedge, listing-clustered t (or t on per-listing means) as the headline. Treat 2022-26 as the pre-registered test.
+- [major] The okx_only vs okx_first split looks ahead; the ex-ante version does not help
+    IMPACT: The okx_only +10% (t 3.5) edge cannot be traded. Tokens that later get a Binance listing cannot be excluded ex-ante, and they supply the left tail.
+    FIX: Drop the okx_only/okx_first split from the decision evidence, or label it as look-ahead. Document the definition behind the -11%/17 figure.
+- [major] In 2022-24 the OKX-extra events were significantly worse than same-period Binance events; in 2025-26 they are indistinguishable
+    IMPACT: There is some evidence that OKX-extra events come from a weaker population, with extra adverse selection from later Binance listings. Pooling them into the Binance rule with equal weight is therefore not supported. The 2022-24 Binance side is in-sample and inflated by rule selection, so the gap is overstated somewhat.
+    FIX: If ever traded, give OKX-extra events a separate, lower risk budget. Do not treat them as exchangeable with Binance events.
+- [minor] Ex-ante variants, all reported, none selected
+    IMPACT: No ex-ante variant beats Binance-only over the full sample. Half weight is Sharpe-neutral (-0.01 ± about 0.18). Checking Binance listing status at entry does nothing useful. The Binance-announcement exit would not rescue the full sample either.
+    FIX: None needed beyond reporting. Avoid adding more variants, since each one widens the multiple-testing set.
+- [major] Hindsight-optimal weighting adds almost nothing over the full sample; vol-matched, the union is dominated
+    IMPACT: Even with perfect hindsight on weights, the full sample shows no Sharpe benefit. The extra return from the union comes from extra risk, which levering the Binance sleeve would supply more efficiently where liquidity allows.
+    FIX: Judge the extension on risk-adjusted terms (ΔSR, vol-matched return), not on total return or trade count.
+- [minor] A shadow period has very low power
+    IMPACT: Shadow logging will not settle the question statistically within a normal review horizon. Any decision leans on priors and on the tail-risk profile.
+    FIX: Pre-register promotion and kill criteria now, and pool shadow evidence with the historical 2022-26 sample rather than restarting the count.
+- [minor] Headline metrics mix bases and sample windows
+    IMPACT: This slightly flatters the OKX-alone headline numbers. It does not change the conclusions.
+    FIX: Use net PnL/notional for trade statistics, and use one common end date.
+- [info] The worst trade dominates the 2022-24 gap
+    IMPACT: About 0.73 of the 0.84 comes from three late-2024 okx_first tokens. If the MEMEFI gap fill turns out to be a data artefact, the 2022-24 gap shrinks. The episode itself remains.
+    FIX: Check the MEMEFI stop fill against another price source (the data lens covers this). Keep the episode in all tests.
+CORRECTED: All from /tmp/claude-0/-home-user/f7826394-e5e3-5463-a537-6672931e9cc4/scratchpad/xlist/verify/stat/.
+Union ΔSR vs Binance-only (SE range over 5 methods, z): 2022-24 -0.84 (0.45-0.58, z -1.5 to -1.9); 2025-26 +0.32 (0.24-0.34, z +1.0 to +1.3); 2026 Jan-Aug +0.67 (0.43-0.60, z +1.1 to +1.5); 2022-26 -0.20 (0.26-0.37, z -0.6 to -0.8).
+okx_half ΔSR: -0.34 / +0.21 / +0.46 / -0.007 (2022-26 SE 0.15-0.21); maxDD 0.208 vs 0.167.
+okx_nobn: -0.88 / +0.30 / +0.68 / -0.23.
+okx_nobn_half: -0.35 / +0.20 / +0.47 / -0.02.
+Binance t0-24h exit (upper bound, not ex-ante): -0.76 / +0.39 / +0.91 / -0.13.
+OKX-alone 2022-26 (to 09-25): SR 0.628, t_SR 1.37 (Lo 1.26), block-21 90% CI [-0.16, 1.58]. Trade gross t 1.82 unclustered / 1.50 by listing / 1.34 two-way. Net mean 3.5%, t 1.46 unclustered / 1.20 by listing / 1.08 two-way.
+OKX-alone 2025-26: SR 1.577, t_SR 2.07, CI [0.32, 2.75]. Gross t 3.13 unclustered / 2.41 by listing / 2.54 two-way. Net mean 8.7%, t 2.22 unclustered / 1.71 by listing / 1.65 two-way. Excluding Jan 2025 (to 09-01): SR 0.87. Split at 2024-11-01: SR 1.42 before, -0.21 after.
+Nov 2024-Jan 2025 episode: OKX-alone -19.2%; union +11.8% vs Binance-only +41.6%. Excluding it: union 2.16 vs Binance-only 1.85.
+OKX vs Binance net per trade: 2022-24 0.7% vs 11.3% (t -2.48); 2025-26 7.9% vs 7.1% (t 0.13).
+Hindsight-optimal mix gain: 2022-26 +0.04 SR.
+Power: about 28 months to reach t = 2 at the 2025-26 effect size; about 13 years at the full-sample effect.
+SUMMARY: Recommendation: keep the OKX extension in shadow (signals logged only). Don't adopt it at full weight. Of the options, reduced weight is the only one I could defend, but the numbers don't support it.
+
+What I did: I reproduced union.json and okx_events.json exactly with a reviewer copy of the simulator, then re-ran the full portfolio under several bootstraps and variants. The scripts and JSON outputs are in /tmp/claude-0/-home-user/f7826394-e5e3-5463-a537-6672931e9cc4/scratchpad/xlist/verify/stat/: statlib.py, stat_variants.py, s0_repro, s1_point, s2_eventboot, s3_tstats, s4_extra, s5_mix and s6_boundary (.py/.json).
+
+1) Union vs Binance-only: no period's Sharpe difference can be told apart from noise. By period: 2022-24 -0.84, z about -1.5 to -1.9. 2025-26 +0.32, z about +1.0 to +1.3. 2026 Jan-Aug +0.67, z about +1.1 to +1.5. 2022-26 -0.20, z about -0.6 to -0.8. These hold across paired block, month, event-cluster and jackknife methods. MaxDD roughly doubles, from 0.167 to 0.34. The period narrative comes from where the split falls. One episode, Nov 2024-Jan 2025 (OKX-alone -19%; union +12% vs Binance-only +42%), straddles 2025-01-01. Split at 2024-11-01 instead and the story flips: OKX-alone SR is 1.42 before and -0.21 after. Excluding January 2025, 2025-26 OKX-alone SR is 0.87.
+
+2) OKX-extra alone: the full-sample Sharpe of 0.63 is not significant (t_SR 1.37; net trade t 1.20 clustered by listing, 1.08 two-way). The 2025-26 figure of 1.58 is marginal (t_SR 2.07; net trade t 1.65-1.71 clustered, down from the author's 3.13 unclustered gross). That subperiod was also picked after 2022-24 failed, and it does not differ significantly from 2022-24 (t 1.29).
+
+The okx_only +10% (t 3.5) result uses look-ahead: whether a token is ever listed on Binance is only known afterwards. The ex-ante version (enter only if Binance has no perp at entry) makes things slightly worse: OKX-alone SR 0.47 vs 0.54, union SR 1.87 vs 1.90. I could not reproduce the author's '-11% on 17 trades' figure.
+
+In 2022-24, OKX-extra trades earned significantly less net than Binance trades (0.7% vs 11.3%, t -2.48). In 2025-26 the two are indistinguishable (7.9% vs 7.1%).
+
+3) Variants, reported without selection:
+- Half weight: Sharpe-neutral over 2022-26 (ΔSR -0.007, SE about 0.18), maxDD 0.21. Vol-matched final equity 5.34 against 5.37 for a levered Binance-only sleeve.
+- No Binance perp at entry: about the same as the plain union, slightly worse over 2022-26 (ΔSR -0.23 vs -0.20).
+- Both comb
+====================================================================================================
+Completeness critic. I re-ran the two most consequential verifier claims (union de-duplication; Binance pre-market events), ran the combined correction nobody had run, and checked live-implementation constraints (OKX specs and position limits, capacity, ex-ante detection, and whether the live code can trade these events). Outputs are in SP/xlist/verify/critic/. | results_materially_wrong
+- [major] Spot-check 1 confirmed: counting 11 tokens twice (once per venue) produces most of the union's 2025-26 gain
+    IMPACT: The union's 2025-26 gain over Binance-only falls from +0.32 to +0.05 Sharpe (168h dedupe), or to -0.02 under live-style keying. Over 2022-26 the union is 0.35-0.48 Sharpe worse than Binance-only, with twice the drawdown.
+    FIX: Report union numbers only after de-duplicating by base asset (first venue wins). If the calendar is extended, key the live sleeve by base asset.
+- [major] Spot-check 2 confirmed: 15 Binance pre-market perps carry the validated 2025-26 Binance result
+    IMPACT: The Binance rule's 'OOS ~2.06' partly measures shorting pre-market perps before TGE, a mechanism absent from 2022-24. Without those events the post-launch baseline is about 1.57 for 2025-26.
+    FIX: Flag pre-market perps ex ante (OKX ruleType/preMktSwTime, first spot on any venue). Report baseline and extension numbers with and without them.
+- [major] Missing check, now run: the corrections combined leave no significant union benefit in any period
+    IMPACT: The only cell near significance is 2026 Jan-Aug (8 months, z 1.76). It is a sub-period picked after the fact, and the full-sample effect is negative.
+    FIX: Publish the combined-correction table as the reference comparison.
+- [minor] Verifier error: the statistics lens repeats the author's 'gap past the stop' for MEMEFI
+    IMPACT: No number changes. Tail risk per tranche under shared_stop is up to about -87%, not -50%. The statistics lens's hint that the 2022-24 gap might shrink should be dropped.
+    FIX: Describe it as the shared-stop mechanic. Any per-tranche cap is a rule change and needs in-sample evaluation.
+- [minor] Unreproducible and conflicting claims between verifiers
+    IMPACT: Class-split conclusions are not supported. They are also look-ahead, as two lenses show.
+    FIX: Remove the -11%/17 claim and the okx_only/okx_first narrative from the decision evidence.
+- [major] Missing check, now run: live code cannot trade OKX-extra events as written; ex-ante detection is possible but needs new calendar logic
+    IMPACT: The replay assumes an OKX calendar and a newtok definition that do not exist live. The methodology lens found the literal live newtok gives 2022-26 0.373 vs 0.628.
+    FIX: Before any paper run, implement and freeze the OKX calendar, the category/ruleType filter, first-trade t0, the base-asset dedupe and the pre-market flag.
+- [info] Missing check, now run: order size, position limits and capacity are not binding at a NAV around 10k
+    IMPACT: None at paper or small-live scale. The 10bp slippage assumption is plausible for entries. Capacity becomes a problem above about 100k NAV for the thinnest OKX-only tokens. Delisted contracts, which are thinner, could not be measured by REST.
+    FIX: None needed now. Cap participation (e.g. ≤2% of trailing-hour volume) if size grows.
+- [minor] Not run by anyone: applying the entry-clock lag to both sets
+    IMPACT: Probably small (≤0.1 Sharpe per side); the direction for ΔSR is unknown.
+    FIX: Re-run both sets with ceil(t0_exact) as the event clock.
+CORRECTED: All numbers are Sharpe unless marked.
+
+**Reproduced exactly, and the numbers stand as computed.**
+- OKX-alone: 0.628 (2022-26) / 0.135 (2022-24) / 1.577 (2025-26) / 2.207 (2026).
+- Union vs Binance-only: 1.569 vs 2.413 / 2.379 vs 2.060 / 3.353 vs 2.693 / 1.896 vs 2.100.
+
+**Corrected union vs Binance-only (periods 2022-24 / 2025-26 / 2026 Jan-Aug / 2022-26).**
+- 168h dedupe only: 1.511 / 2.106 / 3.317 / 1.746, against 2.413 / 2.060 / 2.693 / 2.100.
+- Live-style ("forever") dedupe: 1.351 / 2.036 / 3.183 / 1.625.
+- Pre-market excluded plus 168h dedupe: 1.511 / 1.766 / 2.671 / 1.607, against Binance-only without pre-market 2.413 / 1.565 / 1.659 / 1.904.
+
+**ΔSR of the combined correction (block-bootstrap SE).**
+- 2025-26: +0.20 ± 0.37 (z 0.54).
+- 2026 Jan-Aug: +1.01 ± 0.57 (z 1.76).
+- 2022-26: -0.30 ± 0.41 (z -0.73).
+- maxDD 2022-26: 0.327 vs 0.167.
+
+**Binance baseline, restated.** The validated "OOS ~2.06" is 1.565 without pre-market perps (2026 Jan-Aug: 1.659).
+
+**OKX-alone.** Headline stays 0.63 over 2022-26 and is not significant: event-clustered t about 1.5; net two-way t about 1.1. Clock-lag and funding fixes lower 2025-26 to about 1.53.
+
+**Live constraints.** Min order ≤29 USDT, position limit 350k USDT, entry-hour volume median 2.9M USDT: none binds at NAV ~10k.
+
+**Event flow.** 16 OKX-extra new-token events in 2026 through 09-25, about 1.8/month.
+SUMMARY: **Verdict.** The author's numbers reproduce exactly, but the headline conclusion "the union beats Binance-only in 2025-26 and 2026" is materially overstated. With the corrections combined, no benefit can be told apart from noise.
+
+**1) Spot-checks of the two most consequential verifier claims (both confirmed by my own code).**
+- **Union dedupe (methodology lens).** I matched base assets myself and got the same 41 overlaps. 11 tokens appear on both venues within 168h. First-venue-wins dedupe gives 2025-26 2.106 vs Binance-only 2.060: a +0.05 gain, not +0.32. Live-style symbol keying goes further (it blocks re-listings for 200 trades) and gives 2.036.
+- **Binance pre-market perps (pre-market lens).** Independent Binance spot-archive and OKX spot-listTime checks show 12 of 15 events had spot ≥48h after the perp launched. Excluding all 15 reproduces 2025-26 1.565 and 2026 1.659, so the validated Binance OOS (~2.06) partly comes from a pre-TGE mechanism absent in 2022-24.
+
+**Verifier errors.**
+- The statistics lens repeats the author's wrong "MEMEFI gap-through". The -86.6% is the inherited shared stop filled exactly at the level, so it is not a data artefact that could shrink the 2022-24 gap.
+- Verifiers disagree on the "-11%/17 trades" figure and on the new-token count (69 vs 75). Neither is reproducible as stated.
+
+**2) Missing checks I ran.**
+- **Combined correction** (pre-market exclusion plus dedupe): union vs Binance-only ΔSR is +0.20 ± 0.37 (2025-26), +1.01 ± 0.57 (2026 Jan-Aug, a post-hoc 8-month window) and -0.30 ± 0.41 (2022-26), with maxDD 33% vs 17%. The pre-market lens's claim that the edge widens does not survive dedupe.
+- **Live implementation.**
+  - OKX order specs don't bind at ~800 USDT per tranche: min order ≤29 USDT, rounding ≤1.8%, tier-1 cap ≥3.9k, posLmtAmt 350k.
+  - Liquidity is also fine: entry-hour OKX volume has a median of 2.9M USDT, similar to Binance-set events. The live KII quote shows a 7.5bp spread.
+  - But the live code cannot trade these events: its calendar and newtok use Binance only. An OKX calendar would need an instCategory==1/normal filter (most recent OKX listings are TradFi), first-candle t0 (listTime resets on ID reuse: OL, ZK), a base-asset dedupe and a pre-market flag.
+  - Detection at t0+24h is feasible; there are no 'preopen' instruments, but none are needed.
+- **Not run:** the clock lag applied to both sets.
+
+**3) Decision.** Do not add OKX-extra events to the live or paper sleeve at full weight.
+- At most, log 

@@ -1,0 +1,162 @@
+{
+ "author (bn spot, okx spot listTime, okx spot archive probe) | 2022-2026": {
+  "events": 75,
+  "sharpe": 0.628,
+  "trades": 146,
+  "mean": 0.0446,
+  "t": 1.82,
+  "maxdd": 0.352
+ },
+ "author (bn spot, okx spot listTime, okx spot archive probe) | 2022-2024": {
+  "events": 75,
+  "sharpe": 0.135,
+  "trades": 94,
+  "mean": 0.0023,
+  "t": 0.08,
+  "maxdd": 0.308
+ },
+ "author (bn spot, okx spot listTime, okx spot archive probe) | 2025-2026": {
+  "events": 75,
+  "sharpe": 1.577,
+  "trades": 52,
+  "mean": 0.1209,
+  "t": 3.13,
+  "maxdd": 0.115
+ },
+ "author (bn spot, okx spot listTime, okx spot archive probe) | 2026": {
+  "events": 75,
+  "sharpe": 2.207,
+  "trades": 30,
+  "mean": 0.1164,
+  "t": 2.41,
+  "maxdd": 0.074
+ },
+ "live-rule literal (Binance spot only) | 2022-2026": {
+  "events": 92,
+  "sharpe": 0.373,
+  "trades": 180,
+  "mean": 0.0304,
+  "t": 1.45,
+  "maxdd": 0.379
+ },
+ "live-rule literal (Binance spot only) | 2022-2024": {
+  "events": 92,
+  "sharpe": -0.193,
+  "trades": 126,
+  "mean": -0.0063,
+  "t": -0.25,
+  "maxdd": 0.336
+ },
+ "live-rule literal (Binance spot only) | 2025-2026": {
+  "events": 92,
+  "sharpe": 1.58,
+  "trades": 54,
+  "mean": 0.1159,
+  "t": 3.1,
+  "maxdd": 0.115
+ },
+ "live-rule literal (Binance spot only) | 2026": {
+  "events": 92,
+  "sharpe": 2.207,
+  "trades": 30,
+  "mean": 0.1164,
+  "t": 2.41,
+  "maxdd": 0.074
+ },
+ "bn spot + okx spot listTime (no archive probe) | 2022-2026": {
+  "events": 83,
+  "sharpe": 0.457,
+  "trades": 162,
+  "mean": 0.0374,
+  "t": 1.62,
+  "maxdd": 0.352
+ },
+ "bn spot + okx spot listTime (no archive probe) | 2022-2024": {
+  "events": 83,
+  "sharpe": -0.083,
+  "trades": 110,
+  "mean": -0.0021,
+  "t": -0.08,
+  "maxdd": 0.308
+ },
+ "bn spot + okx spot listTime (no archive probe) | 2025-2026": {
+  "events": 83,
+  "sharpe": 1.577,
+  "trades": 52,
+  "mean": 0.1209,
+  "t": 3.13,
+  "maxdd": 0.115
+ },
+ "bn spot + okx spot listTime (no archive probe) | 2026": {
+  "events": 83,
+  "sharpe": 2.207,
+  "trades": 30,
+  "mean": 0.1164,
+  "t": 2.41,
+  "maxdd": 0.074
+ },
+ "author + Bybit perp > 30 d old counts as old | 2022-2026": {
+  "events": 71,
+  "sharpe": 0.536,
+  "trades": 138,
+  "mean": 0.0428,
+  "t": 1.68,
+  "maxdd": 0.394
+ },
+ "author + Bybit perp > 30 d old counts as old | 2022-2024": {
+  "events": 71,
+  "sharpe": -0.005,
+  "trades": 88,
+  "mean": -0.0002,
+  "t": -0.01,
+  "maxdd": 0.352
+ },
+ "author + Bybit perp > 30 d old counts as old | 2025-2026": {
+  "events": 71,
+  "sharpe": 1.584,
+  "trades": 50,
+  "mean": 0.1185,
+  "t": 2.95,
+  "maxdd": 0.116
+ },
+ "author + Bybit perp > 30 d old counts as old | 2026": {
+  "events": 71,
+  "sharpe": 2.207,
+  "trades": 30,
+  "mean": 0.1164,
+  "t": 2.41,
+  "maxdd": 0.074
+ },
+ "author minus TESTPM002 | 2022-2026": {
+  "events": 74,
+  "sharpe": 0.628,
+  "trades": 146,
+  "mean": 0.0446,
+  "t": 1.82,
+  "maxdd": 0.352
+ },
+ "author minus TESTPM002 | 2022-2024": {
+  "events": 74,
+  "sharpe": 0.135,
+  "trades": 94,
+  "mean": 0.0023,
+  "t": 0.08,
+  "maxdd": 0.308
+ },
+ "author minus TESTPM002 | 2025-2026": {
+  "events": 74,
+  "sharpe": 1.577,
+  "trades": 52,
+  "mean": 0.1209,
+  "t": 3.13,
+  "maxdd": 0.115
+ },
+ "author minus TESTPM002 | 2026": {
+  "events": 74,
+  "sharpe": 2.207,
+  "trades": 30,
+  "mean": 0.1164,
+  "t": 2.41,
+  "maxdd": 0.074
+ }
+}

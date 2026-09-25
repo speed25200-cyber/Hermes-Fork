@@ -1,0 +1,200 @@
+{
+ "union split 2024-11-01": {
+  "pre": {
+   "okx_alone": 1.417,
+   "union": 2.804,
+   "bn": 2.704,
+   "d": 0.1
+  },
+  "post": {
+   "okx_alone": -0.207,
+   "union": 1.423,
+   "bn": 2.026,
+   "d": -0.603
+  }
+ },
+ "union split 2025-01-01": {
+  "pre": {
+   "okx_alone": 0.135,
+   "union": 1.569,
+   "bn": 2.413,
+   "d": -0.844
+  },
+  "post": {
+   "okx_alone": 1.43,
+   "union": 2.379,
+   "bn": 2.06,
+   "d": 0.32
+  }
+ },
+ "union split 2025-02-01": {
+  "pre": {
+   "okx_alone": 0.453,
+   "union": 2.07,
+   "bn": 2.831,
+   "d": -0.761
+  },
+  "post": {
+   "okx_alone": 0.872,
+   "union": 1.631,
+   "bn": 1.446,
+   "d": 0.186
+  }
+ },
+ "union split 2025-04-01": {
+  "pre": {
+   "okx_alone": 0.374,
+   "union": 1.85,
+   "bn": 2.469,
+   "d": -0.619
+  },
+  "post": {
+   "okx_alone": 1.225,
+   "union": 1.997,
+   "bn": 1.687,
+   "d": 0.31
+  }
+ },
+ "union Nov24-Jan25 episode": {
+  "okx_alone_ret": -0.1915,
+  "union_ret": 0.1178,
+  "bn_ret": 0.4156,
+  "ex_episode": {
+   "okx_alone": 1.233,
+   "union": 2.163,
+   "bn": 1.851
+  }
+ },
+ "okx_half split 2024-11-01": {
+  "pre": {
+   "okx_alone": 1.418,
+   "union": 2.969,
+   "bn": 2.704,
+   "d": 0.266
+  },
+  "post": {
+   "okx_alone": -0.189,
+   "union": 1.764,
+   "bn": 2.026,
+   "d": -0.262
+  }
+ },
+ "okx_half split 2025-01-01": {
+  "pre": {
+   "okx_alone": 0.151,
+   "union": 2.076,
+   "bn": 2.413,
+   "d": -0.338
+  },
+  "post": {
+   "okx_alone": 1.425,
+   "union": 2.273,
+   "bn": 2.06,
+   "d": 0.214
+  }
+ },
+ "okx_half split 2025-02-01": {
+  "pre": {
+   "okx_alone": 0.469,
+   "union": 2.576,
+   "bn": 2.831,
+   "d": -0.255
+  },
+  "post": {
+   "okx_alone": 0.87,
+   "union": 1.572,
+   "bn": 1.446,
+   "d": 0.126
+  }
+ },
+ "okx_half split 2025-04-01": {
+  "pre": {
+   "okx_alone": 0.388,
+   "union": 2.263,
+   "bn": 2.469,
+   "d": -0.206
+  },
+  "post": {
+   "okx_alone": 1.225,
+   "union": 1.885,
+   "bn": 1.687,
+   "d": 0.199
+  }
+ },
+ "okx_half Nov24-Jan25 episode": {
+  "okx_alone_ret": -0.0931,
+  "union_ret": 0.2561,
+  "bn_ret": 0.4156,
+  "ex_episode": {
+   "okx_alone": 1.232,
+   "union": 2.1,
+   "bn": 1.851
+  }
+ },
+ "okx_nobn split 2024-11-01": {
+  "pre": {
+   "okx_alone": 1.355,
+   "union": 2.781,
+   "bn": 2.704,
+   "d": 0.078
+  },
+  "post": {
+   "okx_alone": -0.286,
+   "union": 1.391,
+   "bn": 2.026,
+   "d": -0.635
+  }
+ },
+ "okx_nobn split 2025-01-01": {
+  "pre": {
+   "okx_alone": 0.077,
+   "union": 1.538,
+   "bn": 2.413,
+   "d": -0.875
+  },
+  "post": {
+   "okx_alone": 1.342,
+   "union": 2.358,
+   "bn": 2.06,
+   "d": 0.298
+  }
+ },
+ "okx_nobn split 2025-02-01": {
+  "pre": {
+   "okx_alone": 0.401,
+   "union": 2.044,
+   "bn": 2.831,
+   "d": -0.787
+  },
+  "post": {
+   "okx_alone": 0.747,
+   "union": 1.6,
+   "bn": 1.446,
+   "d": 0.154
+  }
+ },
+ "okx_nobn split 2025-04-01": {
+  "pre": {
+   "okx_alone": 0.324,
+   "union": 1.825,
+   "bn": 2.469,
+   "d": -0.644
+  },
+  "post": {
+   "okx_alone": 1.092,
+   "union": 1.967,
+   "bn": 1.687,
+   "d": 0.28
+  }
+ },
+ "okx_nobn Nov24-Jan25 episode": {
+  "okx_alone_ret": -0.1951,
+  "union_ret": 0.1127,
+  "bn_ret": 0.4156,
+  "ex_episode": {
+   "okx_alone": 1.151,
+   "union": 2.139,
+   "bn": 1.851
+  }
+ }
+}

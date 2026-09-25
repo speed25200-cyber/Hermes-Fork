@@ -1,0 +1,112 @@
+{
+ "okx all": {
+  "sharpe": 0.628,
+  "n": 146,
+  "mean": 0.0446,
+  "t": 1.82,
+  "maxdd": 0.352
+ },
+ "okx 2022-24": {
+  "sharpe": 0.135,
+  "n": 94,
+  "mean": 0.0023,
+  "t": 0.08,
+  "maxdd": 0.308
+ },
+ "okx 2025-26": {
+  "sharpe": 1.577,
+  "n": 52,
+  "mean": 0.1209,
+  "t": 3.13,
+  "maxdd": 0.115
+ },
+ "okx 2026": {
+  "sharpe": 2.207,
+  "n": 30,
+  "mean": 0.1164,
+  "t": 2.41,
+  "maxdd": 0.074
+ },
+ "okx 2025-26 to 09-01": {
+  "sharpe": 1.43,
+  "n": 42,
+  "mean": 0.1165,
+  "t": 2.92,
+  "maxdd": 0.115
+ },
+ "okx 2022-26 to 09-01": {
+  "sharpe": 0.539,
+  "n": 136,
+  "mean": 0.0376,
+  "t": 1.51,
+  "maxdd": 0.352
+ },
+ "bn_full 2022-2024": {
+  "sharpe": 2.413,
+  "n": 101,
+  "maxdd": 0.098
+ },
+ "bn_trunc 2022-2024": {
+  "sharpe": 2.413,
+  "n": 101,
+  "maxdd": 0.098,
+  "identical_to_full": true
+ },
+ "union 2022-2024": {
+  "sharpe": 1.569,
+  "n": 195,
+  "okx": 94,
+  "maxdd": 0.311
+ },
+ "bn_full 2025-2026": {
+  "sharpe": 2.06,
+  "n": 152,
+  "maxdd": 0.167
+ },
+ "bn_trunc 2025-2026": {
+  "sharpe": 2.06,
+  "n": 152,
+  "maxdd": 0.167,
+  "identical_to_full": true
+ },
+ "union 2025-2026": {
+  "sharpe": 2.379,
+  "n": 193,
+  "okx": 42,
+  "maxdd": 0.194
+ },
+ "bn_full 2026 Jan-Aug": {
+  "sharpe": 2.693,
+  "n": 40,
+  "maxdd": 0.11
+ },
+ "bn_trunc 2026 Jan-Aug": {
+  "sharpe": 2.693,
+  "n": 40,
+  "maxdd": 0.11,
+  "identical_to_full": true
+ },
+ "union 2026 Jan-Aug": {
+  "sharpe": 3.353,
+  "n": 60,
+  "okx": 20,
+  "maxdd": 0.122
+ },
+ "bn_full 2022-2026": {
+  "sharpe": 2.1,
+  "n": 253,
+  "maxdd": 0.167
+ },
+ "bn_trunc 2022-2026": {
+  "sharpe": 2.1,
+  "n": 253,
+  "maxdd": 0.167,
+  "identical_to_full": true
+ },
+ "union 2022-2026": {
+  "sharpe": 1.896,
+  "n": 388,
+  "okx": 136,
+  "maxdd": 0.34
+ }
+}

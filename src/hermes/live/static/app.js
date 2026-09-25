@@ -608,7 +608,7 @@ function sleevePanel(D) {
   if (!L.enabled) return "";
   const openT = L.open || [], cov = L.coverage || {}, watch = Object.keys(L.watch || {}).length;
   const cal = L.calendar || {}, calAge = cal.refreshed_at ? (Date.now() - toMs(cal.refreshed_at)) / 3600000 : Infinity;
-  const ent = Array.isArray(L.entries) && L.entries.length ? L.entries : [24, 72], killN = fin(L.kill_trades) ? L.kill_trades : 25;
+  const ent = Array.isArray(L.entries) && L.entries.length ? L.entries : [24, 72], killN = fin(L.kill_trades) ? L.kill_trades : 60, killM = fin(L.kill_mean) ? L.kill_mean : -0.03;
   const markOf = sym => {const p = posOf(D, sym); return p && fin(p.mark) ? p.mark : null};
   const rows = openT.map(t => {
     const m = markOf(t.symbol), pnl = fin(m) ? t.qty * (m - t.entry_px) : null;
@@ -632,10 +632,10 @@ function sleevePanel(D) {
     <div><div class="label">P&L réalisé</div><div class="v ${cls(L.closed_pnl)}">${usd(L.closed_pnl, 2, true)}</div><div class="x">${(L.closed || []).length} opération(s) récente(s)</div></div>
     <div><div class="label">Couverture OKX</div><div class="v">${num(cov.on_okx || 0, 0)} / ${num(cov.new_tokens_due || 0, 0)}</div><div class="x">nouveaux tokens cotés sur OKX à l'échéance</div></div>
     <div><div class="label">Calendrier Binance</div><div class="v ${calAge > 7 ? "down" : ""}">${cal.refreshed_at ? dt(cal.refreshed_at) : "pas encore lu"}</div><div class="x">${calAge > 7 && cal.refreshed_at ? "en retard : relu toutes les 6 h" : num(cal.listings || 0, 0) + " perpétuel(s) coté(s) depuis 7 j, dont " + watch + " nouveau(x) token(s)"}</div></div>
-    <div><div class="label">État</div><div class="v ${L.suspended ? "down" : ""}">${L.suspended ? "suspendue" : "active"}</div><div class="x">${L.suspended ? "règle d'arrêt : " + killN + " dernières opérations perdantes" : "règle d'arrêt fixée d'avance"}</div></div>
+    <div><div class="label">État</div><div class="v ${L.suspended ? "down" : ""}">${L.suspended ? "suspendue" : "active"}</div><div class="x">${L.suspended ? "règle d'arrêt : " + killN + " dernières opérations à " + pct(killM, 0) + " ou moins en moyenne" : "règle d'arrêt fixée d'avance"}</div></div>
    </div>
    <div class="tw">${table("t-sleeve", cols, rows, {sort: {k: "entry", dir: "desc"}, empty: "<b>Aucun short ouvert</b>La poche entre sur un nouveau token " + ent.map(h => num(h, 0) + " h").join(" puis ") + " après la cotation de son perpétuel, s'il est coté sur OKX."})}</div>
-   <p class="cap" style="padding:12px 16px 0">Court sur chaque nouveau token coté en perpétuel sur Binance et présent sur OKX, en tranches (${ent.map(h => num(h, 0) + " h").join(" et ")} après la cotation, chacune dans les 3 heures, jamais rattrapée), fermées 7 jours après, couvertes par un long BTC de même montant, stop à +50 % de la première entrée. Test en papier : Sharpe hors échantillon 2,1 en recherche, attendu plutôt autour de 1 ; le P&L de la poche compte le funding et des coûts de recherche (0,15 % par côté), et elle s'arrête d'elle-même si ses ${killN} dernières opérations perdent en moyenne.</p></div></div>`;
+   <p class="cap" style="padding:12px 16px 0">Court sur chaque nouveau token coté en perpétuel sur Binance et présent sur OKX, en tranches (${ent.map(h => num(h, 0) + " h").join(" et ")} après la cotation, chacune dans les 3 heures, jamais rattrapée), fermées 7 jours après, couvertes par un long BTC de même montant, stop à +50 % de la première entrée. Test en papier : Sharpe hors échantillon 2,1 en recherche (1,6 sans les perpétuels de pré-marché), attendu plutôt autour de 1 ; le P&L de la poche compte le funding et des coûts de recherche (0,15 % par côté), et elle s'arrête d'elle-même si ses ${killN} dernières opérations perdent en moyenne ${pct(-killM, 0)} ou plus.</p></div></div>`;
 }
 
 function contribution(D) {

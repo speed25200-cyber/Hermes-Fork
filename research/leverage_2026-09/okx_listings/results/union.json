@@ -1,0 +1,112 @@
+{
+ "binance_only 2022-2024": {
+  "sharpe": 2.413,
+  "lomo": 2.13,
+  "trades": 101,
+  "okx_trades": 0,
+  "maxdd": 0.098,
+  "vol": 0.114,
+  "years": {
+   "2022": -0.004,
+   "2023": 0.265,
+   "2024": 0.775
+  },
+  "invested": 0.239
+ },
+ "binance_only 2025-2026": {
+  "sharpe": 2.06,
+  "lomo": 1.446,
+  "trades": 152,
+  "okx_trades": 0,
+  "maxdd": 0.167,
+  "vol": 0.227,
+  "years": {
+   "2025": 0.589,
+   "2026": 0.315
+  },
+  "invested": 0.556
+ },
+ "binance_only 2026 Jan-Aug": {
+  "sharpe": 2.693,
+  "lomo": 1.448,
+  "trades": 40,
+  "okx_trades": 0,
+  "maxdd": 0.11,
+  "vol": 0.159,
+  "years": {
+   "2026": 0.319
+  },
+  "invested": 0.44
+ },
+ "binance_only 2022-2026": {
+  "sharpe": 2.1,
+  "lomo": 1.828,
+  "trades": 253,
+  "okx_trades": 0,
+  "maxdd": 0.167,
+  "vol": 0.164,
+  "years": {
+   "2022": -0.004,
+   "2023": 0.265,
+   "2024": 0.775,
+   "2025": 0.589,
+   "2026": 0.315
+  },
+  "invested": 0.352
+ },
+ "union 2022-2024": {
+  "sharpe": 1.569,
+  "lomo": 1.25,
+  "trades": 195,
+  "okx_trades": 94,
+  "maxdd": 0.311,
+  "vol": 0.187,
+  "years": {
+   "2022": 0.133,
+   "2023": 0.381,
+   "2024": 0.46
+  },
+  "invested": 0.379
+ },
+ "union 2025-2026": {
+  "sharpe": 2.379,
+  "lomo": 1.631,
+  "trades": 193,
+  "okx_trades": 42,
+  "maxdd": 0.194,
+  "vol": 0.261,
+  "years": {
+   "2025": 0.781,
+   "2026": 0.49
+  },
+  "invested": 0.607
+ },
+ "union 2026 Jan-Aug": {
+  "sharpe": 3.353,
+  "lomo": 2.429,
+  "trades": 60,
+  "okx_trades": 20,
+  "maxdd": 0.122,
+  "vol": 0.185,
+  "years": {
+   "2026": 0.495
+  },
+  "invested": 0.531
+ },
+ "union 2022-2026": {
+  "sharpe": 1.896,
+  "lomo": 1.582,
+  "trades": 388,
+  "okx_trades": 136,
+  "maxdd": 0.34,
+  "vol": 0.216,
+  "years": {
+   "2022": 0.133,
+   "2023": 0.381,
+   "2024": 0.46,
+   "2025": 0.781,
+   "2026": 0.49
+  },
+  "invested": 0.46
+ }
+}

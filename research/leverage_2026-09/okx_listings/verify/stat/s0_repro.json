@@ -1,0 +1,74 @@
+{
+ "binance_only 2022-2024": {
+  "sharpe": 2.413,
+  "author": 2.413,
+  "trades": 101,
+  "author_trades": 101,
+  "maxdd": 0.098,
+  "author_maxdd": 0.098,
+  "sharpe_slice_of_full": 2.413
+ },
+ "binance_only 2025-2026": {
+  "sharpe": 2.06,
+  "author": 2.06,
+  "trades": 152,
+  "author_trades": 152,
+  "maxdd": 0.167,
+  "author_maxdd": 0.167,
+  "sharpe_slice_of_full": 2.06
+ },
+ "binance_only 2026 Jan-Aug": {
+  "sharpe": 2.693,
+  "author": 2.693,
+  "trades": 40,
+  "author_trades": 40,
+  "maxdd": 0.11,
+  "author_maxdd": 0.11,
+  "sharpe_slice_of_full": 2.623
+ },
+ "binance_only 2022-2026": {
+  "sharpe": 2.1,
+  "author": 2.1,
+  "trades": 253,
+  "author_trades": 253,
+  "maxdd": 0.167,
+  "author_maxdd": 0.167,
+  "sharpe_slice_of_full": 2.1
+ },
+ "union 2022-2024": {
+  "sharpe": 1.569,
+  "author": 1.569,
+  "trades": 195,
+  "author_trades": 195,
+  "maxdd": 0.311,
+  "author_maxdd": 0.311,
+  "sharpe_slice_of_full": 1.569
+ },
+ "union 2025-2026": {
+  "sharpe": 2.379,
+  "author": 2.379,
+  "trades": 193,
+  "author_trades": 193,
+  "maxdd": 0.194,
+  "author_maxdd": 0.194,
+  "sharpe_slice_of_full": 2.379
+ },
+ "union 2026 Jan-Aug": {
+  "sharpe": 3.353,
+  "author": 3.353,
+  "trades": 60,
+  "author_trades": 60,
+  "maxdd": 0.122,
+  "author_maxdd": 0.122,
+  "sharpe_slice_of_full": 3.289
+ },
+ "union 2022-2026": {
+  "sharpe": 1.896,
+  "author": 1.896,
+  "trades": 388,
+  "author_trades": 388,
+  "maxdd": 0.34,
+  "author_maxdd": 0.34,
+  "sharpe_slice_of_full": 1.896
+ }
+}

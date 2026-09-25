@@ -1,0 +1,100 @@
+sym,t0_exact,cls,newtok,gate_name,g_okx_spot,g_bybit_10th,g_gate_start,g_bn_spot_day,g_okx_preMktSw,gap_h,verdict
+LOOKS-USDT-SWAP,2022-02-17 09:56:41.396,okx_only,False,,-89.9,6374.2,,,,-89.9,spot existed at/before perp start
+UMEE-USDT-SWAP,2022-02-24 07:01:15.079,okx_only,True,,-87.0,,,,,-87.0,spot existed at/before perp start
+RSS3-USDT-SWAP,2022-02-24 07:01:09.996,okx_only,True,RSS3,-87.0,6209.2,-237.0,,,-237.0,spot existed at/before perp start
+DOME-USDT-SWAP,2022-03-08 06:57:34.249,okx_only,True,Humain Web3,-87.0,5921.2,-68.0,,,-87.0,spot existed at/before perp start
+ASTR-USDT-SWAP,2022-04-14 07:00:09.148,okx_first,False,Astar Token,-87.0,,-2082.0,-1087.0,,-2082.0,spot existed at/before perp start
+NYM-USDT-SWAP,2022-04-21 07:00:01.375,okx_only,True,NYM,-87.0,10611.0,-142.0,,,-142.0,spot existed at/before perp start
+FITFI-USDT-SWAP,2022-05-11 07:02:38.802,okx_only,True,,-87.0,4385.2,,,,-87.0,spot existed at/before perp start
+CEL-USDT-SWAP,2022-06-17 06:59:57.386,okx_only,False,Celsius Network,-87.0,3497.5,-10412.0,,,-10412.0,spot existed at/before perp start
+SWEAT-USDT-SWAP,2022-09-15 06:57:48.420,okx_only,True,,-47.0,1337.1,,,,-47.0,spot existed at/before perp start
+ETHW-USDT-SWAP,2022-09-16 06:57:45.985,okx_first,True,EthereumPoW,-14.5,1313.1,-915.0,,,-915.0,spot existed at/before perp start
+USTC-USDT-SWAP,2022-11-03 06:59:36.350,okx_first,False,TerraUSD Classic,-87.0,161.1,-3843.0,-3775.0,,-3843.0,spot existed at/before perp start
+WEMIX-USDT-SWAP,2022-11-08 06:57:15.617,okx_only,False,WEMIX,-87.0,41.1,-10339.0,,,-10339.0,spot existed at/before perp start
+TON-USDT-SWAP,2022-12-28 06:57:57.309,okx_first,False,,-87.0,-165.0,,14129.0,,-165.0,spot existed at/before perp start
+GMX-USDT-SWAP,2023-02-02 07:07:43.480,okx_first,False,GMX,-87.1,-2023.1,-2873.1,-2887.1,,-2887.1,spot existed at/before perp start
+CORE-USDT-SWAP,2023-02-08 13:55:46.356,okx_only,True,Core,-1.9,-1.9,-1.9,,,-1.9,spot existed at/before perp start
+BLUR-USDT-SWAP,2023-02-15 02:55:56.870,okx_first,True,Blur,-8.4,-8.4,-8.4,6765.1,,-8.4,spot existed at/before perp start
+FLOKI-USDT-SWAP,2023-02-20 06:56:27.597,okx_first,False,Floki Inu,-86.9,-2454.6,-12526.4,1769.1,,-12526.4,spot existed at/before perp start
+GFT-USDT-SWAP,2023-02-23 06:58:05.950,okx_only,True,,-87.0,,,-367.0,,-367.0,spot existed at/before perp start
+GLMR-USDT-SWAP,2023-04-17 06:15:33.916,okx_first,False,Moonbeam Network,-86.3,-3798.2,-11057.8,-11070.3,,-11070.3,spot existed at/before perp start
+PEPE-USDT-SWAP,2023-05-03 03:55:54.119,okx_first,True,Pepe,-42.9,76.1,-332.9,44.1,,-332.9,spot existed at/before perp start
+AIDOGE-USDT-SWAP,2023-05-03 03:55:36.495,okx_only,True,ArbDoge AI,-83.9,,-349.9,,,-349.9,spot existed at/before perp start
+CETUS-USDT-SWAP,2023-05-10 11:01:36.723,okx_first,True,Cetus Protocol,-0.5,,-1.0,13093.0,,-1.0,spot existed at/before perp start
+ORDI-USDT-SWAP,2023-05-21 09:55:31.200,okx_first,True,Ordinals,-21.9,2110.1,-319.9,4070.1,,-319.9,spot existed at/before perp start
+WSM-USDT-SWAP,2023-10-06 03:56:18.423,okx_only,True,,-83.9,,,,,-83.9,spot existed at/before perp start
+VRA-USDT-SWAP,2023-10-06 07:57:05.280,okx_only,False,,-88.0,-4965.9,,,,-4965.9,spot existed at/before perp start
+RACA-USDT-SWAP,2023-10-24 08:07:31.709,okx_only,False,Radio Caca,-88.1,-8359.9,-18910.1,,,-18910.1,spot existed at/before perp start
+PYTH-USDT-SWAP,2023-11-20 14:55:46.705,okx_first,True,Pyth Network,-0.4,-0.9,-0.9,1761.1,,-0.9,spot existed at/before perp start
+AUCTION-USDT-SWAP,2023-12-01 07:55:45.766,okx_first,False,BounceAuction,-87.9,,-24669.9,-24223.9,,-24669.9,spot existed at/before perp start
+RON-USDT-SWAP,2023-12-11 10:00:05.034,okx_only,False,Ronin Network,-90.0,,-16376.0,,,-16376.0,spot existed at/before perp start
+CTC-USDT-SWAP,2023-12-14 07:56:05.233,okx_only,False,Creditcoin,-87.9,-9573.8,-16443.9,,,-16443.9,spot existed at/before perp start
+TURBO-USDT-SWAP,2023-12-14 09:56:01.537,okx_first,False,Turbo,-89.9,,-5357.9,6638.1,,-5357.9,spot existed at/before perp start
+METIS-USDT-SWAP,2023-12-28 09:58:09.377,okx_first,False,Metis Token,-90.0,,-23013.0,1766.0,,-23013.0,spot existed at/before perp start
+DMAIL-USDT-SWAP,2024-01-30 10:59:46.206,okx_only,True,,-1.0,-1.0,,,,-1.0,spot existed at/before perp start
+FLR-USDT-SWAP,2024-02-06 08:29:43.108,okx_only,False,Flare Network,-88.5,-9412.4,-9412.5,,,-9412.5,spot existed at/before perp start
+GPT-USDT-SWAP,2024-02-28 12:55:35.471,okx_only,True,,-0.9,-8521.9,,,,-8521.9,spot existed at/before perp start
+VELO-USDT-SWAP,2024-03-12 08:26:16.707,okx_only,False,Velo,-88.4,-6888.4,-25798.4,,,-25798.4,spot existed at/before perp start
+BONE-USDT-SWAP,2024-03-15 08:27:07.999,okx_only,False,Bone ShibaSwap,-88.5,,-9244.5,,,-9244.5,spot existed at/before perp start
+GF-USDT-SWAP,2024-03-15 10:28:21.420,okx_only,False,GoldFinger,-90.5,,17305.5,,,-90.5,spot existed at/before perp start
+ZK-USDT-SWAP,2024-03-19 10:26:24.186,okx_first,True,zkSync,-0.4,-0.4,2157.6,2149.6,,-0.4,spot existed at/before perp start
+VENOM-USDT-SWAP,2024-03-25 08:27:09.085,okx_only,True,VENOM,-0.5,-0.5,-0.5,,,-0.5,spot existed at/before perp start
+ZEUS-USDT-SWAP,2024-04-05 08:29:26.443,okx_only,True,Zeus Network,-18.5,,-5.5,,,-18.5,spot existed at/before perp start
+BLOCK-USDT-SWAP,2024-04-11 12:26:42.327,okx_only,True,,-0.4,-0.4,,,,-0.4,spot existed at/before perp start
+FOXY-USDT-SWAP,2024-04-12 08:26:39.968,okx_only,True,Foxy Linea,-0.4,-0.4,-0.4,,,-0.4,spot existed at/before perp start
+MEW-USDT-SWAP,2024-04-15 08:25:37.061,okx_first,True,Cat in a dogs world,-0.4,95.6,-380.4,,,-380.4,spot existed at/before perp start
+PRCL-USDT-SWAP,2024-04-16 13:26:46.700,okx_only,True,Parcl,-0.4,-0.4,-0.4,,,-0.4,spot existed at/before perp start
+MERL-USDT-SWAP,2024-04-19 10:26:04.126,okx_first,True,Merlin Chain,-0.4,-0.4,-0.4,,,-0.4,spot existed at/before perp start
+MSN-USDT-SWAP,2024-04-29 06:25:55.869,okx_only,True,,-0.4,,,,,-0.4,spot existed at/before perp start
+ZERO-USDT-SWAP,2024-05-06 08:27:23.540,okx_only,True,,-0.5,-0.5,,,,-0.5,spot existed at/before perp start
+ZENT-USDT-SWAP,2024-05-09 08:28:49.479,okx_only,True,Zentry,-88.5,-214.5,-47.5,,,-214.5,spot existed at/before perp start
+ULTI-USDT-SWAP,2024-06-07 07:25:56.057,okx_only,True,,-21.4,-21.4,,,,-21.4,spot existed at/before perp start
+ATH-USDT-SWAP,2024-06-13 03:59:55.691,okx_first,True,Aethir,-18.0,-18.0,-18.0,,,-18.0,spot existed at/before perp start
+UXLINK-USDT-SWAP,2024-07-18 09:01:19.572,okx_first,True,UxLink,-1.0,-1.0,-1.0,,,-1.0,spot existed at/before perp start
+MAX-USDT-SWAP,2024-08-06 08:30:41.320,okx_only,True,Mastercard xStock,-22.5,,8645.5,,,-22.5,spot existed at/before perp start
+CAT-USDT-SWAP,2024-09-06 10:30:53.123,okx_first,True,,1176.5,-8088.5,,,,-8088.5,OKX spot +1176h; Bybit CATUSDT -8088h (possibly other CAT); DEX token; not a pre-market contract (uncertain)
+MOODENG-USDT-SWAP,2024-10-03 07:00:23.946,okx_first,True,Moo Deng,1037.0,,-138.5,,,-138.5,OKX spot +1037h but Gate -138h; not pre-market
+PUFFER-USDT-SWAP,2024-10-14 12:30:22.791,okx_first,True,Puffer,,-0.5,-0.5,,,-0.5,spot existed at/before perp start
+X-USDT-SWAP,2024-10-25 09:30:59.750,okx_only,True,,-21.5,-21.5,,,,-21.5,spot existed at/before perp start
+GRASS-USDT-SWAP,2024-10-28 14:30:18.199,okx_first,True,Grass,,-0.5,-0.5,,,-0.5,spot existed at/before perp start
+DOG-USDT-SWAP,2024-11-19 06:00:23.865,okx_only,True,Dog,,,-4986.0,,,-4986.0,spot existed at/before perp start
+OL-USDT-SWAP,2024-11-22 09:00:52.228,okx_first,True,Open Loot,-89.0,-68.0,-68.0,,,-89.0,spot existed at/before perp start
+MEMEFI-USDT-SWAP,2024-11-22 15:00:45.522,okx_first,True,,-2.0,-2.0,,,,-2.0,spot existed at/before perp start
+MORPHO-USDT-SWAP,2024-11-25 10:01:21.218,okx_first,True,Morpho Labs,-90.0,-96.0,-96.0,7478.0,,-96.0,spot existed at/before perp start
+MAJOR-USDT-SWAP,2024-11-28 13:00:34.025,okx_only,True,Major,-1.0,-1.0,-1.0,,,-1.0,spot existed at/before perp start
+ZKJ-USDT-SWAP,2024-12-06 09:00:34.870,okx_first,False,Polyhedra Network,-89.0,-4225.0,-6287.0,,,-6287.0,spot existed at/before perp start
+SUNDOG-USDT-SWAP,2024-12-11 10:15:23.500,okx_only,True,Sundog,,-2184.2,-2686.3,,,-2686.3,spot existed at/before perp start
+AI16Z-USDT-SWAP,2024-12-20 09:15:24.996,okx_first,True,,,406.7,,,,406.7,"Bybit spot +407h; no other CEX; DEX-traded token (knowledge, not verified here)"
+GRIFFAIN-USDT-SWAP,2024-12-27 07:01:16.836,okx_first,True,GRIFFAIN,,,-185.0,,,-185.0,spot existed at/before perp start
+ZEREBRO-USDT-SWAP,2024-12-27 07:15:19.933,okx_first,True,zerebro,,-383.3,-640.3,,,-640.3,spot existed at/before perp start
+ALCH-USDT-SWAP,2025-01-03 07:15:15.135,okx_first,True,Alchemist AI,,-189.3,-0.3,,,-189.3,spot existed at/before perp start
+DUCK-USDT-SWAP,2025-01-16 11:00:19.661,okx_only,True,DuckChain,-1.0,,-1.0,,,-1.0,spot existed at/before perp start
+NC-USDT-SWAP,2025-01-17 11:00:57.041,okx_only,True,Nodecoin,-1.0,,-1.0,,,-1.0,spot existed at/before perp start
+J-USDT-SWAP,2025-01-22 11:00:25.689,okx_only,True,,-1.0,-1.0,,,,-1.0,spot existed at/before perp start
+BUZZ-USDT-SWAP,2025-01-27 11:15:23.615,okx_only,True,,,,,,,,"no CEX spot found; DEX token (knowledge, not verified here)"
+PI-USDT-SWAP,2025-02-20 09:00:30.853,okx_only,True,Pi Network,-1.0,,-1.0,,,-1.0,spot existed at/before perp start
+HYPE-USDT-SWAP,2025-02-21 07:00:39.397,okx_first,True,Hyperliquid,6151.0,3362.0,-1441.0,,,-1441.0,CEX spot later on OKX/Bybit but Gate spot -1441h; not pre-market
+LAUNCHCOIN-USDT-SWAP,2025-06-03 10:15:58.882,okx_only,True,,,,,,,,"no CEX spot found; DEX token (knowledge, not verified here)"
+USELESS-USDT-SWAP,2025-07-25 10:00:27.052,okx_first,True,Useless Coin,,,-336.0,,,-336.0,spot existed at/before perp start
+TESTPM002-USDT-SWAP,2025-08-20 06:43:37.380,okx_only,True,,,,,,,,"OKX test pre-market contract (3 bars, never traded)"
+OKB-USDT-SWAP,2025-09-04 02:00:37.825,okx_only,False,OKB,-82.0,,-48591.4,,,-48591.4,spot existed at/before perp start
+MET-USDT-SWAP,2025-10-10 08:15:42.974,okx_first,True,Meteora,317.7,317.7,317.7,807.7,318.2,317.7,PRE-MARKET confirmed (preMktSwTime 2025-10-23 14:30; OKX ann. 2025-10-23; spot +318h; CoinGecko first 2025-10-23)
+PIGGY-USDT-SWAP,2025-10-29 08:00:31.936,okx_only,True,Piggycell,,,-20.0,,,-20.0,spot existed at/before perp start
+TRIA-USDT-SWAP,2026-02-05 07:30:00.746,okx_first,True,,,-45.5,,,,-45.5,spot existed at/before perp start
+UP-USDT-SWAP,2026-04-08 11:00:02.103,okx_only,True,Unitas,,,68.0,,,68.0,spot later on CEX (Gate +68h) but CoinGecko prices from 2026-03-14 -> token existed; not pre-market
+OFC-USDT-SWAP,2026-04-09 11:00:22.847,okx_only,True,One Football,-0.8,,-1.0,,,-1.0,spot existed at/before perp start
+PROS-USDT-SWAP,2026-04-28 14:00:00.191,okx_only,False,,356.0,,,-31694.0,,-31694.0,"OKX spot +356h, CoinGecko Pharos first 2026-04-28 (= t0 day) -> not pre-market; newtok=False only via ticker collision with Binance PROS (Prosper, 2022)"
+BLEND-USDT-SWAP,2026-04-29 10:00:02.017,okx_only,True,Fluent,,-117.0,-2.0,,,-117.0,spot existed at/before perp start
+GRAM-USDT-SWAP,2026-06-17 10:30:02.885,okx_first,True,GRAM (prev. Toncoin),-0.5,117.5,-20.5,349.5,,-20.5,"NOT A LAUNCH: Toncoin renamed (TON-USDT-SWAP last trade 2026-06-16 08:00 @1.695; GRAM first 06-17 10:30 @1.670; Gate ""GRAM (prev. Toncoin)"")"
+RE-USDT-SWAP,2026-06-17 10:30:14.752,okx_first,True,Re,27.5,,27.5,13.5,27.8,13.5,PRE-MARKET confirmed (preMktSwTime 2026-06-18 14:20; OKX ann. 2026-06-18; spot +27.5h; CoinGecko first 2026-06-18)
+O-USDT-SWAP,2026-06-17 16:30:00.852,okx_first,True,o1.exchange,,,-0.5,,,-0.5,spot existed at/before perp start
+NES-USDT-SWAP,2026-06-24 13:30:01.259,okx_only,True,NESA,-0.5,,164.5,,,-0.5,spot existed at/before perp start
+DATA-USDT-SWAP,2026-07-02 12:30:02.421,okx_only,False,DATA Network,-0.5,163.9,-47.5,-70716.5,,-70716.5,"Gate ""DATA Network"" -47.5h; newtok=False via ticker collision with Binance DATA (Streamr, 2018)"
+AEON-USDT-SWAP,2026-07-27 11:30:37.205,okx_only,True,AEON,-0.5,,-0.5,,,-0.5,spot existed at/before perp start
+DOS-USDT-SWAP,2026-08-10 12:00:00.783,okx_first,True,DAPPOS,70.0,,-1.0,,,-1.0,spot existed at/before perp start
+CP-USDT-SWAP,2026-09-02 15:40:05.239,okx_only,True,Cluster Protocol,-1.2,,-0.7,,,-1.2,spot existed at/before perp start
+CASHCAT-USDT-SWAP,2026-09-03 03:30:00.382,okx_only,True,Cash Cat,,,-211.5,,,-211.5,spot existed at/before perp start
+DGAI-USDT-SWAP,2026-09-03 03:00:02.142,okx_only,True,DGrid AI,,,-235.0,,,-235.0,spot existed at/before perp start
+PONS-USDT-SWAP,2026-09-05 03:00:04.739,okx_only,True,Pons,251.5,,-210.0,,,-210.0,spot existed at/before perp start
+CNPY-USDT-SWAP,2026-09-07 13:00:00.559,okx_only,True,Canopy,,,-1.0,,,-1.0,spot existed at/before perp start
+KII-USDT-SWAP,2026-09-24 11:00:00.620,okx_only,True,,,-982.0,,,,-982.0,spot existed at/before perp start

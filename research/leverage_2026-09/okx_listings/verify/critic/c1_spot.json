@@ -1,0 +1,307 @@
+{
+ "runs": {
+  "bn_only|2022-24": {
+   "sharpe": 2.413,
+   "trades": 101,
+   "okx": 0,
+   "maxdd": 0.098,
+   "final": 2.236
+  },
+  "bn_only|2025-26": {
+   "sharpe": 2.06,
+   "trades": 152,
+   "okx": 0,
+   "maxdd": 0.167,
+   "final": 2.088
+  },
+  "bn_only|2026JanAug": {
+   "sharpe": 2.693,
+   "trades": 40,
+   "okx": 0,
+   "maxdd": 0.11,
+   "final": 1.319
+  },
+  "bn_only|2022-26": {
+   "sharpe": 2.1,
+   "trades": 253,
+   "okx": 0,
+   "maxdd": 0.167,
+   "final": 4.67
+  },
+  "union|2022-24": {
+   "sharpe": 1.569,
+   "trades": 195,
+   "okx": 94,
+   "maxdd": 0.311,
+   "final": 2.286
+  },
+  "union|2025-26": {
+   "sharpe": 2.379,
+   "trades": 193,
+   "okx": 42,
+   "maxdd": 0.194,
+   "final": 2.654
+  },
+  "union|2026JanAug": {
+   "sharpe": 3.353,
+   "trades": 60,
+   "okx": 20,
+   "maxdd": 0.122,
+   "final": 1.495
+  },
+  "union|2022-26": {
+   "sharpe": 1.896,
+   "trades": 388,
+   "okx": 136,
+   "maxdd": 0.34,
+   "final": 6.067
+  },
+  "union_dedupe168|2022-24": {
+   "sharpe": 1.511,
+   "trades": 189,
+   "okx": 94,
+   "maxdd": 0.297,
+   "final": 2.185
+  },
+  "union_dedupe168|2025-26": {
+   "sharpe": 2.106,
+   "trades": 179,
+   "okx": 42,
+   "maxdd": 0.194,
+   "final": 2.24
+  },
+  "union_dedupe168|2026JanAug": {
+   "sharpe": 3.317,
+   "trades": 52,
+   "okx": 20,
+   "maxdd": 0.086,
+   "final": 1.432
+  },
+  "union_dedupe168|2022-26": {
+   "sharpe": 1.746,
+   "trades": 368,
+   "okx": 136,
+   "maxdd": 0.327,
+   "final": 4.893
+  },
+  "union_dedupe_forever|2022-24": {
+   "sharpe": 1.351,
+   "trades": 170,
+   "okx": 94,
+   "maxdd": 0.297,
+   "final": 1.933
+  },
+  "union_dedupe_forever|2025-26": {
+   "sharpe": 2.036,
+   "trades": 162,
+   "okx": 42,
+   "maxdd": 0.194,
+   "final": 2.086
+  },
+  "union_dedupe_forever|2026JanAug": {
+   "sharpe": 3.183,
+   "trades": 50,
+   "okx": 20,
+   "maxdd": 0.086,
+   "final": 1.409
+  },
+  "union_dedupe_forever|2022-26": {
+   "sharpe": 1.625,
+   "trades": 332,
+   "okx": 136,
+   "maxdd": 0.325,
+   "final": 4.031
+  },
+  "bn_only_exPM|2022-24": {
+   "sharpe": 2.413,
+   "trades": 101,
+   "okx": 0,
+   "maxdd": 0.098,
+   "final": 2.236
+  },
+  "bn_only_exPM|2025-26": {
+   "sharpe": 1.565,
+   "trades": 125,
+   "okx": 0,
+   "maxdd": 0.167,
+   "final": 1.651
+  },
+  "bn_only_exPM|2026JanAug": {
+   "sharpe": 1.659,
+   "trades": 29,
+   "okx": 0,
+   "maxdd": 0.087,
+   "final": 1.144
+  },
+  "bn_only_exPM|2022-26": {
+   "sharpe": 1.904,
+   "trades": 226,
+   "okx": 0,
+   "maxdd": 0.167,
+   "final": 3.693
+  },
+  "union_exPM|2022-24": {
+   "sharpe": 1.569,
+   "trades": 195,
+   "okx": 94,
+   "maxdd": 0.311,
+   "final": 2.286
+  },
+  "union_exPM|2025-26": {
+   "sharpe": 1.998,
+   "trades": 162,
+   "okx": 38,
+   "maxdd": 0.194,
+   "final": 2.092
+  },
+  "union_exPM|2026JanAug": {
+   "sharpe": 2.827,
+   "trades": 47,
+   "okx": 18,
+   "maxdd": 0.1,
+   "final": 1.317
+  },
+  "union_exPM|2022-26": {
+   "sharpe": 1.735,
+   "trades": 357,
+   "okx": 132,
+   "maxdd": 0.34,
+   "final": 4.783
+  },
+  "union_exPM_dedupe168|2022-24": {
+   "sharpe": 1.511,
+   "trades": 189,
+   "okx": 94,
+   "maxdd": 0.297,
+   "final": 2.185
+  },
+  "union_exPM_dedupe168|2025-26": {
+   "sharpe": 1.766,
+   "trades": 150,
+   "okx": 38,
+   "maxdd": 0.194,
+   "final": 1.846
+  },
+  "union_exPM_dedupe168|2026JanAug": {
+   "sharpe": 2.671,
+   "trades": 39,
+   "okx": 18,
+   "maxdd": 0.07,
+   "final": 1.261
+  },
+  "union_exPM_dedupe168|2022-26": {
+   "sharpe": 1.607,
+   "trades": 339,
+   "okx": 132,
+   "maxdd": 0.327,
+   "final": 4.033
+  }
+ },
+ "w168": [
+  {
+   "base": "PEPE",
+   "i": 63,
+   "j": 19,
+   "dh": 61.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "PYTH",
+   "i": 115,
+   "j": 26,
+   "dh": 48.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "MORPHO",
+   "i": 231,
+   "j": 61,
+   "dh": 52.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "GRIFFAIN",
+   "i": 259,
+   "j": 66,
+   "dh": 150.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "ZEREBRO",
+   "i": 261,
+   "j": 67,
+   "dh": 151.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "ALCH",
+   "i": 263,
+   "j": 68,
+   "dh": 100.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "MET",
+   "i": 455,
+   "j": 79,
+   "dh": 28.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "TRIA",
+   "i": 521,
+   "j": 81,
+   "dh": 29.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "RE",
+   "i": 639,
+   "j": 87,
+   "dh": 28.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "O",
+   "i": 648,
+   "j": 88,
+   "dh": 163.0,
+   "bn_new": true,
+   "okx_new": true
+  },
+  {
+   "base": "DOS",
+   "i": 702,
+   "j": 92,
+   "dh": 27.0,
+   "bn_new": true,
+   "okx_new": true
+  }
+ ],
+ "pm": [
+  "AZTECUSDT",
+  "BREVUSDT",
+  "CCUSDT",
+  "ESPUSDT",
+  "FOGOUSDT",
+  "KATUSDT",
+  "KITEUSDT",
+  "LINEAUSDT",
+  "METUSDT",
+  "MONUSDT",
+  "OPNUSDT",
+  "SENTUSDT",
+  "WLFIUSDT",
+  "YBUSDT",
+  "ZAMAUSDT"
+ ]
+}

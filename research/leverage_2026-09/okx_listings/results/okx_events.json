@@ -1,0 +1,108 @@
+{
+ "all 2022-2026": {
+  "sharpe": 0.628,
+  "n_trades": 146,
+  "mean_trade": 0.0446,
+  "median_trade": 0.129,
+  "t_trades": 1.82,
+  "win": 0.671,
+  "years": {
+   "2022": 0.138,
+   "2023": 0.0928,
+   "2024": -0.1745,
+   "2025": 0.1519,
+   "2026": 0.2155
+  },
+  "stats": {
+   "late_entries": 0,
+   "entries": 146,
+   "stops": 24,
+   "tranche2_after_stop": 9,
+   "t2_inherit": 64
+  },
+  "maxdd": 0.3521
+ },
+ "2022-2024": {
+  "sharpe": 0.135,
+  "n_trades": 94,
+  "mean_trade": 0.0023,
+  "median_trade": 0.1118,
+  "t_trades": 0.08,
+  "win": 0.628,
+  "years": {
+   "2022": 0.138,
+   "2023": 0.0928,
+   "2024": -0.1745
+  },
+  "stats": {
+   "late_entries": 0,
+   "entries": 94,
+   "stops": 17,
+   "tranche2_after_stop": 7,
+   "t2_inherit": 40
+  },
+  "maxdd": 0.3075
+ },
+ "2025-2026": {
+  "sharpe": 1.577,
+  "n_trades": 52,
+  "mean_trade": 0.1209,
+  "median_trade": 0.1629,
+  "t_trades": 3.13,
+  "win": 0.75,
+  "years": {
+   "2025": 0.1519,
+   "2026": 0.2155
+  },
+  "stats": {
+   "late_entries": 0,
+   "entries": 52,
+   "stops": 7,
+   "tranche2_after_stop": 2,
+   "t2_inherit": 24
+  },
+  "maxdd": 0.1148
+ },
+ "2026": {
+  "sharpe": 2.207,
+  "n_trades": 30,
+  "mean_trade": 0.1164,
+  "median_trade": 0.1473,
+  "t_trades": 2.41,
+  "win": 0.733,
+  "years": {
+   "2026": 0.2155
+  },
+  "stats": {
+   "late_entries": 0,
+   "entries": 30,
+   "stops": 3,
+   "tranche2_after_stop": 1,
+   "t2_inherit": 14
+  },
+  "maxdd": 0.0744
+ },
+ "all, costs x2": {
+  "sharpe": 0.564,
+  "n_trades": 146,
+  "mean_trade": 0.0446,
+  "median_trade": 0.129,
+  "t_trades": 1.82,
+  "win": 0.671,
+  "years": {
+   "2022": 0.1333,
+   "2023": 0.0874,
+   "2024": -0.189,
+   "2025": 0.145,
+   "2026": 0.2062
+  },
+  "stats": {
+   "late_entries": 0,
+   "entries": 146,
+   "stops": 24,
+   "tranche2_after_stop": 9,
+   "t2_inherit": 64
+  },
+  "maxdd": 0.3571
+ }
+}

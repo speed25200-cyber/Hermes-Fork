@@ -8,9 +8,12 @@ first entry. New tokens drift down in their first week (airdrop and unlock selli
 +7 to +16 % per event vs BTC in each of 2023-2026 (t 2-4). The equal-weight plateau of in-sample configurations (entry
 day 1 or 3, exit day 7, BTC hedge) made an out-of-sample Sharpe of 2.1 (2025-01 -> 2026-08, OKX prices; leave-one-
 month-out 1.5, bootstrap 90 % [0.7, 3.6]); rebuilt with the live rules (entry windows, one 50 % stop per contract): 2.09
-and 1.47. The honest forward expectation is about 1: Binance lists fewer new crypto tokens (74 in Jan-Aug 2026 against
-228 in 2025; OKX lists about 28 % of them by +72 h), and the squeeze tail grew. Paper only: a forward test with a kill
-rule fixed in advance (``kill_trades``), judged on P&L net of research-level costs and funding.
+and 1.47. Fifteen of those out-of-sample listings (2025-08 -> 2026-03) were pre-market perpetuals shorted before the
+token existed, a mechanism absent from the selection years; without them the out-of-sample Sharpe is about 1.57.
+The honest forward expectation is about 1: Binance now lists two or three new crypto perpetuals a month (the rest of
+its launches are stocks, FX and pre-IPO contracts), and the squeeze tail grew. OKX's own listings were tested as
+extra events and not adopted (RESULTS § 19). Paper only: a forward test with a kill rule set before any live trade
+(``kill_trades``, ``kill_mean``, ``kill_loss``), judged on P&L net of research-level costs and funding.
 
 Sizing as in research: a listing gets NAV x leverage / slots x clip(sigma_ref / sigma, 0.25, 1), split equally
 across its tranches, where sigma is the coin's realised daily volatility since listing (scale 0.5 without enough
@@ -130,8 +133,8 @@ class ListingSleeve:
 
     # -- kill rule --------------------------------------------------------------------------------------------
     def suspended(self) -> bool:
-        """Fixed in advance: no new entry once the last ``kill_trades`` closed trades have a mean return <= 0 or
-        lose more than ``kill_loss`` of the sleeve's capital between them."""
+        """Fixed before any live trade: no new entry once the last ``kill_trades`` closed trades have a mean net return
+        <= ``kill_mean`` or lose more than ``kill_loss`` of the sleeve's capital between them."""
         n = self.cfg.kill_trades
         closed = [t for t in self.done if t.get("reason") != "gone" and float(t.get("notional", 0) or 0) > 0]  # type: ignore[arg-type]
         if n <= 0 or len(closed) < n:
@@ -141,9 +144,9 @@ class ListingSleeve:
         navs = [float(t.get("nav", 0.0) or 0.0) for t in last]  # type: ignore[arg-type]
         nav = next((v for v in reversed(navs) if v > 0), 0.0)
         if nav <= 0:
-            return mean <= 0.0
+            return mean <= self.cfg.kill_mean
         loss = -sum(float(t["pnl"]) for t in last) / (nav * self.cfg.leverage)  # type: ignore[arg-type]
-        return mean <= 0.0 or loss > self.cfg.kill_loss
+        return mean <= self.cfg.kill_mean or loss > self.cfg.kill_loss
 
     # -- positions --------------------------------------------------------------------------------------------
     def holdings(self, prices: dict[str, float]) -> dict[str, float]:
@@ -267,6 +270,7 @@ class ListingSleeve:
             "suspended": self.suspended(),
             "entries": list(self.cfg.entries),
             "kill_trades": self.cfg.kill_trades,
+            "kill_mean": self.cfg.kill_mean,
             "tokens_open": len(self.coins()),
             "open": [asdict(t) for t in self.open],
             "open_pnl": round(pnl, 2),

@@ -625,12 +625,68 @@ avec une moitié sans stop ferait 2,22 ; des entrées rattrapées en retard l'au
 adverse du code a fait corriger avant le déploiement : la couverture BTC orpheline après un stop, l'arrêt d'urgence
 qui ne fermait pas la poche, les limites de risque du livre (perte journalière, budget de drawdown) qui ne freinaient
 pas ses entrées, les entrées tardives, et les jetons préfixés « 1000 » pris pour neufs. Règles d'arrêt fixées d'avance : la poche s'arrête si ses 25 dernières
-opérations perdent en moyenne ou plus de 10 % de son plafond ; revue après 12 mois et au moins 30 opérations ; le
+opérations perdent en moyenne ou plus de 10 % de son plafond (recalibrée avant toute opération réelle, § 19 : 60
+opérations à −3 % ou moins en moyenne, ou plus de 15 % du plafond) ; revue après 12 mois et au moins 30 opérations ; le
 passage en argent réel n'est envisageable qu'à 2× combiné, puis 3× si le Sharpe prospectif dépasse 1.
 
 **Capital minimal** : le livre tient 28 de ses 30 positions sur OKX dès 1 000 USDT, mais la moitié de ses
 rééquilibrages par bougie y tombent sous la taille minimale d'ordre ; 3 000 USDT est un plancher raisonnable,
 10 000 USDT le rend fidèle au backtest. Code et résultats des quatre pistes et des vérifications :
 `research/leverage_2026-09/` (dossiers `longtail`, `newlisting`, `tsmom_div`, `cascade` et leurs vérifications).
+
+## 19. Nouvelles cotations : ce que Binance ne cote plus, OKX à la place, et la règle d'arrêt (25 septembre 2026)
+
+**Le flux d'événements s'est tari.** Lu sur `exchangeInfo` depuis le VPS : les 12 derniers contrats USDT lancés par
+Binance (depuis le 7 septembre) sont tous des perpétuels TradFi (actions US et de Hong Kong, change USD/BRL,
+pré-introductions en bourse), que la poche exclut. Nouveaux perpétuels crypto de Binance encore cotés, par mois :
+≈ 30 en septembre-octobre 2025, 14-15 de novembre à janvier, puis 5, 8, 5, 4, 7, 3, 2 et 3 de février à septembre
+2026. Rejouée avec les règles live, la poche a trouvé 3 nouveaux tokens par mois au premier semestre 2026 (dont OKX
+en cote), 1 à 2 en juillet-août.
+
+**OKX à la place ? Testé, non retenu.** Calendrier complet des perpétuels USDT d'OKX, contrats retirés compris
+(fichiers de funding de tous les swaps jusqu'au 7 septembre 2025, liste courante ensuite, sondage des archives de
+transactions pour les contrats retirés depuis), comparé aux cotations Binance : 99 événements qu'OKX cote seul ou
+au moins 24 h avant Binance, jamais vus par le choix de la règle, donc un vrai test hors échantillon. Prix horaires
+reconstruits depuis les archives de transactions d'OKX ou son API (vérifiés à l'identique par un relecteur, et à
+±0,7 % près contre l'indice OKX et les archives de Bybit), funding réalisé d'OKX, âge du token par le premier marché
+au comptant connu (Binance ou OKX). Règle live gelée, sans aucun réglage :
+
+| Événements OKX seuls (règle gelée) | 2022-2024 | 2025-2026 | 2022-2026 |
+|---|:-:|:-:|:-:|
+| Sharpe | 0,14 | 1,58 | 0,63 |
+| t par cotation (net, deux tranches regroupées) | — | 1,7 | 1,2 |
+
+Ajoutés à la poche Binance (un token compté une seule fois, la première place de cotation prime) et sans les
+perpétuels de pré-marché (voir plus bas), le gain de Sharpe est de +0,20 ± 0,37 en 2025-2026, −0,30 ± 0,41 sur
+2022-2026, pour une baisse maximale doublée (33 % contre 17 %). La perte vient des tokens qu'OKX cote avant
+Binance pendant les manies (GRASS, MORPHO, MEMEFI, GRIFFAIN, ZEREBRO fin 2024) : la cotation Binance qui suit les
+fait monter, ce qu'on ne peut pas savoir à l'entrée. Un premier calcul (+0,32 en 2025-2026) comptait deux fois 11
+tokens cotés sur les deux places ; une relecture adverse à quatre angles l'a corrigé. **Décision** : pas
+d'extension à OKX ; à réexaminer si Binance cesse tout à fait de coter des tokens crypto (il faudrait alors un
+calendrier OKX, un filtre de catégorie et de pré-marché, et un dédoublonnage par token).
+
+**Le résultat hors échantillon de la poche, relu.** 15 des cotations Binance échangées en 2025-2026 (WLFI, LINEA,
+MON, YB, MET, KITE, CC, SENT, BREV, ZAMA, FOGO, ESP, AZTEC, OPN, KAT) étaient des perpétuels de **pré-marché** :
+le contrat existait des jours ou des semaines avant le token, et le court tenait avant son lancement. Ce mécanisme
+n'existait pas en 2022-2024, quand la règle a été choisie. Leurs 27 opérations ont gagné +16,4 % en moyenne (t 3,5),
+et la poche live les échange aussi (son horloge est la première minute du perpétuel) ; sans elles, le Sharpe hors
+échantillon de la règle live passe de 2,06 à 1,57 (2026 : de 2,69 à 1,66), et à 1,34 si l'on recale leurs entrées
+sur le lancement du token. L'avantage « après lancement » vaut donc environ 1,5 hors échantillon, et le pré-marché
+est un second avantage, récent et non choisi, qu'on garde en le sachant.
+
+**La règle d'arrêt était trop serrée.** Rééchantillonnage par cotation (3 nouveaux tokens par mois, 24 mois) des
+opérations de la règle live, nettes de la couverture, des coûts et du funding (+5,8 % par opération après lancement
+en 2025-2026, dispersion 30 %) :
+
+| Règle | Arrêt à tort, avantage réel (après lancement / avec pré-marché) | Arrêt d'une poche morte (avantage nul) |
+|---|:-:|:-:|
+| 25 dernières opérations en moyenne ≤ 0 (règle initiale) | 92 % / 69 % | 99,6 %, en 26 opérations |
+| 60 dernières ≤ −3 % en moyenne, ou perte > 15 % du plafond | 21 % / 3,5 % | 71 %, médiane 67 opérations |
+
+L'ancienne règle aurait arrêté la poche validée le 28 avril 2025. La nouvelle est adoptée avant la moindre opération
+réelle (la poche n'en a encore fait aucune) ; elle rappelle aussi une limite : à 2 ou 3 tokens par mois, il faudra
+environ deux ans pour que l'expérience en direct tranche statistiquement. Le plafond de levier combiné du § 18 (2×
+au départ, 3× seulement si le Sharpe prospectif dépasse 1) reste la bonne borne ; la poche, plus faible et plus
+rare qu'estimé, n'autorise pas davantage. Code et vérifications : `research/leverage_2026-09/okx_listings/`.
 
 Ce document est mis à jour avec chaque résultat, favorable ou non.

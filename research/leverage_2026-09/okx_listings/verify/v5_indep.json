@@ -1,0 +1,578 @@
+{
+ "okx_alone | 2022-2026": {
+  "base": {
+   "sharpe": 0.628,
+   "trades": 146,
+   "mean": 0.0446,
+   "maxdd": 0.352,
+   "final": 1.437,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 0.617,
+   "trades": 146,
+   "mean": 0.0446,
+   "maxdd": 0.354,
+   "final": 1.427,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 0.462,
+   "trades": 82,
+   "mean": 0.0296,
+   "maxdd": 0.181,
+   "final": 1.215,
+   "killed_at": "2024-11-26 06:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 0.466,
+   "trades": 82,
+   "mean": 0.0296,
+   "maxdd": 0.145,
+   "final": 1.174,
+   "killed_at": "2024-11-26 06:00:00"
+  },
+  "livesim_sharpe": 0.628,
+  "match_livesim": true
+ },
+ "okx_alone | 2022-2024": {
+  "base": {
+   "sharpe": 0.135,
+   "trades": 94,
+   "mean": 0.0023,
+   "maxdd": 0.308,
+   "final": 1.027,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 0.122,
+   "trades": 94,
+   "mean": 0.0023,
+   "maxdd": 0.309,
+   "final": 1.021,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 0.581,
+   "trades": 82,
+   "mean": 0.0296,
+   "maxdd": 0.181,
+   "final": 1.215,
+   "killed_at": "2024-11-26 06:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 0.586,
+   "trades": 82,
+   "mean": 0.0296,
+   "maxdd": 0.145,
+   "final": 1.174,
+   "killed_at": "2024-11-26 06:00:00"
+  },
+  "livesim_sharpe": 0.135,
+  "match_livesim": true
+ },
+ "okx_alone | 2025-2026": {
+  "base": {
+   "sharpe": 1.577,
+   "trades": 52,
+   "mean": 0.1209,
+   "maxdd": 0.115,
+   "final": 1.4,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 1.57,
+   "trades": 52,
+   "mean": 0.1209,
+   "maxdd": 0.115,
+   "final": 1.398,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 1.577,
+   "trades": 52,
+   "mean": 0.1209,
+   "maxdd": 0.115,
+   "final": 1.4,
+   "killed_at": null
+  },
+  "kill25_L0.8": {
+   "sharpe": 1.578,
+   "trades": 52,
+   "mean": 0.1209,
+   "maxdd": 0.093,
+   "final": 1.313,
+   "killed_at": null
+  },
+  "livesim_sharpe": 1.577,
+  "match_livesim": true
+ },
+ "okx_alone | 2026": {
+  "base": {
+   "sharpe": 2.207,
+   "trades": 30,
+   "mean": 0.1164,
+   "maxdd": 0.074,
+   "final": 1.215,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 2.203,
+   "trades": 30,
+   "mean": 0.1164,
+   "maxdd": 0.074,
+   "final": 1.215,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 2.207,
+   "trades": 30,
+   "mean": 0.1164,
+   "maxdd": 0.074,
+   "final": 1.215,
+   "killed_at": null
+  },
+  "kill25_L0.8": {
+   "sharpe": 2.212,
+   "trades": 30,
+   "mean": 0.1164,
+   "maxdd": 0.06,
+   "final": 1.171,
+   "killed_at": null
+  },
+  "livesim_sharpe": 2.207,
+  "match_livesim": true
+ },
+ "binance_only | 2022-2024": {
+  "base": {
+   "sharpe": 2.413,
+   "trades": 101,
+   "mean": 0.0915,
+   "maxdd": 0.098,
+   "final": 2.236,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 2.383,
+   "trades": 101,
+   "mean": 0.0915,
+   "maxdd": 0.098,
+   "final": 2.21,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 2.413,
+   "trades": 101,
+   "mean": 0.0915,
+   "maxdd": 0.098,
+   "final": 2.236,
+   "killed_at": null
+  },
+  "kill25_L0.8": {
+   "sharpe": 2.415,
+   "trades": 101,
+   "mean": 0.0915,
+   "maxdd": 0.079,
+   "final": 1.911,
+   "killed_at": null
+  },
+  "livesim_sharpe": 2.413,
+  "match_livesim": true
+ },
+ "binance_only | 2025-2026": {
+  "base": {
+   "sharpe": 2.06,
+   "trades": 152,
+   "mean": 0.1014,
+   "maxdd": 0.167,
+   "final": 2.088,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 2.046,
+   "trades": 152,
+   "mean": 0.1014,
+   "maxdd": 0.167,
+   "final": 2.077,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 1.288,
+   "trades": 41,
+   "mean": 0.1105,
+   "maxdd": 0.167,
+   "final": 1.299,
+   "killed_at": "2025-04-28 18:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 1.297,
+   "trades": 41,
+   "mean": 0.1105,
+   "maxdd": 0.135,
+   "final": 1.238,
+   "killed_at": "2025-04-28 18:00:00"
+  },
+  "livesim_sharpe": 2.06,
+  "match_livesim": true
+ },
+ "binance_only | 2026 Jan-Aug": {
+  "base": {
+   "sharpe": 2.693,
+   "trades": 40,
+   "mean": 0.1127,
+   "maxdd": 0.11,
+   "final": 1.319,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 2.682,
+   "trades": 40,
+   "mean": 0.1127,
+   "maxdd": 0.11,
+   "final": 1.317,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 2.693,
+   "trades": 40,
+   "mean": 0.1127,
+   "maxdd": 0.11,
+   "final": 1.319,
+   "killed_at": null
+  },
+  "kill25_L0.8": {
+   "sharpe": 2.703,
+   "trades": 40,
+   "mean": 0.1127,
+   "maxdd": 0.088,
+   "final": 1.251,
+   "killed_at": null
+  },
+  "livesim_sharpe": 2.693,
+  "match_livesim": true
+ },
+ "binance_only | 2022-2026": {
+  "base": {
+   "sharpe": 2.1,
+   "trades": 253,
+   "mean": 0.0974,
+   "maxdd": 0.167,
+   "final": 4.67,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 2.079,
+   "trades": 253,
+   "mean": 0.0974,
+   "maxdd": 0.167,
+   "final": 4.591,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 1.977,
+   "trades": 142,
+   "mean": 0.097,
+   "maxdd": 0.167,
+   "final": 2.904,
+   "killed_at": "2025-04-28 18:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 1.981,
+   "trades": 142,
+   "mean": 0.097,
+   "maxdd": 0.135,
+   "final": 2.366,
+   "killed_at": "2025-04-28 18:00:00"
+  },
+  "livesim_sharpe": 2.1,
+  "match_livesim": true
+ },
+ "union_author | 2022-2024": {
+  "base": {
+   "sharpe": 1.569,
+   "trades": 195,
+   "mean": 0.0485,
+   "maxdd": 0.311,
+   "final": 2.286,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 1.538,
+   "trades": 195,
+   "mean": 0.0485,
+   "maxdd": 0.313,
+   "final": 2.247,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 2.1,
+   "trades": 172,
+   "mean": 0.0666,
+   "maxdd": 0.184,
+   "final": 2.722,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 2.105,
+   "trades": 172,
+   "mean": 0.0666,
+   "maxdd": 0.148,
+   "final": 2.247,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "livesim_sharpe": 1.569,
+  "match_livesim": true
+ },
+ "union_author | 2025-2026": {
+  "base": {
+   "sharpe": 2.379,
+   "trades": 193,
+   "mean": 0.1033,
+   "maxdd": 0.194,
+   "final": 2.654,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 2.364,
+   "trades": 193,
+   "mean": 0.1033,
+   "maxdd": 0.194,
+   "final": 2.636,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 1.06,
+   "trades": 38,
+   "mean": 0.1157,
+   "maxdd": 0.191,
+   "final": 1.255,
+   "killed_at": "2025-02-28 07:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 1.067,
+   "trades": 38,
+   "mean": 0.1157,
+   "maxdd": 0.155,
+   "final": 1.205,
+   "killed_at": "2025-02-28 07:00:00"
+  },
+  "livesim_sharpe": 2.379,
+  "match_livesim": true
+ },
+ "union_author | 2026 Jan-Aug": {
+  "base": {
+   "sharpe": 3.353,
+   "trades": 60,
+   "mean": 0.1101,
+   "maxdd": 0.122,
+   "final": 1.495,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 3.34,
+   "trades": 60,
+   "mean": 0.1101,
+   "maxdd": 0.122,
+   "final": 1.493,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 3.353,
+   "trades": 60,
+   "mean": 0.1101,
+   "maxdd": 0.122,
+   "final": 1.495,
+   "killed_at": null
+  },
+  "kill25_L0.8": {
+   "sharpe": 3.359,
+   "trades": 60,
+   "mean": 0.1101,
+   "maxdd": 0.099,
+   "final": 1.384,
+   "killed_at": null
+  },
+  "livesim_sharpe": 3.353,
+  "match_livesim": true
+ },
+ "union_author | 2022-2026": {
+  "base": {
+   "sharpe": 1.896,
+   "trades": 388,
+   "mean": 0.0757,
+   "maxdd": 0.34,
+   "final": 6.067,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 1.872,
+   "trades": 388,
+   "mean": 0.0757,
+   "maxdd": 0.342,
+   "final": 5.923,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 1.68,
+   "trades": 172,
+   "mean": 0.0666,
+   "maxdd": 0.184,
+   "final": 2.722,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 1.685,
+   "trades": 172,
+   "mean": 0.0666,
+   "maxdd": 0.148,
+   "final": 2.247,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "livesim_sharpe": 1.896,
+  "match_livesim": true
+ },
+ "union_dedup_first_venue | 2022-2024": {
+  "base": {
+   "sharpe": 1.511,
+   "trades": 189,
+   "mean": 0.0445,
+   "maxdd": 0.297,
+   "final": 2.185,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 1.481,
+   "trades": 189,
+   "mean": 0.0445,
+   "maxdd": 0.299,
+   "final": 2.149,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 1.995,
+   "trades": 168,
+   "mean": 0.0602,
+   "maxdd": 0.184,
+   "final": 2.55,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 2.0,
+   "trades": 168,
+   "mean": 0.0602,
+   "maxdd": 0.148,
+   "final": 2.132,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "livesim_sharpe": 1.511,
+  "match_livesim": true
+ },
+ "union_dedup_first_venue | 2025-2026": {
+  "base": {
+   "sharpe": 2.106,
+   "trades": 179,
+   "mean": 0.0947,
+   "maxdd": 0.194,
+   "final": 2.24,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 2.091,
+   "trades": 179,
+   "mean": 0.0947,
+   "maxdd": 0.194,
+   "final": 2.226,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 0.784,
+   "trades": 34,
+   "mean": 0.0927,
+   "maxdd": 0.191,
+   "final": 1.157,
+   "killed_at": "2025-02-28 07:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 0.791,
+   "trades": 34,
+   "mean": 0.0927,
+   "maxdd": 0.155,
+   "final": 1.127,
+   "killed_at": "2025-02-28 07:00:00"
+  },
+  "livesim_sharpe": 2.106,
+  "match_livesim": true
+ },
+ "union_dedup_first_venue | 2026 Jan-Aug": {
+  "base": {
+   "sharpe": 3.317,
+   "trades": 52,
+   "mean": 0.1053,
+   "maxdd": 0.086,
+   "final": 1.432,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 3.305,
+   "trades": 52,
+   "mean": 0.1053,
+   "maxdd": 0.086,
+   "final": 1.43,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 3.317,
+   "trades": 52,
+   "mean": 0.1053,
+   "maxdd": 0.086,
+   "final": 1.432,
+   "killed_at": null
+  },
+  "kill25_L0.8": {
+   "sharpe": 3.324,
+   "trades": 52,
+   "mean": 0.1053,
+   "maxdd": 0.069,
+   "final": 1.336,
+   "killed_at": null
+  },
+  "livesim_sharpe": 3.317,
+  "match_livesim": true
+ },
+ "union_dedup_first_venue | 2022-2026": {
+  "base": {
+   "sharpe": 1.746,
+   "trades": 368,
+   "mean": 0.0689,
+   "maxdd": 0.327,
+   "final": 4.893,
+   "killed_at": null
+  },
+  "btc_funding": {
+   "sharpe": 1.723,
+   "trades": 368,
+   "mean": 0.0689,
+   "maxdd": 0.329,
+   "final": 4.783,
+   "killed_at": null
+  },
+  "kill25": {
+   "sharpe": 1.597,
+   "trades": 168,
+   "mean": 0.0602,
+   "maxdd": 0.184,
+   "final": 2.55,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "kill25_L0.8": {
+   "sharpe": 1.601,
+   "trades": 168,
+   "mean": 0.0602,
+   "maxdd": 0.148,
+   "final": 2.132,
+   "killed_at": "2024-11-27 16:00:00"
+  },
+  "livesim_sharpe": 1.746,
+  "match_livesim": true
+ }
+}

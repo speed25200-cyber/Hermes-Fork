@@ -1,0 +1,612 @@
+{
+ "a 2022-2024": {
+  "binance": {
+   "n": 101,
+   "listings": 53,
+   "mean_net": 0.113,
+   "se": 0.0236,
+   "sr": 2.413
+  },
+  "okx": {
+   "n": 94,
+   "listings": 47,
+   "mean_net": 0.0067,
+   "se": 0.0358,
+   "sr": 0.135
+  },
+  "diff": -0.1063,
+  "t_diff": -2.48
+ },
+ "a 2025-2026": {
+  "binance": {
+   "n": 152,
+   "listings": 84,
+   "mean_net": 0.0714,
+   "se": 0.0306,
+   "sr": 2.06
+  },
+  "okx": {
+   "n": 42,
+   "listings": 21,
+   "mean_net": 0.0793,
+   "se": 0.0507,
+   "sr": 1.43
+  },
+  "diff": 0.0079,
+  "t_diff": 0.13
+ },
+ "a 2022-2026": {
+  "binance": {
+   "n": 253,
+   "listings": 137,
+   "mean_net": 0.088,
+   "se": 0.0207,
+   "sr": 2.1
+  },
+  "okx": {
+   "n": 136,
+   "listings": 68,
+   "mean_net": 0.0291,
+   "se": 0.0293,
+   "sr": 0.539
+  },
+  "diff": -0.0589,
+  "t_diff": -1.64
+ },
+ "b okx 2025-26 minus 2022-24": {
+  "diff": 0.0799,
+  "t": 1.29
+ },
+ "d power 2022-2026": {
+  "listings": 73,
+  "mean": 0.0352,
+  "sd": 0.2511,
+  "listings_needed_t2": 203.8,
+  "listings_per_month": 1.28,
+  "months_needed_at_rate": 158.7
+ },
+ "d power 2025-2026": {
+  "listings": 26,
+  "mean": 0.0866,
+  "sd": 0.2581,
+  "listings_needed_t2": 35.5,
+  "listings_per_month": 1.25,
+  "months_needed_at_rate": 28.4
+ },
+ "c jackknife union": {
+  "2022-2024": {
+   "d": -0.844,
+   "jk_se": 0.537,
+   "z": -1.57,
+   "most_negative_tokens": [
+    [
+     "MEMEFI",
+     0.265
+    ],
+    [
+     "GRIFFAIN",
+     0.243
+    ],
+    [
+     "OL",
+     0.22
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "X",
+     -0.081
+    ],
+    [
+     "MSN",
+     -0.077
+    ],
+    [
+     "MERL",
+     -0.076
+    ]
+   ]
+  },
+  "2025-2026": {
+   "d": 0.32,
+   "jk_se": 0.297,
+   "z": 1.07,
+   "most_negative_tokens": [
+    [
+     "LAUNCHCOIN",
+     0.152
+    ],
+    [
+     "PI",
+     0.1
+    ],
+    [
+     "RE",
+     0.052
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.138
+    ],
+    [
+     "UP",
+     -0.101
+    ],
+    [
+     "BUZZ",
+     -0.076
+    ]
+   ]
+  },
+  "2026 Jan-Aug": {
+   "d": 0.667,
+   "jk_se": 0.527,
+   "z": 1.26,
+   "most_negative_tokens": [
+    [
+     "RE",
+     0.248
+    ],
+    [
+     "O",
+     0.085
+    ],
+    [
+     "TRIA",
+     0.043
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "UP",
+     -0.322
+    ],
+    [
+     "DOS",
+     -0.221
+    ],
+    [
+     "AEON",
+     -0.195
+    ]
+   ]
+  },
+  "2022-2026": {
+   "d": -0.205,
+   "jk_se": 0.323,
+   "z": -0.63,
+   "most_negative_tokens": [
+    [
+     "MEMEFI",
+     0.144
+    ],
+    [
+     "GRIFFAIN",
+     0.134
+    ],
+    [
+     "OL",
+     0.121
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.059
+    ],
+    [
+     "X",
+     -0.045
+    ],
+    [
+     "UP",
+     -0.043
+    ]
+   ]
+  }
+ },
+ "c jackknife okx_half": {
+  "2022-2024": {
+   "d": -0.338,
+   "jk_se": 0.337,
+   "z": -1.0,
+   "most_negative_tokens": [
+    [
+     "MEMEFI",
+     0.155
+    ],
+    [
+     "GRIFFAIN",
+     0.153
+    ],
+    [
+     "OL",
+     0.128
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "MSN",
+     -0.053
+    ],
+    [
+     "MERL",
+     -0.053
+    ],
+    [
+     "NYM",
+     -0.048
+    ]
+   ]
+  },
+  "2025-2026": {
+   "d": 0.214,
+   "jk_se": 0.168,
+   "z": 1.28,
+   "most_negative_tokens": [
+    [
+     "LAUNCHCOIN",
+     0.076
+    ],
+    [
+     "PI",
+     0.053
+    ],
+    [
+     "ALCH",
+     0.027
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.083
+    ],
+    [
+     "UP",
+     -0.059
+    ],
+    [
+     "BUZZ",
+     -0.046
+    ]
+   ]
+  },
+  "2026 Jan-Aug": {
+   "d": 0.454,
+   "jk_se": 0.296,
+   "z": 1.54,
+   "most_negative_tokens": [
+    [
+     "RE",
+     0.112
+    ],
+    [
+     "TRIA",
+     0.021
+    ],
+    [
+     "O",
+     0.017
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "UP",
+     -0.198
+    ],
+    [
+     "DOS",
+     -0.127
+    ],
+    [
+     "AEON",
+     -0.12
+    ]
+   ]
+  },
+  "2022-2026": {
+   "d": -0.007,
+   "jk_se": 0.178,
+   "z": -0.04,
+   "most_negative_tokens": [
+    [
+     "GRIFFAIN",
+     0.071
+    ],
+    [
+     "MEMEFI",
+     0.069
+    ],
+    [
+     "OL",
+     0.059
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.038
+    ],
+    [
+     "UP",
+     -0.027
+    ],
+    [
+     "MERL",
+     -0.026
+    ]
+   ]
+  }
+ },
+ "c jackknife okx_nobn": {
+  "2022-2024": {
+   "d": -0.875,
+   "jk_se": 0.543,
+   "z": -1.61,
+   "most_negative_tokens": [
+    [
+     "MEMEFI",
+     0.267
+    ],
+    [
+     "GRIFFAIN",
+     0.245
+    ],
+    [
+     "OL",
+     0.221
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "X",
+     -0.082
+    ],
+    [
+     "MSN",
+     -0.078
+    ],
+    [
+     "MERL",
+     -0.077
+    ]
+   ]
+  },
+  "2025-2026": {
+   "d": 0.298,
+   "jk_se": 0.298,
+   "z": 1.0,
+   "most_negative_tokens": [
+    [
+     "LAUNCHCOIN",
+     0.154
+    ],
+    [
+     "PI",
+     0.101
+    ],
+    [
+     "RE",
+     0.058
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.14
+    ],
+    [
+     "UP",
+     -0.102
+    ],
+    [
+     "BUZZ",
+     -0.077
+    ]
+   ]
+  },
+  "2026 Jan-Aug": {
+   "d": 0.685,
+   "jk_se": 0.537,
+   "z": 1.28,
+   "most_negative_tokens": [
+    [
+     "RE",
+     0.276
+    ],
+    [
+     "O",
+     0.099
+    ],
+    [
+     "OFC",
+     0.043
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "UP",
+     -0.328
+    ],
+    [
+     "AEON",
+     -0.199
+    ],
+    [
+     "DOS",
+     -0.19
+    ]
+   ]
+  },
+  "2022-2026": {
+   "d": -0.231,
+   "jk_se": 0.327,
+   "z": -0.71,
+   "most_negative_tokens": [
+    [
+     "MEMEFI",
+     0.145
+    ],
+    [
+     "GRIFFAIN",
+     0.135
+    ],
+    [
+     "OL",
+     0.122
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.06
+    ],
+    [
+     "X",
+     -0.045
+    ],
+    [
+     "UP",
+     -0.044
+    ]
+   ]
+  }
+ },
+ "c jackknife okx_exit_bn24": {
+  "2022-2024": {
+   "d": -0.761,
+   "jk_se": 0.547,
+   "z": -1.39,
+   "most_negative_tokens": [
+    [
+     "MEMEFI",
+     0.264
+    ],
+    [
+     "GRIFFAIN",
+     0.254
+    ],
+    [
+     "OL",
+     0.225
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "X",
+     -0.082
+    ],
+    [
+     "MSN",
+     -0.078
+    ],
+    [
+     "MERL",
+     -0.078
+    ]
+   ]
+  },
+  "2025-2026": {
+   "d": 0.388,
+   "jk_se": 0.296,
+   "z": 1.31,
+   "most_negative_tokens": [
+    [
+     "LAUNCHCOIN",
+     0.16
+    ],
+    [
+     "PI",
+     0.107
+    ],
+    [
+     "PIGGY",
+     0.033
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.143
+    ],
+    [
+     "UP",
+     -0.105
+    ],
+    [
+     "BUZZ",
+     -0.078
+    ]
+   ]
+  },
+  "2026 Jan-Aug": {
+   "d": 0.907,
+   "jk_se": 0.436,
+   "z": 2.08,
+   "most_negative_tokens": [
+    [
+     "OFC",
+     0.056
+    ],
+    [
+     "PI",
+     0.0
+    ],
+    [
+     "VENOM",
+     0.0
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "UP",
+     -0.339
+    ],
+    [
+     "AEON",
+     -0.205
+    ],
+    [
+     "BLEND",
+     -0.143
+    ]
+   ]
+  },
+  "2022-2026": {
+   "d": -0.13,
+   "jk_se": 0.332,
+   "z": -0.39,
+   "most_negative_tokens": [
+    [
+     "MEMEFI",
+     0.146
+    ],
+    [
+     "GRIFFAIN",
+     0.142
+    ],
+    [
+     "OL",
+     0.126
+    ]
+   ],
+   "most_positive_tokens": [
+    [
+     "USELESS",
+     -0.061
+    ],
+    [
+     "X",
+     -0.046
+    ],
+    [
+     "UP",
+     -0.044
+    ]
+   ]
+  }
+ }
+}

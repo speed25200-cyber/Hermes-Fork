@@ -1,0 +1,114 @@
+{
+ "binance_only | 2022-2024": {
+  "sharpe": 2.413,
+  "trades": 101,
+  "okx": 0,
+  "maxdd": 0.098,
+  "final": 2.236
+ },
+ "binance_only | 2025-2026": {
+  "sharpe": 2.06,
+  "trades": 152,
+  "okx": 0,
+  "maxdd": 0.167,
+  "final": 2.088
+ },
+ "binance_only | 2026 Jan-Aug": {
+  "sharpe": 2.693,
+  "trades": 40,
+  "okx": 0,
+  "maxdd": 0.11,
+  "final": 1.319
+ },
+ "binance_only | 2022-2026": {
+  "sharpe": 2.1,
+  "trades": 253,
+  "okx": 0,
+  "maxdd": 0.167,
+  "final": 4.67
+ },
+ "union_author | 2022-2024": {
+  "sharpe": 1.569,
+  "trades": 195,
+  "okx": 94,
+  "maxdd": 0.311,
+  "final": 2.286
+ },
+ "union_author | 2025-2026": {
+  "sharpe": 2.379,
+  "trades": 193,
+  "okx": 42,
+  "maxdd": 0.194,
+  "final": 2.654
+ },
+ "union_author | 2026 Jan-Aug": {
+  "sharpe": 3.353,
+  "trades": 60,
+  "okx": 20,
+  "maxdd": 0.122,
+  "final": 1.495
+ },
+ "union_author | 2022-2026": {
+  "sharpe": 1.896,
+  "trades": 388,
+  "okx": 136,
+  "maxdd": 0.34,
+  "final": 6.067
+ },
+ "union_first_venue_wins (drop later Binance event) | 2022-2024": {
+  "sharpe": 1.511,
+  "trades": 189,
+  "okx": 94,
+  "maxdd": 0.297,
+  "final": 2.185
+ },
+ "union_first_venue_wins (drop later Binance event) | 2025-2026": {
+  "sharpe": 2.106,
+  "trades": 179,
+  "okx": 42,
+  "maxdd": 0.194,
+  "final": 2.24
+ },
+ "union_first_venue_wins (drop later Binance event) | 2026 Jan-Aug": {
+  "sharpe": 3.317,
+  "trades": 52,
+  "okx": 20,
+  "maxdd": 0.086,
+  "final": 1.432
+ },
+ "union_first_venue_wins (drop later Binance event) | 2022-2026": {
+  "sharpe": 1.746,
+  "trades": 368,
+  "okx": 136,
+  "maxdd": 0.327,
+  "final": 4.893
+ },
+ "union_binance_wins (drop OKX event) | 2022-2024": {
+  "sharpe": 2.1,
+  "trades": 185,
+  "okx": 84,
+  "maxdd": 0.204,
+  "final": 2.832
+ },
+ "union_binance_wins (drop OKX event) | 2025-2026": {
+  "sharpe": 2.381,
+  "trades": 182,
+  "okx": 30,
+  "maxdd": 0.194,
+  "final": 2.54
+ },
+ "union_binance_wins (drop OKX event) | 2026 Jan-Aug": {
+  "sharpe": 3.486,
+  "trades": 52,
+  "okx": 12,
+  "maxdd": 0.11,
+  "final": 1.461
+ },
+ "union_binance_wins (drop OKX event) | 2022-2026": {
+  "sharpe": 2.189,
+  "trades": 367,
+  "okx": 114,
+  "maxdd": 0.214,
+  "final": 7.194
+ }
+}
