@@ -54,6 +54,10 @@ def test_calendar_keeps_new_tokens_in_their_window(tmp_path):
     assert sl.due(NOW + pd.Timedelta(hours=5)) == [("EARLYUSDT", 0)]  # the others' windows have passed
     assert sl.due(NOW + pd.Timedelta(hours=48)) == [("SPOTNEWUSDT", 1)]
     assert sl.symbols_needed(NOW) == sorted(["NEWUSDT", "SPOTNEWUSDT", HEDGE])
+    assert sl.summary({})["calendar"] == {"refreshed_at": NOW.isoformat(), "listings": 4}
+    sl.backoff(NOW + pd.Timedelta(hours=7))  # a failed refresh spaces out the retries, not the last success
+    reloaded = ListingSleeve(sl.cfg, sl.store)
+    assert sl.refreshed_at == NOW.isoformat() and reloaded.refreshed_at == NOW.isoformat()
 
 
 def test_missed_windows_are_never_caught_up(tmp_path):

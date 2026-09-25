@@ -133,7 +133,8 @@ journalière, budget de drawdown entamé) ; un arrêt ferme aussi la poche. Le c
 mis en cache avec les opérations dans la base d'état) ; le livre est décidé sur le compte net des jambes de la
 poche, les deux listes de cibles sont additionnées avant exécution ; une panne de la poche ne bloque jamais le
 livre. Le tableau de bord (onglet Positions) montre les shorts ouverts, le P&L, la couverture OKX (combien de
-nouveaux tokens sont cotés sur OKX à l'échéance) et l'état. **Règle d'arrêt** : plus aucune entrée si les 25
+nouveaux tokens sont cotés sur OKX à l'échéance), l'heure du dernier calendrier lu (en rouge au-delà de 7 h : la
+lecture échoue, voir le journal « calendar refresh failed ») et l'état. **Règle d'arrêt** : plus aucune entrée si les 25
 dernières opérations perdent en moyenne ou plus de 10 % du plafond (P&L net du funding et de coûts de recherche,
 0,15 % par côté sur le token, 0,06 % sur BTC) ; revue après 12 mois et 30 opérations.
 

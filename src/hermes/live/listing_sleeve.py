@@ -67,6 +67,8 @@ class ListingSleeve:
         self.listings: dict[str, dict[str, object]] = dict(st.get("listings", {}) or {})  # symbol -> launch, newtok
         self.coverage: dict[str, bool] = dict(st.get("coverage", {}) or {})  # new token -> OKX-listed when due
         self.calendar_at: str | None = st.get("calendar_at")  # type: ignore[assignment]
+        # Last successful refresh (calendar_at also moves on a failure, to space out the retries).
+        self.refreshed_at: str | None = st.get("refreshed_at", self.calendar_at)  # type: ignore[assignment]
         self._nav = float(st.get("nav", 0.0) or 0.0)  # type: ignore[arg-type]
 
     # -- calendar ---------------------------------------------------------------------------------------------
@@ -89,7 +91,7 @@ class ListingSleeve:
             self.listings[sym] = {"launch": t0.isoformat(), "new_token": bool(newtok)}
         # Listings whose window has passed are no longer needed.
         self.listings = {s: v for s, v in self.listings.items() if pd.Timestamp(str(v["launch"])) >= horizon}
-        self.calendar_at = now.isoformat()
+        self.calendar_at = self.refreshed_at = now.isoformat()
         self._save()
 
     def backoff(self, now: pd.Timestamp) -> None:
@@ -272,6 +274,7 @@ class ListingSleeve:
             "closed_pnl": round(sum(float(t.get("pnl", 0.0)) for t in self.done), 2),  # type: ignore[arg-type]
             "coverage": {"new_tokens_due": len(self.coverage), "on_okx": int(sum(self.coverage.values()))},
             "watch": {s: v for s, v in self.listings.items() if v.get("new_token")},
+            "calendar": {"refreshed_at": self.refreshed_at, "listings": len(self.listings)},
         }
 
     # -- internals --------------------------------------------------------------------------------------------
@@ -311,6 +314,7 @@ class ListingSleeve:
                 "listings": self.listings,
                 "coverage": dict(list(self.coverage.items())[-500:]),
                 "calendar_at": self.calendar_at,
+                "refreshed_at": self.refreshed_at,
                 "nav": self._nav,
             },
         )
