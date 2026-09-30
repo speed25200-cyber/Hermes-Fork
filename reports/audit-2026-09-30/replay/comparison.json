@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "conclusion": "Both engines lose money. This differential diagnostic does not establish an economic edge.",
+  "initial_equity_usdt": 10000,
+  "baseline_return": -0.06307599292436772,
+  "corrected_return": -0.06302414640925669,
+  "difference_percentage_points": 0.005184651511103144,
+  "difference_usdt": 0.5184651511099219,
+  "baseline_max_drawdown": -0.06978326567965942,
+  "corrected_max_drawdown": -0.0703671550143199,
+  "identical_inputs": true,
+  "baseline_replay_identical_after_observer_repair": true,
+  "decision_constraints": {
+    "baseline_violations": {
+      "adv": 0,
+      "beta_exposure": 0,
+      "es_daily": 0,
+      "gross": 0,
+      "positions": 0,
+      "vol_annual": 0,
+      "weight": 0
+    },
+    "corrected_violations": {
+      "adv": 0,
+      "beta_exposure": 0,
+      "es_daily": 0,
+      "gross": 0,
+      "positions": 0,
+      "vol_annual": 0,
+      "weight": 0
+    },
+    "corrected_min_final_scale": 1.0
+  },
+  "method_limits": [
+    "Fixed original out-of-fold scores and finite-score membership, already examined dates, no new untouched holdout.",
+    "Flat 10000 USDT account at 2026-01-01 and 184-day warmup; not the continuous archived research or actual paper account.",
+    "Eight-month return after simulated fees, spread, impact and Binance funding; not actual OKX fills/costs.",
+    "Final limiter never bound in this sample; zero final violations in baseline too. Regression tests exercise separate edge cases.",
+    "No retraining, parameter selection, new promotion, connected orders or deployment."
+  ],
+  "files_sha256": {
+    "README.md": "73dfb2fc3d41ee70b87c97652846566995a2f0985644a2d74c8627ffc2f8693f",
+    "baseline.json": "ad69322d37f307d5b60cc0d6442856089509fd6163361b88764019b9a65ebe9f",
+    "baseline_daily.csv": "2319697580fc3c1a44363ca60a72735167bda74e26e8413d7c3b43c35bc1f173",
+    "baseline_monthly.csv": "202d19e9bafbcb981d2301a45064e885cc5490d97737d9992fe9309ee4133b48",
+    "corrected.json": "cc09ff4249fbdd8d7b102574f66fd6c8f7442b5a0e18cd8c0ade76cc8f675490",
+    "corrected_daily.csv": "0e6c350799114d129b350dfc11ea90162b99f1f6ec7514ffbb3b3a6ea10b9ee7",
+    "corrected_monthly.csv": "2178b2de0cecebd6b758f0f8906effb511a216ac5f39b00a1883578e9dab281a",
+    "declaration.json": "0f4a4854a1a0d5c2111c4ae09149906f8c04821b4b82c5d7157b37825ac08947",
+    "fetch_panel.py": "334852976cf905a40752a242770450751cdd2e3007952e87c35dd9d3f9308237",
+    "inputs.json": "9ada4a6c5135f513357c68bf8e3ceb54e493080c2fa1b97702bb7826cfdafdeb",
+    "replay.py": "2c79457b584c09357d40f2eb95e82d34f8864312a26fd9295e015f8cb5486c2b"
+  }
+}

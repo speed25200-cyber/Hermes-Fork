@@ -11,9 +11,23 @@
   "ruff_format_check": "PASS",
   "git_diff_check": "PASS",
   "connected_trading_tests": "NOT_RUN",
-  "new_real_market_backtest": "NOT_RUN",
+  "new_real_market_backtest": "FIXED_OOF_DIFFERENTIAL_ONLY",
   "notes": [
     "Deux avertissements attendus signalent le chargement des anciens bundles sans empreinte de configuration.",
     "Les tests vérifient des comportements logiciels, pas la rentabilité."
-  ]
+  ],
+  "fixed_oof_diagnostic": {
+    "period": "2026-01-01 / 2026-08-31 20:00 UTC",
+    "decisions_per_engine": 11656,
+    "input_equality": "PASS",
+    "auxiliary_and_label_parity": "PASS",
+    "final_constraints_both_engines": "PASS",
+    "evidence": "replay/comparison.json",
+    "fresh_holdout": false
+  },
+  "github_ci": {
+    "source_commit": "b6b52d32109147535204c5d2cda9a76ccec14bcd",
+    "conclusion": "success",
+    "url": "https://github.com/speed25200-cyber/Hermes-Fork/actions/runs/36704003062"
+  }
 }

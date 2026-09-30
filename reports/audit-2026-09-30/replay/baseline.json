@@ -1,0 +1,76 @@
+{
+  "capital_usdt": 10000.0,
+  "cost_return_sums": {
+    "fees": 0.0077533896905531835,
+    "funding": 0.017776276810555835,
+    "gross_pnl": -0.0715076198165247,
+    "impact": 0.00031325260402054536,
+    "slippage": -0.0012750715663433466,
+    "spread": 0.002705853024345919
+  },
+  "elapsed_seconds": 49.319693093000296,
+  "end_bar_close": "2026-08-31 20:00:00+00:00",
+  "end_bar_open": "2026-08-31 19:30:00+00:00",
+  "engine_commit": "22facd44104a7994cc3365f0696898da4c98d789",
+  "engine_sha256": "99000d29521e7a2c382a132b519e9182da4fb9e2fc143e83de37b9ed134168f4",
+  "engine_source": "/workspace/Hermes-Fork-baseline/src/hermes/backtest/engine.py",
+  "final_decision_constraints": {
+    "absolute_tolerance": 1e-09,
+    "equity_basis": "decision_equity_before_rebalance_fees",
+    "first_violation": {},
+    "max_abs_beta_exposure": 0.019599505997074922,
+    "max_abs_weight": 0.10978961218596779,
+    "max_adv_ratio": 0.001360023388158471,
+    "max_es_daily": 0.040000000000000015,
+    "max_gross": 0.9986146323965677,
+    "max_positions": 30,
+    "max_vol_annual": 0.15233969854204707,
+    "min_final_scale": null,
+    "n_decisions": 11656,
+    "stage": "after_overlay",
+    "violations": {
+      "adv": 0,
+      "beta_exposure": 0,
+      "es_daily": 0,
+      "gross": 0,
+      "positions": 0,
+      "vol_annual": 0,
+      "weight": 0
+    }
+  },
+  "final_equity_usdt": 9369.240070756323,
+  "inputs_sha256": "9ada4a6c5135f513357c68bf8e3ceb54e493080c2fa1b97702bb7826cfdafdeb",
+  "limitations": [
+    "Original historical selection universe; not new discovery or new independent holdout",
+    "Truncated warmup and flat portfolio at evaluation start; not exact recreation of original full-history account",
+    "Funding and bars from Binance; actual OKX execution costs not observed",
+    "Legacy OOF artifact lacks source-and-data training provenance; used explicitly as diagnostic input only"
+  ],
+  "metrics": {
+    "ann_vol": 0.04417278770640373,
+    "best_day": 0.010103934487868838,
+    "cagr": -0.09328842782139635,
+    "calmar": -1.3368309280571296,
+    "max_drawdown": -0.06978326567965942,
+    "n_bars": 11656,
+    "n_days": 243,
+    "sharpe": -2.1949029047805175,
+    "sharpe_daily": -2.0032950677105497,
+    "total_return": -0.06307599292436772,
+    "worst_day": -0.021878869998600337
+  },
+  "no_promotion_decision": true,
+  "positions": {
+    "max_abs_beta_exposure": 0.019599502965257646,
+    "max_abs_weight": 0.10978960990905762,
+    "max_gross": 0.9986146308947355,
+    "max_positions": 30,
+    "vol_ex_ante_stats_is_pre_overlay": true,
+    "weights_storage": "float32"
+  },
+  "purpose": "Fixed OOF differential diagnostic; no training, tuning or promotion; not a fresh holdout",
+  "risk_events": [],
+  "start": "2026-01-01 00:00:00+00:00",
+  "stop_count": 57,
+  "turnover_sum": 23.935945538041537
+}

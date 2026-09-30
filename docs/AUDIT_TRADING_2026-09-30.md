@@ -44,9 +44,40 @@ le signal, choix consigné le 24 septembre. Un Sharpe sur les minuscules rendeme
 plus servir de nouveau test indépendant en ajustant les paramètres après observation.
 
 Les données brutes nécessaires pour réentraîner et rejouer toute la recherche ne sont pas versionnées.
-Les rapports existants sont relus ici ; leurs chiffres historiques ne sont **pas** présentés comme des
-backtests réexécutés avec les corrections. Le financement historique reste celui de Binance alors que
-l'exécution privée utilise OKX : cette différence exige encore une mesure sur la bonne place.
+L'artefact original et des archives publiques ont été récupérés pour le diagnostic limité ci-dessous.
+Les chiffres du rapport historique complet ne sont **pas** présentés comme des backtests intégralement
+réexécutés avec les corrections. Le financement historique reste celui de Binance alors que l'exécution
+privée utilise OKX : cette différence exige encore une mesure sur la bonne place.
+
+## Rejeu réel à prédictions figées
+
+Les deux moteurs ont été exécutés sur les mêmes archives publiques, les mêmes prédictions OOF et les
+neuf sous-livres d'origine, sans réentraînement ni réglage après observation. Le compte simulé commence
+sans position avec 10 000 USDT le 1er janvier 2026, après 184 jours d'initialisation. Il s'arrête à la clôture
+de la bougie du 31 août à 20:00 UTC. Ce protocole ne recrée pas le compte continu du rapport original.
+
+| Mesure | Déployé `22facd4` | Corrigé `b6b52d3` |
+|---|---:|---:|
+| Rendement net simulé | −6,3076 % | −6,3024 % |
+| Équité finale | 9 369,24 USDT | 9 369,76 USDT |
+| Drawdown maximal | −6,9783 % | −7,0367 % |
+| Sharpe quotidien | −2,0033 | −2,0023 |
+
+**L'amélioration terminale n'est que de 0,52 USDT ; les deux moteurs restent perdants et le drawdown
+s'aggrave légèrement.** L'architecture corrigée ne crée pas, dans ce test, un avantage économique.
+Sur 11 656 décisions par moteur, aucun plafond final contrôlé n'est dépassé, y compris avec l'ancienne
+version ; le nouveau limiteur final n'a jamais dû réduire l'exposition. Les différences viennent ici de la
+construction interne des sous-livres, pas d'une activation de ce dernier garde-fou. Les cas limites corrigés
+restent vérifiés séparément par les tests de régression.
+
+Les entrées, labels, signaux et IC sont identiques entre les deux exécutions, contrôlés par empreintes.
+Les métriques utilisent les mêmes formules ; les auxiliaires et labels ont été vérifiés contre la bibliothèque
+complète. Ces dates ayant déjà été étudiées et l'ancien OOF n'ayant pas de provenance d'entraînement
+renforcée, ce diagnostic n'est pas un nouveau test indépendant. Il ne teste ni les fills réels d'OKX ni les
+réparations du broker et du traitement temps réel.
+
+Protocole, commandes, empreintes et résultats :
+[`reports/audit-2026-09-30/replay/`](../reports/audit-2026-09-30/replay/README.md).
 
 ## Architecture corrigée
 
@@ -118,6 +149,7 @@ Ruff format et `git diff --check` passent. Deux avertissements attendus concerne
 bundles sans empreinte de configuration. Le bilan JSON est identique à son recalcul par la nouvelle commande.
 Résultat machine : `reports/audit-2026-09-30/validation.json`.
 
-Aucun test d'ordres connecté et aucun nouveau backtest de marché réel n'a été exécuté ; les tests de
-régression utilisent des scénarios contrôlés. Les chiffres de rendement ci-dessus restent des observations,
-pas une validation économique des nouveaux correctifs.
+La [CI GitHub du code corrigé](https://github.com/speed25200-cyber/Hermes-Fork/actions/runs/36704003062)
+est passée. Le rejeu différentiel sur données réelles décrit ci-dessus est terminé ; il ne démontre pas de
+rentabilité. Aucun test d'ordres connecté n'a été exécuté et aucune nouvelle décision de promotion n'a été
+prise. Les tests de régression utilisent des scénarios contrôlés.
