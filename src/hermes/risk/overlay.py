@@ -138,9 +138,11 @@ class RiskOverlay:
         info["es_1d"] = es * s
         info["es_scale"] = s
         w = w * s
+        restricted = False
         if self.reduce_only(equity):
             w = self.restrict_to_reductions(w, current)
             info["reduce_only"] = 1.0
+            restricted = True
         # Positions beyond max_positions: keep the largest.
         nz = np.nonzero(w)[0]
         if len(nz) > self.cfg.max_positions:
@@ -148,4 +150,12 @@ class RiskOverlay:
             mask = np.zeros_like(w, dtype=bool)
             mask[keep] = True
             w = np.where(mask, w, 0.0)
+            restricted = True
+        if restricted:
+            # Retirer une couverture peut accroître l'ES, même en mode réduction seule.
+            # Conserver la première réduction et vérifier l'ES du portefeuille réellement rendu.
+            final_scale, final_es = self.es_scale(w, cov_bar, bars_per_day, hist_daily_returns)
+            w = w * final_scale
+            info["es_1d"] = final_es * final_scale
+            info["es_scale"] *= final_scale
         return w, info

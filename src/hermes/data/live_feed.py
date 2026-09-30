@@ -43,6 +43,7 @@ SNAPSHOT_MS = 300_000
 # SOL: 100 % of rows match at +5 min, 2-16 % at +0).
 API_STAMP_LAG_MS = 300_000
 POSITIONING_RPM = 150  # /futures/data allows 1000 requests per 5 minutes and IP
+FUNDING_RECONCILE_DAYS = 7  # refresh delayed/corrected settlements, even behind the kline cursor
 
 
 def kline_weight(limit: int) -> int:
@@ -326,7 +327,7 @@ class BinanceLiveFeed:
         if k.empty:
             return
         k["premium"] = prem["premium"].reindex(k.index) if not prem.empty else np.nan
-        fund_start = int(k.index[0].value // 1_000_000)
+        fund_start = min(int(k.index[0].value // 1_000_000), now_ms - FUNDING_RECONCILE_DAYS * 86_400_000)
         f = await self._funding(symbol, fund_start)
         k["funding_rate"] = f.reindex(k.index)
         merged = k if have is None else pd.concat([have, k])
@@ -432,7 +433,11 @@ class BinanceLiveFeed:
                     agg = intrabar_aggregates(m1, self.bar)
                     frames[s] = frames[s].join(agg, how="left")
         self.last_update = time.time()
-        panel = clean_panel(Panel.from_long(frames, self.bar))
+        raw = Panel.from_long(frames, self.bar)
+        # Gap filling is useful for feature continuity, but a carried-forward close is not an executable
+        # live quote. Preserve observation provenance so the engine can freeze affected contracts.
+        observed = raw["close"].notna().astype(float)
+        panel = clean_panel(raw).with_fields({"observed_close": observed})
         panel.meta["source"] = "binance_live"
         return panel
 

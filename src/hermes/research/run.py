@@ -24,6 +24,7 @@ from hermes.data.store import load_panel
 from hermes.models.bundle import ModelBundle
 from hermes.research.dataset import Dataset, build_dataset
 from hermes.research.evaluate import Evaluation, evaluate
+from hermes.research.provenance import provenance_json, same_training_inputs, training_provenance
 from hermes.research.report import write_report
 from hermes.research.walkforward import (
     WalkForwardResult,
@@ -89,29 +90,8 @@ def training_hash(cfg: HermesConfig) -> str:
 
 
 def _resumable(saved: str, current: str) -> bool:
-    """A saved walk-forward is reusable when training settings, panel start and contract set match and it
-    covers at least the current panel (a longer history is truncated, never extended)."""
-    parts0, parts1 = _marker_parts(saved), _marker_parts(current)
-    if parts0 is None or parts1 is None:
-        return False
-    return (
-        parts0[0] == parts1[0]
-        and parts0[1] == parts1[1]
-        and parts0[3] == parts1[3]
-        and pd.Timestamp(parts0[2]) >= pd.Timestamp(parts1[2])
-    )
-
-
-def _marker_parts(marker: str) -> tuple[str, str, str, str] | None:
-    """(training hash, panel start, panel end, contracts) from ``hash:start:end:n`` (timestamps contain ':')."""
-    try:
-        head, n = marker.rsplit(":", 1)
-        h, stamps = head.split(":", 1)
-        # Each timestamp is 'YYYY-MM-DD HH:MM:SS+00:00': split the two on the '+00:00:' boundary.
-        start, end = stamps.split("+00:00:", 1)
-        return h, start + "+00:00", end, n
-    except ValueError:
-        return None
+    """Reprise uniquement si les observations, matrices, sources et versions sont identiques."""
+    return same_training_inputs(saved, current)
 
 
 def _ledger_records(ledger: Path) -> list[dict[str, object]]:
@@ -242,7 +222,8 @@ def run_research(
     _memory_note("dataset")
     wf_dir = out / "walkforward"
     marker = wf_dir / "training_hash"
-    thash = f"{training_hash(cfg)}:{panel.index[0]}:{panel.index[-1]}:{len(panel.symbols)}"
+    provenance = training_provenance(ds, training_hash(cfg))
+    thash = provenance_json(provenance)
     if resume and marker.exists() and _resumable(marker.read_text(), thash):
         log.info("resuming from the saved walk-forward in %s", wf_dir)
         wf = WalkForwardResult.load(wf_dir).restricted_to(ds.panel.index, ds.panel.symbols)
@@ -260,7 +241,7 @@ def run_research(
     ds.release_training_arrays()
     ev, bt = evaluate(ds, wf, cfg, n_null=n_null, workers=workers)
     elapsed = time.time() - t0
-    write_report(out, cfg, ds, wf, ev, bt, chash, elapsed)
+    write_report(out, cfg, ds, wf, ev, bt, chash, elapsed, provenance=provenance)
     if bundle is not None:
         from hermes.portfolio.alpha import signal_persistence
         from hermes.research.evaluate import holding_target, traded_score
@@ -273,6 +254,8 @@ def run_research(
         bundle.meta.update(
             {
                 "promoted": ev.promoted,
+                "promotion_eligibility": ev.promotion_eligibility,
+                "training_provenance": provenance,
                 "evaluation": dict(ev.tests.items()),
                 # What research expects of the live book: the dashboard compares the incubation to it.
                 "research": {
@@ -307,6 +290,7 @@ def run_research(
         rec = {
             "date": datetime.now(UTC).isoformat(timespec="seconds"),
             "config_hash": chash,
+            "training_provenance_sha256": provenance["sha256"],
             "data": f"{cfg.data.source}:{cfg.data.bar}:{panel.index[0].date()}..{panel.index[-1].date()}",
             "sharpe_daily": round(float(ev.tests["sharpe_daily"]), 3),
             "dsr": round(float(ev.tests["dsr"]), 3),

@@ -1,0 +1,10 @@
+{
+  "activation": "none",
+  "bundle": "models/basis",
+  "candidate": "basis",
+  "declaration_sha256": "f2baf7ab4aac1b2adf74487d25cbdbbb03622e0b4fe156674b8323ea1ef6fd47",
+  "economic_selection": "cash",
+  "exploratory_only": true,
+  "promoted": false,
+  "selection_basis": "calibration_only"
+}

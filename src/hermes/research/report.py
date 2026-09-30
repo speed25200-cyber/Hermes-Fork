@@ -46,6 +46,8 @@ def write_report(
     bt: BacktestResult,
     config_hash: str,
     elapsed_s: float,
+    *,
+    provenance: dict[str, object] | None = None,
 ) -> None:
     daily = (1 + bt.returns).groupby(bt.returns.index.floor("D")).prod() - 1
     stats_daily = bt.stats.groupby(bt.stats.index.floor("D")).agg(
@@ -78,6 +80,7 @@ def write_report(
     meta = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "config_hash": config_hash,
+        "training_provenance": provenance,
         "elapsed_seconds": round(elapsed_s),
         "data": {
             "source": cfg.data.source,
@@ -106,6 +109,8 @@ def render_markdown(meta: dict, ev: Evaluation, wf: WalkForwardResult) -> str:
     need = int(t.get("gate_required", len(ev.gate)))
     count = f"{n_ok} critères sur {len(ev.gate)}, {need} requis"
     verdict = f"✅ PROMU ({count})" if ev.promoted else f"⛔ NON PROMU ({count}) — interdit de capital réel"
+    if ev.promotion_eligibility.get("reason") == "synthetic_data":
+        verdict += " ; données synthétiques, aucune preuve de rentabilité"
     L += [
         "# Rapport de recherche Hermes",
         "",

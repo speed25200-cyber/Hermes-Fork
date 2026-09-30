@@ -1,0 +1,15 @@
+# Compte d'observation séparé pour le candidat figé sur la calibration historique.
+# Son bundle reste non promu, même si le résultat exploratoire est positif.
+execution:
+  venue: paper
+live:
+  state_dir: state-factor-challenger
+  model_dir: artifacts/models/factor-challenger
+  paper_initial_equity: 10000
+  capital_fraction: 1.0
+  paper_nominal_size: false
+  allow_unpromoted: false
+  listing_sleeve:
+    enabled: false
+risk:
+  kill_switch_file: state-factor-challenger/KILL

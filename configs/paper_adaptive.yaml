@@ -1,0 +1,14 @@
+# Comparaison prospective séparée : même modèle, taille pilotée par l'IC comme en recherche.
+# Ne réutilise jamais le compte nominal déjà en cours ; aucun ordre OKX.
+execution:
+  venue: paper
+live:
+  state_dir: state-adaptive
+  model_dir: artifacts/models/champion
+  paper_initial_equity: 10000
+  capital_fraction: 1.0
+  paper_nominal_size: false
+  listing_sleeve:
+    enabled: false
+risk:
+  kill_switch_file: state-adaptive/KILL

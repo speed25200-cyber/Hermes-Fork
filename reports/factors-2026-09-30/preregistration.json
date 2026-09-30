@@ -1,0 +1,394 @@
+{
+  "declared_at": "2026-09-30T11:34:57.579840+00:00",
+  "protocol": {
+    "calibration": {
+      "start": "2025-10-01",
+      "end": "2025-12-31"
+    },
+    "confirmation": {
+      "start": "2026-01-01",
+      "end": "2026-04-30"
+    },
+    "test": {
+      "start": "2026-05-01",
+      "end": "2026-08-30"
+    },
+    "family_max": 6,
+    "prior_trials": 23,
+    "min_observations": 60,
+    "alpha": 0.05,
+    "mean_block_days": 7.0,
+    "bootstrap_samples": 10000,
+    "seed": 20260930,
+    "examined_history": true
+  },
+  "capital_usdt": 10000,
+  "rules": [
+    {
+      "name": "carry",
+      "definition": "-Z(cs_funding_sum_10080m): buy low settled seven-day funding and sell high funding",
+      "terms": [
+        {
+          "feature": "cs_funding_sum_10080m",
+          "coefficient": -1.0,
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "name": "basis",
+      "definition": "-Z(cs_premium): buy discounted perpetuals and sell expensive perpetuals",
+      "terms": [
+        {
+          "feature": "cs_premium",
+          "coefficient": -1.0,
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "name": "reversal",
+      "definition": "-0.5*Z(iret_240m) - 0.5*Z(iret_1440m): fade four-hour and one-day residual moves",
+      "terms": [
+        {
+          "feature": "iret_240m",
+          "coefficient": -0.5,
+          "scale": 1.0
+        },
+        {
+          "feature": "iret_1440m",
+          "coefficient": -0.5,
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "name": "momentum",
+      "definition": "Z(iret_10080m) - sqrt(1/7)*Z(iret_1440m): seven-day residual momentum excluding the last day",
+      "terms": [
+        {
+          "feature": "iret_10080m",
+          "coefficient": 1.0,
+          "scale": 1.0
+        },
+        {
+          "feature": "iret_1440m",
+          "coefficient": -0.3779644730092272,
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "name": "flow",
+      "definition": "Z(flow_ret_div; scale=0.1): follow relative aggressive flow not yet reflected in residual price",
+      "terms": [
+        {
+          "feature": "flow_ret_div",
+          "coefficient": 1.0,
+          "scale": 0.1
+        }
+      ]
+    },
+    {
+      "name": "combined",
+      "definition": "Arithmetic mean of the five raw fixed rules; cross-sectional standardisation follows the sum",
+      "terms": [
+        {
+          "feature": "cs_funding_sum_10080m",
+          "coefficient": -0.2,
+          "scale": 1.0
+        },
+        {
+          "feature": "cs_premium",
+          "coefficient": -0.2,
+          "scale": 1.0
+        },
+        {
+          "feature": "iret_240m",
+          "coefficient": -0.1,
+          "scale": 1.0
+        },
+        {
+          "feature": "iret_1440m",
+          "coefficient": -0.17559289460184546,
+          "scale": 1.0
+        },
+        {
+          "feature": "iret_10080m",
+          "coefficient": 0.2,
+          "scale": 1.0
+        },
+        {
+          "feature": "flow_ret_div",
+          "coefficient": 0.2,
+          "scale": 0.1
+        }
+      ]
+    }
+  ],
+  "config": {
+    "name": "hermes-fixed-factors",
+    "seed": 42,
+    "data": {
+      "source": "binance_archive",
+      "cache_dir": "data",
+      "bar": "30m",
+      "start": "2025-07-01",
+      "end": "2026-08-31",
+      "include_metrics": false,
+      "include_premium": true,
+      "intrabar": false,
+      "intrabar_start": null,
+      "source_bar": "15m",
+      "download_workers": 16,
+      "universe": {
+        "top_n": 30,
+        "liquidity_lookback_days": 30,
+        "min_history_days": 60,
+        "reselect_every_days": 7,
+        "quote": "USDT",
+        "exclude": [
+          "USDCUSDT",
+          "BTCDOMUSDT",
+          "DEFIUSDT",
+          "FDUSDUSDT",
+          "TUSDUSDT"
+        ],
+        "symbols": [],
+        "venue": "okx"
+      }
+    },
+    "features": {
+      "return_minutes": [
+        30,
+        60,
+        120,
+        240,
+        480,
+        1440,
+        4320,
+        10080,
+        20160,
+        43200
+      ],
+      "vol_minutes": [
+        240,
+        1440,
+        4320
+      ],
+      "flow_minutes": [
+        60,
+        240,
+        1440
+      ],
+      "funding_minutes": [
+        480,
+        1440,
+        4320,
+        10080,
+        43200
+      ],
+      "trend_pairs_minutes": [
+        [
+          240,
+          1440
+        ],
+        [
+          1440,
+          5760
+        ],
+        [
+          5760,
+          20160
+        ]
+      ],
+      "range_minutes": [
+        1440,
+        10080,
+        43200
+      ],
+      "day_minutes": 1440,
+      "long_minutes": 10080,
+      "zscore_minutes": 43200,
+      "vol_halflife_minutes": 1440,
+      "max_lookback_minutes": 43200,
+      "cross_sectional": true,
+      "market_features": true,
+      "time_features": true,
+      "intrabar": true,
+      "positioning": [
+        "oi",
+        "ls_top",
+        "ls_account"
+      ],
+      "funding_per_8h": false
+    },
+    "labels": {
+      "horizons": [
+        16,
+        48,
+        96
+      ],
+      "primary_horizon": 48,
+      "residualize": "style",
+      "vol_normalize": true,
+      "clip_sigma": 5.0
+    },
+    "model": {
+      "gbm": {
+        "enabled": false,
+        "n_estimators": 2000,
+        "learning_rate": 0.02,
+        "num_leaves": 31,
+        "min_data_in_leaf": 2000,
+        "feature_fraction": 0.6,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "lambda_l2": 10.0,
+        "max_bin": 63,
+        "early_stopping_rounds": 150,
+        "seeds": [
+          1,
+          2,
+          3
+        ],
+        "objective": "huber",
+        "n_jobs": 0
+      },
+      "linear": {
+        "enabled": true,
+        "alpha": 300.0
+      },
+      "deep": {
+        "enabled": false,
+        "seq_len": 48,
+        "d_model": 64,
+        "n_heads": 4,
+        "n_layers": 2,
+        "dropout": 0.15,
+        "epochs": 12,
+        "batch_timestamps": 64,
+        "lr": 0.001,
+        "weight_decay": 0.0001,
+        "seed": 7,
+        "patience": 3
+      },
+      "ensemble": "ic_weighted",
+      "market_model": false
+    },
+    "validation": {
+      "train_days": 365.0,
+      "expanding": true,
+      "test_days": 90.0,
+      "embargo_minutes": 1440.0,
+      "min_train_days": 365.0,
+      "val_days": 60.0,
+      "train_sample_minutes": 60.0,
+      "recency_halflife_days": 0.0,
+      "cpcv_groups": 8,
+      "cpcv_test_groups": 2,
+      "bootstrap_samples": 2000,
+      "null_permutations": 200,
+      "n_trials": 1,
+      "gate_min_dsr": 0.95,
+      "gate_min_null_percentile": 0.95,
+      "gate_max_pbo": 0.3,
+      "gate_min_sharpe": 0.8,
+      "gate_min_positive_year_fraction": 0.6,
+      "gate_min_months": 12,
+      "gate_min_criteria": 7
+    },
+    "costs": {
+      "maker_fee": 0.0002,
+      "taker_fee": 0.0005,
+      "maker_fill_ratio": 0.6,
+      "min_half_spread_bps": 1.0,
+      "impact_coef": 0.7,
+      "include_funding": true
+    },
+    "portfolio": {
+      "vol_target_annual": 0.2,
+      "gross_max": 2.5,
+      "net_max": 0.25,
+      "weight_max": 0.15,
+      "adv_participation_max": 0.02,
+      "beta_neutral": true,
+      "rebalance_every": 1,
+      "cost_aversion": 2.0,
+      "holding_horizon": 48,
+      "cov_halflife_days": 7.0,
+      "min_trade_weight": 0.002,
+      "ic_ref": 0.03,
+      "min_position_usdt": 5.0,
+      "signal_halflife": 0.5,
+      "cost_scale_floor": 0.5,
+      "style_neutral": true,
+      "style_risk": 1.0,
+      "regime_gate_drawdown": 0.0,
+      "regime_gate_lookback_days": 90,
+      "regime_gate_scale": 0.5,
+      "regime_gate_symbol": "BTCUSDT",
+      "books": []
+    },
+    "risk": {
+      "daily_loss_limit": 0.03,
+      "drawdown_soft": 0.1,
+      "drawdown_hard": 0.25,
+      "es_limit_daily": 0.04,
+      "max_positions": 40,
+      "exchange_leverage": 5,
+      "stop_loss_daily_sigmas": 8.0,
+      "max_data_staleness_s": 900,
+      "kill_switch_file": "state/KILL"
+    },
+    "execution": {
+      "venue": "paper",
+      "okx_base_url": "https://www.okx.com",
+      "okx_demo": true,
+      "td_mode": "cross",
+      "maker_first": true,
+      "maker_timeout_s": 60.0,
+      "chase_interval_s": 5.0,
+      "max_chases": 8,
+      "taker_slippage_cap_bps": 15.0,
+      "child_max_book_fraction": 0.5,
+      "dead_man_switch_s": 60,
+      "order_tag": "hermes"
+    },
+    "live": {
+      "state_dir": "state",
+      "model_dir": "artifacts/models/champion",
+      "bar_close_delay_s": 3.0,
+      "capital_fraction": 1.0,
+      "paper_initial_equity": 10000.0,
+      "history_days": null,
+      "candidates": 80,
+      "allow_unpromoted": false,
+      "listing_sleeve": {
+        "enabled": false,
+        "leverage": 1.0,
+        "slots": 5,
+        "entries": [
+          24.0,
+          72.0
+        ],
+        "entry_grace_hours": 3.0,
+        "exit_hours": 168.0,
+        "stop": 0.5,
+        "hedge_beta": 1.0,
+        "new_token_days": 30.0,
+        "sigma_ref": 0.124,
+        "kill_trades": 60,
+        "kill_mean": -0.03,
+        "kill_loss": 0.15,
+        "coin_cost": 0.0015,
+        "hedge_cost": 0.0006
+      },
+      "paper_nominal_size": true
+    }
+  },
+  "config_file_sha256": "6996011bba1506be54284876474c1955479b08a1b3bf6b68043e32a50fcc7641",
+  "prior_result_access": "No new candidate returns inspected; earlier ML outcomes on the same dates are known.",
+  "selection": "Frozen on calibration; confirmation and test cannot choose replacements.",
+  "september": "Additional recent diagnostic only for the calibration-chosen candidate, if complete market and funding data can be collected; mixed Binance prices and OKX funding explicitly recorded."
+}

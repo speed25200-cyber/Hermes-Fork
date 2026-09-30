@@ -1,0 +1,22 @@
+{
+  "common_config_sha256": "8a14d3788e626a487d3c4d138fe45ba6eb9e589fa4d3a205ac950b2226d8ce92",
+  "config_hash": "41c9ce80aeef32efe4a8842b4d4bd7ed66b61931d8d3852ddf8a3cb3ccf78033",
+  "declaration_sha256": "f2baf7ab4aac1b2adf74487d25cbdbbb03622e0b4fe156674b8323ea1ef6fd47",
+  "model_rule": {
+    "definition": "Z(flow_ret_div; scale=0.1): follow relative aggressive flow not yet reflected in residual price",
+    "name": "flow",
+    "terms": [
+      {
+        "coefficient": 1.0,
+        "feature": "flow_ret_div",
+        "scale": 0.1
+      }
+    ]
+  },
+  "panel_sha256": "56021df51e76577a67e48a0fd034c99f5a5eb6c2a78853aee088c34ac9ab48a5",
+  "promotion_eligible": false,
+  "protocol_sha256": "9398b6f39df6ea558a472aaf8562c038c2238bb968e010e701c5a7933cf4c842",
+  "registered_at": "2026-09-30T11:39:00.306982+00:00",
+  "status": "registered_before_simulation",
+  "type": "factor"
+}

@@ -53,6 +53,46 @@ class PortfolioConstructor:
         self.ic_ref = ic_ref
         self.cov_shrink = cov_shrink
 
+    def exposure_limit(self, market_alpha: float) -> float:
+        c = self.cfg
+        return c.net_max if market_alpha != 0.0 or not c.beta_neutral else min(c.net_max, 0.05)
+
+    def limit_after_overlay(
+        self,
+        weights: np.ndarray,
+        inp: BookInputs,
+        equity: float,
+        cov_bar: np.ndarray,
+        *,
+        net_max: float | None = None,
+    ) -> tuple[np.ndarray, float]:
+        """Réduire uniformément le portefeuille final : aucune ouverture, aucun changement de signe.
+
+        Un scalaire commun préserve les couvertures, l'ES et le mode réduction seule. Pour des sous-livres,
+        ``net_max`` est la moyenne de leurs bornes ; leurs scores et tailles minimales restent individuels.
+        """
+        c = self.cfg
+        held = weights != 0
+        if not np.any(held):
+            return weights.copy(), 1.0
+        adv = np.where(np.isfinite(inp.adv) & (inp.adv > 0), inp.adv, 0.0)
+        cap = np.minimum(c.weight_max, c.adv_participation_max * adv / max(equity, 1e-9))
+        beta = np.where(np.isfinite(inp.beta), inp.beta, 1.0) if c.beta_neutral else np.ones(len(weights))
+        bound = self.exposure_limit(inp.market_alpha) if net_max is None else net_max
+        vol = float(np.sqrt(max(weights @ cov_bar @ weights, 0.0) * self.bars_per_year))
+        gross = float(np.abs(weights).sum())
+        exposure = abs(float(beta @ weights))
+        if not np.all(np.isfinite([vol, gross, exposure])):
+            return np.zeros_like(weights), 0.0
+        scale = min(1.0, float(np.min(cap[held] / np.abs(weights[held]))))
+        if vol > c.vol_target_annual:
+            scale = min(scale, c.vol_target_annual / vol)
+        if gross > c.gross_max:
+            scale = min(scale, c.gross_max / gross)
+        if exposure > bound + 1e-12:
+            scale = min(scale, bound / exposure)
+        return weights * scale, scale
+
     def target(self, inp: BookInputs, equity: float) -> BookResult:
         c = self.cfg
         n = len(inp.score)
@@ -77,7 +117,7 @@ class PortfolioConstructor:
         n_tr = int(tradable.sum())
         vol_target_h = c.vol_target_annual * np.sqrt(H / self.bars_per_year)
         lam = risk_aversion(self.ic_ref, n_tr, vol_target_h)
-        net_max = c.net_max if inp.market_alpha != 0.0 or not c.beta_neutral else min(c.net_max, 0.05)
+        net_max = self.exposure_limit(inp.market_alpha)
         penalty_q = None
         if c.style_neutral:
             # Style factors priced like the market: a unit of size or volatility exposure costs as much risk as
@@ -98,16 +138,20 @@ class PortfolioConstructor:
             gross_max=c.gross_max,
         )
         w = res.weights
-        # Dust control: never open or adjust by less than the minimum trade size.
+        # Éviter les petits ajustements, sauf si les limites imposent une réduction du risque.
         small = np.abs(w - inp.w0) < c.min_trade_weight
         w = np.where(small & tradable, inp.w0, w)
         w = np.where(tradable, w, 0.0)
-        # Positions too small to be held at the exchange (lot sizes) are dropped, then the exposure bound is
-        # restored: silently losing them at order rounding would unbalance a beta-neutral book.
         min_w = c.min_position_usdt / max(equity, 1e-9)
-        if min_w > 0 and np.any((np.abs(w) > 0) & (np.abs(w) < min_w)):
+        b = beta if c.beta_neutral else np.ones(n)
+        # Restaurer toutes les limites après les petits ajustements et suppressions de couvertures.
+        # Chaque passage supplémentaire supprime au moins une position : au plus n + 1 passages.
+        for _ in range(n + 1):
+            w = np.clip(w, -cap, cap)
             w = np.where(np.abs(w) < min_w, 0.0, w)
-            b = beta if c.beta_neutral else np.ones(n)
             w = project_exposure(w, b, np.where(w != 0, cap, 0.0), net_max)
+            w, _ = self.limit_after_overlay(w, inp, equity, cov_bar, net_max=net_max)
+            if not np.any((np.abs(w) > 0) & (np.abs(w) < min_w)):
+                break
         vol_ann = float(np.sqrt(max(w @ cov_bar @ w, 0.0) * self.bars_per_year))
         return BookResult(w, alpha, cov_bar, vol_ann, n_tr, lam)

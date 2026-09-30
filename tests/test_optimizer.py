@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from hermes.config import PortfolioConfig
 from hermes.portfolio.construct import BookInputs, PortfolioConstructor
@@ -93,6 +94,80 @@ def test_small_account_drops_untradable_positions(rng):
     assert len(held) < n
     assert np.all(np.abs(held) * 500.0 >= 20.0 - 1e-9)
     assert abs(res.weights.sum()) <= 0.05 + 1e-9
+
+
+@pytest.mark.parametrize(
+    ("limits", "current", "ivol", "adv"),
+    [
+        ({"weight_max": 0.2}, [0.201], [0.01], [1e9]),
+        ({"gross_max": 0.199}, [0.1, 0.1], [0.01, 0.01], [1e9, 1e9]),
+        ({"vol_target_annual": 0.099}, [0.1], [1.0], [1e9]),
+        ({"net_max": 0.099}, [0.1], [0.01], [1e9]),
+        ({"adv_participation_max": 0.02}, [0.101], [0.01], [5000.0]),
+    ],
+    ids=["weight", "gross", "volatility", "exposure", "liquidity"],
+)
+def test_dust_control_cannot_restore_a_position_above_risk_limits(limits, current, ivol, adv):
+    cfg = PortfolioConfig(
+        **(
+            {
+                "beta_neutral": False,
+                "weight_max": 1.0,
+                "gross_max": 3.0,
+                "net_max": 2.0,
+                "min_position_usdt": 0.0,
+                "min_trade_weight": 0.002,
+                "vol_target_annual": 2.0,
+                "holding_horizon": 1,
+            }
+            | limits
+        )
+    )
+    n = len(current)
+    inp = BookInputs(
+        score=np.zeros(n),
+        ivol=np.array(ivol),
+        beta=np.ones(n),
+        mkt_var=0.0,
+        cost_rate=np.full(n, 100.0),
+        adv=np.array(adv),
+        w0=np.array(current),
+        ic=0.0,
+    )
+    res = PortfolioConstructor(cfg, bars_per_year=1, ic_ref=0.03).target(inp, equity=1000.0)
+    cap = np.minimum(cfg.weight_max, cfg.adv_participation_max * inp.adv / 1000.0)
+    assert np.all(np.abs(res.weights) <= cap + 1e-12)
+    assert 0 < np.abs(res.weights).sum() <= cfg.gross_max + 1e-12
+    assert abs(res.weights.sum()) <= cfg.net_max + 1e-12
+    assert res.ex_ante_vol_annual <= cfg.vol_target_annual + 1e-12
+
+
+@pytest.mark.parametrize("vol_limit", [0.061, 0.04])
+def test_removing_a_small_hedge_rechecks_volatility_and_minimum_position(vol_limit):
+    cfg = PortfolioConfig(
+        beta_neutral=False,
+        net_max=2.0,
+        vol_target_annual=vol_limit,
+        holding_horizon=1,
+        min_trade_weight=0.0,
+        min_position_usdt=50.0,
+    )
+    inp = BookInputs(
+        score=np.zeros(2),
+        ivol=np.full(2, 0.01),
+        beta=np.ones(2),
+        mkt_var=0.0,
+        cost_rate=np.full(2, 100.0),
+        adv=np.full(2, 1e9),
+        w0=np.array([0.1, -0.049]),
+        ic=0.0,
+        sample_cov=np.ones((2, 2)),
+    )
+    res = PortfolioConstructor(cfg, bars_per_year=1, ic_ref=0.03, cov_shrink=1.0).target(inp, equity=1000.0)
+    held = res.weights[res.weights != 0]
+    assert res.ex_ante_vol_annual <= vol_limit + 1e-12
+    assert np.all(np.abs(held) >= 0.05 - 1e-12)
+    assert len(held) == (1 if vol_limit >= 0.05 else 0)
 
 
 def test_market_alpha_is_causal_and_follows_realised_skill():

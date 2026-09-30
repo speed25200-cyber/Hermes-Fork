@@ -233,6 +233,7 @@ def _run_backtest(
     ]
     ic_mean = np.mean(ics, axis=0)
     constructors = [PortfolioConstructor(p_, bpy, ic_ref if ic_ref is not None else pc.ic_ref) for p_, _ in members]
+    final_constructor = PortfolioConstructor(pc, bpy, pc.ic_ref)
     overlay = RiskOverlay(cfg.risk, check_kill_file=False)
     day_keys = index.floor("D").asi8
     rebalance_bar = is_rebalance_bar(index, panel.bar_delta, pc.rebalance_every)
@@ -357,6 +358,7 @@ def _run_backtest(
                 adv_t = costs.adv_at(t)[idx]
                 cov_s = ewma.matrix(idx)
                 props = np.zeros((K, len(idx)))
+                net_limits = np.zeros(K)
                 for j in range(K):
                     active = member[t] & np.isfinite(zs[j][t])
                     cs_j = cscales[j]
@@ -377,12 +379,17 @@ def _run_backtest(
                     )
                     book = constructors[j].target(inp, equity)
                     props[j] = book.weights if sub is None else book.weights / K
+                    net_limits[j] = constructors[j].exposure_limit(inp.market_alpha)
                 proposal = props.sum(axis=0) if sub is not None else props[0]
                 d = int(day_pos[t])
                 if d not in hist_cache:
                     lo = max(0, d - 180)
                     hist_cache = {d: np.nan_to_num(daily_np[lo:d])}
                 target, info = overlay.apply(ts, equity, proposal, w[idx], book.cov_bar, bpd, hist_cache[d][:, idx])
+                target, final_scale = final_constructor.limit_after_overlay(
+                    target, inp, equity, book.cov_bar, net_max=float(net_limits.mean())
+                )
+                info["es_1d"] *= final_scale
                 if sub is not None:
                     # The overlay scales or drops positions of the sum: each sub-book follows its symbol's ratio.
                     safe = np.where(proposal != 0, proposal, 1.0)
