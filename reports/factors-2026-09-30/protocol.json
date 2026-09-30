@@ -1,0 +1,22 @@
+{
+  "calibration": {
+    "start": "2025-10-01",
+    "end": "2025-12-31"
+  },
+  "confirmation": {
+    "start": "2026-01-01",
+    "end": "2026-04-30"
+  },
+  "test": {
+    "start": "2026-05-01",
+    "end": "2026-08-30"
+  },
+  "family_max": 6,
+  "prior_trials": 23,
+  "min_observations": 60,
+  "alpha": 0.05,
+  "mean_block_days": 7.0,
+  "bootstrap_samples": 10000,
+  "seed": 20260930,
+  "examined_history": true
+}

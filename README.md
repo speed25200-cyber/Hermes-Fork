@@ -8,11 +8,12 @@ de zéro en septembre 2026 : données sans biais de survie, apprentissage automa
 > et refuse de trader de l'argent réel avec un modèle qui n'a pas franchi sa porte de promotion. État
 > actuel : le livre `research_30m_xl_lb_sres_books` est promu selon la règle opérateur de **7 critères sur 9**,
 > mais échoue encore aux critères DSR et PBO. Son historique affiche +16,4 %/an, mais **−7,4 % en 2026**
-> jusqu'à août. Le diagnostic du **30 septembre 2026 à 10:00 UTC** mesure le compte **papier** à
-> **9 364,71 USDT sur 10 000**, soit **−6,35 %**. Le papier utilise une taille nominale même quand
+> jusqu'à août. Le diagnostic du **30 septembre 2026 à 11:00 UTC** mesure le compte **papier** à
+> **9 369,26 USDT sur 10 000**, soit **−6,31 %**. Le papier utilise une taille nominale même quand
 > l'IC estimé vaut zéro ; la recherche réduit alors la taille. Ces rendements ne sont pas directement
 > comparables. Voir l'[audit du trading](docs/AUDIT_TRADING_2026-09-30.md) et les
-> [résultats historiques](docs/RESULTS.md). Aucune rentabilité actuelle ou future n'est démontrée.
+> [résultats historiques](docs/RESULTS.md). Une nouvelle [comparaison de six facteurs fixes](docs/FACTOR_RESEARCH_2026-09-30.md)
+> conclut au cash : aucun candidat ne franchit le seuil déclaré. Aucune rentabilité actuelle ou future n'est démontrée.
 
 ## Ce qu'il fait
 
@@ -43,6 +44,7 @@ hermes data download -c configs/research_15m.yaml      # archives Binance 15 min
 hermes research run  -c configs/research_15m.yaml --out reports/essai   # ou research_30m / research_1m / *_long
 hermes research compare reports/essai reports/autre-essai                 # tableau comparatif, porte comprise
 hermes research audit reports/essai --status state/paper/status.json     # bilan net, sans changer le trading
+hermes research factors chemin/panel --out reports/facteurs             # six règles fixes, jamais promues automatiquement
 hermes model install reports/essai/model                # devient le champion
 hermes live run -c configs/paper.yaml --mode paper      # papier sur flux live
 ```

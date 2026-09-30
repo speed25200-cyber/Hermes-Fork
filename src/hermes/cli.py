@@ -126,6 +126,40 @@ def research_audit(
         typer.echo(str(out))
 
 
+@research_app.command("factors")
+def research_factors(
+    panel: Path = typer.Argument(..., exists=True, file_okay=False, help="Panneau historique local complet"),
+    config: Path = typer.Option(Path("configs/research_factors.yaml"), "--config", "-c"),
+    protocol: Path | None = typer.Option(None, help="Protocole JSON daté ; défaut : octobre 2025–août 2026"),
+    out: Path = typer.Option(Path("reports/factors"), "--out", "-o", help="Nouveau dossier de résultats"),
+    ledger: Path = typer.Option(Path("reports/trials"), help="Registre des essais, perdants compris"),
+    capital: float = typer.Option(10_000.0, min=1.0, help="Capital initial simulé, en USDT"),
+) -> None:
+    """Compare six règles figées, coûts inclus ; sélection chronologique, aucune promotion automatique."""
+    _setup_logging()
+    from hermes.data.panel import Panel
+    from hermes.research.factor_research import run_factor_research
+    from hermes.research.run import _ledger_records
+    from hermes.research.selection import DateWindow, SelectionProtocol
+
+    try:
+        if protocol is None:
+            prior = {str(r["config_hash"]) for r in _ledger_records(ledger) if r.get("config_hash")}
+            selection = SelectionProtocol(test=DateWindow("2026-05-01", "2026-08-30"), prior_trials=len(prior))
+        else:
+            params = json.loads(protocol.read_text())
+            for name in ("calibration", "confirmation", "test"):
+                if name in params:
+                    params[name] = DateWindow(**params[name])
+            selection = SelectionProtocol(**params)
+        run_factor_research(load_config(config), Panel.load(panel), out, selection, capital, ledger)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        typer.echo(f"Comparaison impossible : {exc}", err=True)
+        raise typer.Exit(2) from exc
+    typer.echo((out / "REPORT.md").read_text())
+    typer.echo(f"Résultat enregistré dans {out} ; aucune promotion ni activation du trading.")
+
+
 @model_app.command("install")
 def model_install(
     source: Path = typer.Argument(..., help="Dossier du bundle (ex. reports/latest/model)"),

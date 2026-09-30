@@ -4,7 +4,7 @@ Once per bar, a few seconds after the close:
 
 1. refresh the Binance feed (closed bars only) and check freshness -- stale data means **no new risk**;
 2. recompute the point-in-time universe and the features with the research code, on the live window;
-3. score the members with the model bundle (feature names must match the bundle exactly);
+3. score the members with the model bundle (the exact declared feature order is preserved);
 4. update the realised-IC tracker and the causal IC estimate that sizes the book;
 5. build the target book with the same constructor as the backtest, then the risk overlay;
 6. send the difference to the broker (maker-first), refresh exchange-side catastrophe stops;
@@ -18,6 +18,7 @@ explicitly set ``live.allow_unpromoted``.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -164,6 +165,7 @@ class LiveEngine:
         self.model_dir = Path(model_dir) if model_dir is not None else None
         self._model_mtime = self._bundle_mtime()
         self._cache: dict[str, pd.DataFrame] = {}
+        self._signal_since: pd.Timestamp | None = None
         self.clock = lambda: pd.Timestamp.now(tz="UTC")  # replaced in tests and demonstrations
         # New-listing short sleeve (paper and demo only: real money needs an explicit decision and a promotion).
         sl = cfg.live.listing_sleeve
@@ -224,6 +226,9 @@ class LiveEngine:
         ) > live_history_bars(self.cfg):
             self.store.event("WARNING", "le nouveau modèle demande un autre flux de données : redémarrage du moteur")
             raise SystemExit(3)
+        if any(b.meta.get("model_kind") == "deterministic_factor" for b in (self.bundle, new)):
+            self._cache.clear()
+            self._signal_since = None
         self.bundle, self._model_mtime = new, m
         self._set_config(new_cfg)
         set_pos = getattr(self.feed, "set_positioning", None)
@@ -318,6 +323,36 @@ class LiveEngine:
         if not set(symbols) <= traded:
             self.store.put("traded_symbols", sorted(traded | set(symbols)))
 
+    def _score_inputs(
+        self, feats: FeatureSet, mask: pd.DataFrame, rows: np.ndarray
+    ) -> tuple[np.ndarray, pd.MultiIndex]:
+        """Use the declared factor subset, keeping trained ML bundles on their full feature contract.
+
+        Selection happens after stacking, since a factor may interleave contract and market features in an
+        order different from the library. The full feature set remains available for targets and risk inputs.
+        """
+        names, declared = feats.names, self.bundle.feature_names
+        factor = self.bundle.meta.get("model_kind") == "deterministic_factor"
+        if factor:
+            if (
+                not declared
+                or any(not isinstance(name, str) or not name for name in declared)
+                or len(set(declared)) != len(declared)
+                or len(set(names)) != len(names)
+            ):
+                raise RuntimeError("factor bundle features must be nonempty, unique names")
+            missing = set(declared) - set(names)
+            if missing:
+                raise RuntimeError(f"feature mismatch with the factor bundle (missing {sorted(missing)[:5]}...)")
+        elif names != declared:
+            missing = set(declared) - set(names)
+            raise RuntimeError(f"feature mismatch with the bundle (missing {sorted(missing)[:5]}...)")
+        # Match the precision used by research before computing deterministic or fitted model scores.
+        X, mi = feats.stack(mask, rows=rows, dtype=STORAGE_DTYPE)
+        if factor:
+            X = X[:, [names.index(name) for name in declared]]
+        return X.astype(np.float32), mi
+
     def _check_drift(self, feats: FeatureSet, mask: pd.DataFrame, t: int, d: Decision) -> None:
         """Feature drift against the training profile of the bundle (models/drift.py): the member rows of the
         last day for contract-level features, one row a bar over the last week for market-level ones (shared by
@@ -327,7 +362,7 @@ class LiveEngine:
         if not isinstance(profile, dict) or not profile:
             return
         warm = feature_warmup_bars(self.cfg)
-        names = feats.names
+        names = self.bundle.feature_names
         week = self.cfg.days(DRIFT_MARKET_DAYS)
         design = self.bundle.meta.get("drift_windows")
         same = isinstance(design, dict) and (design.get("contract_bars"), design.get("market_bars")) == (
@@ -336,10 +371,10 @@ class LiveEngine:
         )
         blocks: list[tuple[np.ndarray, list[str]]] = []
         if t + 1 - self.bpd >= warm:
-            X, _ = feats.stack(mask, rows=np.arange(t + 1 - self.bpd, t + 1), dtype=STORAGE_DTYPE)
+            X, _ = self._score_inputs(feats, mask, rows=np.arange(t + 1 - self.bpd, t + 1))
             cols = [j for j, k in enumerate(names) if k not in feats.market]
-            blocks.append((X[:, cols].astype(np.float32), [names[j] for j in cols]))
-        market = list(feats.market)
+            blocks.append((X[:, cols], [names[j] for j in cols]))
+        market = [name for name in names if name in feats.market]
         d.risk["psi_market"] = float(bool(market) and t + 1 - week >= warm)
         d.risk["psi_market_calibrated"] = float(same and bool(design.get("market")))  # type: ignore[union-attr]
         if d.risk["psi_market"]:
@@ -351,6 +386,61 @@ class LiveEngine:
         d.notes.extend(notes)
 
     # -- score / realised-IC memory: in RAM, backed by the state store for restarts ----------------------------
+    def _prepare_factor_epoch(self, ts: pd.Timestamp) -> None:
+        """Separate fixed rules' signal histories without deleting any accounting or audit records.
+
+        A new identity starts at its first decision bar, strictly after all earlier signal records. This also
+        handles restarts and migration from an ML state directory. Returning to ML starts another boundary,
+        keeping factor scores out of that model too. Ordinary ML directories and ML-to-ML identities are unchanged.
+        """
+        epoch = self.store.get("factor_signal_epoch")
+        if self.bundle.meta.get("model_kind") != "deterministic_factor":
+            if not isinstance(epoch, dict):
+                self._signal_since = None
+                return
+            identity = "ml_after_factor"
+        else:
+            from hermes.research.run import config_hash
+
+            ridge = self.bundle.ridge
+            identity = hashlib.sha256(
+                json.dumps(
+                    {
+                        "config": config_hash(self.cfg),
+                        "terms": self.bundle.meta.get("factor_terms"),
+                        "features": self.bundle.feature_names,
+                        "weights": self.bundle.weights,
+                        "ridge": [np.asarray(getattr(ridge, k)).tolist() for k in ("mu", "sd", "coef")],
+                    },
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest()
+        if not isinstance(epoch, dict) or epoch.get("identity") != identity:
+            latest = self.store.db.execute(
+                "SELECT MAX(ts) FROM (SELECT MAX(ts) AS ts FROM scores UNION ALL SELECT MAX(ts) FROM series "
+                "WHERE name LIKE 'ic%' OR name IN ('btc_dd90', 'mkt_ret30', 'xs_ac1', 'mkt_score', 'mkt_target'))"
+            ).fetchone()[0]
+            previous = [pd.Timestamp(v) for v in (latest, epoch.get("since") if isinstance(epoch, dict) else None) if v]
+            if previous and ts <= max(previous):
+                raise RuntimeError("a new factor signal epoch requires a bar after the existing signal history")
+            epoch = {"identity": identity, "since": ts.isoformat()}
+            self.store.put("factor_signal_epoch", epoch)
+            self._cache.clear()
+            self.store.event("INFO", f"nouvelle époque de signal facteur : {identity}, depuis {ts.isoformat()}")
+        self._signal_since = pd.Timestamp(epoch["since"])
+        if ts < self._signal_since:
+            raise RuntimeError("factor decision precedes its signal epoch; refusing future signal history")
+
+    def _signal_window(self, values: pd.Series | pd.DataFrame, ts: pd.Timestamp):
+        """Bound factor observations by strategy identity and by what is known at the requested bar."""
+        if self._signal_since is None:
+            self._prepare_factor_epoch(ts)
+        if self._signal_since is None:
+            return values
+        if ts < self._signal_since:
+            raise RuntimeError("factor decision precedes its signal epoch; refusing future signal history")
+        return values[(values.index >= self._signal_since) & (values.index <= ts)]
+
     def _memory(self, name: str, ts: pd.Timestamp) -> pd.DataFrame:
         """Recent scores (bar x symbol): the base-bar window (realised IC) or 30 days (signal persistence)."""
         since = ts - pd.Timedelta(days=max(31.0, live_history_bars(self.cfg) / self.bpd + 1.0))
@@ -359,7 +449,7 @@ class LiveEngine:
             cache = self.store.score_history(since).drop(columns="__MKT__", errors="ignore")
             if cache.empty:
                 cache = pd.DataFrame(index=pd.DatetimeIndex([], tz="UTC"), dtype=float)
-        cache = cache[cache.index >= since]
+        cache = self._signal_window(cache[cache.index >= since], ts)
         self._cache[name] = cache
         return cache
 
@@ -377,13 +467,13 @@ class LiveEngine:
             if stored.empty:
                 stored = pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC"))
             cache = stored.rename(name).to_frame()
-        cache = cache[cache.index >= since]
+        cache = self._signal_window(cache[cache.index >= since], ts)
         self._cache[name] = cache
         return cache[name]
 
     def _record_once(self, name: str, values: pd.Series, ts: pd.Timestamp) -> None:
         """Persist the values of ``name`` not recorded yet (a value, once its horizon has elapsed, is final)."""
-        new = values.dropna()
+        new = self._signal_window(values.dropna(), ts)
         new = new[~new.index.isin(self._series(name, ts).index)]
         if len(new):
             self.store.put_series(name, new)
@@ -432,6 +522,7 @@ class LiveEngine:
 
     def _remember_series(self, name: str, values: pd.Series, ts: pd.Timestamp) -> None:
         cur = self._series(name, ts)
+        values = self._signal_window(values, ts)
         merged = pd.concat([cur[~cur.index.isin(values.index)], values.astype(float)]).sort_index()
         self._cache[name] = merged.to_frame(name)
 
@@ -452,9 +543,7 @@ class LiveEngine:
         traded = names.iloc[-1] if len(names) and names.index[-1] == ts else pd.Series(dtype=float)
         key = f"ic_h{H}"
         ric_new = rowwise_corr(names.reindex(index=panel.index, columns=panel.symbols), tgt).dropna()
-        ric_new = ric_new[~ric_new.index.isin(self._series(key, ts).index)]
-        self.store.put_series(key, ric_new)
-        self._remember_series(key, ric_new, ts)
+        self._record_once(key, ric_new, ts)
         est = estimate_ic(self._series(key, ts).reindex(grid), H, self.bundle.prior_ic, halflife_bars=self.bpd * 30)
         ic_est = (float(est.iloc[-1]) if np.isfinite(est.iloc[-1]) else self.bundle.prior_ic) * gate
         cost_scale = float(self.bundle.meta.get("cost_scale", 1.0) or 1.0)  # type: ignore[arg-type]
@@ -525,6 +614,7 @@ class LiveEngine:
         cfg = self.cfg
         t = len(panel.index) - 1
         ts = panel.index[t]
+        self._prepare_factor_epoch(ts)
         expected = BinanceLiveFeed.last_closed_bar(panel.bar, now) if now is not None else ts
         stale = ts < expected
         capital = equity * cfg.live.capital_fraction
@@ -536,15 +626,10 @@ class LiveEngine:
         else:
             mask = universe_mask(panel, cfg.data.universe)
         feats = build_features(panel, mask, cfg.features)
-        if feats.names != self.bundle.feature_names:
-            missing = set(self.bundle.feature_names) - set(feats.names)
-            raise RuntimeError(f"feature mismatch with the bundle (missing {sorted(missing)[:5]}...)")
-        # Rounded like the stored training rows (research/dataset.py): the models score the values they were fit on.
         score_mask = mask
         if "observed_close" in panel:
             score_mask = mask & (panel["observed_close"] > 0)
-        X, mi = feats.stack(score_mask, rows=np.array([t]), dtype=STORAGE_DTYPE)
-        X = X.astype(np.float32)
+        X, mi = self._score_inputs(feats, score_mask, rows=np.array([t]))
         members = list(mi.get_level_values(1))
         d.n_members = len(members)
         try:  # a monitoring failure must never stop the book from trading
@@ -582,9 +667,7 @@ class LiveEngine:
         # Each bar's realised IC is recorded once, when its horizon has just elapsed (the end of the window,
         # where features and targets are fully warmed up); older values are never rewritten from a window
         # that has slid past their warm-up.
-        ric_new = ric_new[~ric_new.index.isin(self._series("ic", ts).index)]
-        self.store.put_series("ic", ric_new)
-        self._remember_series("ic", ric_new, ts)
+        self._record_once("ic", ric_new, ts)
         self._incubation_checks(mem, panel, tgt, H, ts, members, daily)
         ric = self._series("ic", ts).reindex(grid)
         est = estimate_ic(ric, H, self.bundle.prior_ic, halflife_bars=self.bpd * 30)
@@ -642,10 +725,7 @@ class LiveEngine:
                 )
         m_alpha = 0.0
         if use_market:
-            mt_new = targets.market[H].dropna()
-            mt_new = mt_new[~mt_new.index.isin(self._series("mkt_target", ts).index)]
-            self.store.put_series("mkt_target", mt_new)
-            self._remember_series("mkt_target", mt_new, ts)
+            self._record_once("mkt_target", targets.market[H], ts)
             ms = self._series("mkt_score", ts).reindex(grid)
             if ms.notna().sum() > 24:
                 mt = self._series("mkt_target", ts).reindex(grid)

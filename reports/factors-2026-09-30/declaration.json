@@ -1,0 +1,688 @@
+{
+  "account_convention": "flat_start_then_continuous_across_windows",
+  "capital": 10000.0,
+  "config": {
+    "costs": {
+      "impact_coef": 0.7,
+      "include_funding": true,
+      "maker_fee": 0.0002,
+      "maker_fill_ratio": 0.6,
+      "min_half_spread_bps": 1.0,
+      "taker_fee": 0.0005
+    },
+    "data": {
+      "bar": "30m",
+      "cache_dir": "data",
+      "download_workers": 16,
+      "end": "2026-08-31",
+      "include_metrics": false,
+      "include_premium": true,
+      "intrabar": false,
+      "intrabar_start": null,
+      "source": "binance_archive",
+      "source_bar": "15m",
+      "start": "2025-07-01",
+      "universe": {
+        "exclude": [
+          "USDCUSDT",
+          "BTCDOMUSDT",
+          "DEFIUSDT",
+          "FDUSDUSDT",
+          "TUSDUSDT"
+        ],
+        "liquidity_lookback_days": 30,
+        "min_history_days": 60,
+        "quote": "USDT",
+        "reselect_every_days": 7,
+        "symbols": [],
+        "top_n": 30,
+        "venue": "okx"
+      }
+    },
+    "execution": {
+      "chase_interval_s": 5.0,
+      "child_max_book_fraction": 0.5,
+      "dead_man_switch_s": 60,
+      "maker_first": true,
+      "maker_timeout_s": 60.0,
+      "max_chases": 8,
+      "okx_base_url": "https://www.okx.com",
+      "okx_demo": true,
+      "order_tag": "hermes",
+      "taker_slippage_cap_bps": 15.0,
+      "td_mode": "cross",
+      "venue": "paper"
+    },
+    "features": {
+      "cross_sectional": true,
+      "day_minutes": 1440,
+      "flow_minutes": [
+        60,
+        240,
+        1440
+      ],
+      "funding_minutes": [
+        480,
+        1440,
+        4320,
+        10080,
+        43200
+      ],
+      "funding_per_8h": false,
+      "intrabar": true,
+      "long_minutes": 10080,
+      "market_features": true,
+      "max_lookback_minutes": 43200,
+      "positioning": [
+        "oi",
+        "ls_top",
+        "ls_account"
+      ],
+      "range_minutes": [
+        1440,
+        10080,
+        43200
+      ],
+      "return_minutes": [
+        30,
+        60,
+        120,
+        240,
+        480,
+        1440,
+        4320,
+        10080,
+        20160,
+        43200
+      ],
+      "time_features": true,
+      "trend_pairs_minutes": [
+        [
+          240,
+          1440
+        ],
+        [
+          1440,
+          5760
+        ],
+        [
+          5760,
+          20160
+        ]
+      ],
+      "vol_halflife_minutes": 1440,
+      "vol_minutes": [
+        240,
+        1440,
+        4320
+      ],
+      "zscore_minutes": 43200
+    },
+    "labels": {
+      "clip_sigma": 5.0,
+      "horizons": [
+        16,
+        48,
+        96
+      ],
+      "primary_horizon": 48,
+      "residualize": "style",
+      "vol_normalize": true
+    },
+    "live": {
+      "allow_unpromoted": false,
+      "bar_close_delay_s": 3.0,
+      "candidates": 80,
+      "capital_fraction": 1.0,
+      "history_days": null,
+      "listing_sleeve": {
+        "coin_cost": 0.0015,
+        "enabled": false,
+        "entries": [
+          24.0,
+          72.0
+        ],
+        "entry_grace_hours": 3.0,
+        "exit_hours": 168.0,
+        "hedge_beta": 1.0,
+        "hedge_cost": 0.0006,
+        "kill_loss": 0.15,
+        "kill_mean": -0.03,
+        "kill_trades": 60,
+        "leverage": 1.0,
+        "new_token_days": 30.0,
+        "sigma_ref": 0.124,
+        "slots": 5,
+        "stop": 0.5
+      },
+      "model_dir": "artifacts/models/champion",
+      "paper_initial_equity": 10000.0,
+      "paper_nominal_size": true,
+      "state_dir": "state"
+    },
+    "model": {
+      "deep": {
+        "batch_timestamps": 64,
+        "d_model": 64,
+        "dropout": 0.15,
+        "enabled": false,
+        "epochs": 12,
+        "lr": 0.001,
+        "n_heads": 4,
+        "n_layers": 2,
+        "patience": 3,
+        "seed": 7,
+        "seq_len": 48,
+        "weight_decay": 0.0001
+      },
+      "ensemble": "ic_weighted",
+      "gbm": {
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "early_stopping_rounds": 150,
+        "enabled": false,
+        "feature_fraction": 0.6,
+        "lambda_l2": 10.0,
+        "learning_rate": 0.02,
+        "max_bin": 63,
+        "min_data_in_leaf": 2000,
+        "n_estimators": 2000,
+        "n_jobs": 0,
+        "num_leaves": 31,
+        "objective": "huber",
+        "seeds": [
+          1,
+          2,
+          3
+        ]
+      },
+      "linear": {
+        "alpha": 300.0,
+        "enabled": true
+      },
+      "market_model": false
+    },
+    "name": "hermes-fixed-factors",
+    "portfolio": {
+      "adv_participation_max": 0.02,
+      "beta_neutral": true,
+      "books": [],
+      "cost_aversion": 2.0,
+      "cost_scale_floor": 0.5,
+      "cov_halflife_days": 7.0,
+      "gross_max": 2.5,
+      "holding_horizon": 48,
+      "ic_ref": 0.03,
+      "min_position_usdt": 5.0,
+      "min_trade_weight": 0.002,
+      "net_max": 0.25,
+      "rebalance_every": 1,
+      "regime_gate_drawdown": 0.0,
+      "regime_gate_lookback_days": 90,
+      "regime_gate_scale": 0.5,
+      "regime_gate_symbol": "BTCUSDT",
+      "signal_halflife": 0.5,
+      "style_neutral": true,
+      "style_risk": 1.0,
+      "vol_target_annual": 0.2,
+      "weight_max": 0.15
+    },
+    "risk": {
+      "daily_loss_limit": 0.03,
+      "drawdown_hard": 0.25,
+      "drawdown_soft": 0.1,
+      "es_limit_daily": 0.04,
+      "exchange_leverage": 5,
+      "kill_switch_file": "state/KILL",
+      "max_data_staleness_s": 900,
+      "max_positions": 40,
+      "stop_loss_daily_sigmas": 8.0
+    },
+    "seed": 42,
+    "validation": {
+      "bootstrap_samples": 2000,
+      "cpcv_groups": 8,
+      "cpcv_test_groups": 2,
+      "embargo_minutes": 1440.0,
+      "expanding": true,
+      "gate_max_pbo": 0.3,
+      "gate_min_criteria": 7,
+      "gate_min_dsr": 0.95,
+      "gate_min_months": 12,
+      "gate_min_null_percentile": 0.95,
+      "gate_min_positive_year_fraction": 0.6,
+      "gate_min_sharpe": 0.8,
+      "min_train_days": 365.0,
+      "n_trials": 1,
+      "null_permutations": 200,
+      "recency_halflife_days": 0.0,
+      "test_days": 90.0,
+      "train_days": 365.0,
+      "train_sample_minutes": 60.0,
+      "val_days": 60.0
+    }
+  },
+  "config_sha256": "8a14d3788e626a487d3c4d138fe45ba6eb9e589fa4d3a205ac950b2226d8ce92",
+  "cost_multipliers": [
+    1.0,
+    2.0
+  ],
+  "kind": "fixed_factor_family",
+  "limits": [
+    "Research is restricted to the supplied candidate pool; point-in-time selection cannot restore omitted contracts.",
+    "Previously examined market dates remain retrospective evidence, even though these rules are now fixed.",
+    "Binance prices and settled funding proxy the OKX market; modeled costs are not observed OKX fills.",
+    "All candidates start flat at calibration start and run continuously across the three windows.",
+    "Window returns describe slices of continuous accounts, not accounts restarted at each boundary.",
+    "The best calibration candidate is an exploratory shadow candidate, not a promotion or trading authorization.",
+    "All six bundles stay unpromoted, including synthetic-data runs and positive historical results.",
+    "No cash yield, future profitability or independence of already examined history is assumed."
+  ],
+  "panel": {
+    "bar": "30m",
+    "end": "2026-08-31 19:30:00+00:00",
+    "fields": {
+      "close": "c84435f7c48d278e5836e94086ea3566f7d776996d31b178c778117b308de3ed",
+      "funding_rate": "cd93521e0b97317fc9b15093cb5a0e17a6f309d290781ed64526d14070606be9",
+      "high": "abbb11a193b7223ebeed47a1594c22c3d17eea71a2ad96327f10c293647d16b5",
+      "low": "38c5db2537e75480bc8cd047e2a4e35796490db350ca46d73c567d4b8f4a2966",
+      "open": "2714c8d8bff73803819cbff3dcb59947d1f5f4e11a511cc1f73744cc2ee25cb0",
+      "premium": "74a8e8f07d876b3b75b9dcfba5c38f29544a04dec39580a4f82c345c1faca06d",
+      "quote_volume": "41e97688fad70f8c794b2c23181f76988b1294365efab5536cca060a6476a4ec",
+      "taker_buy_quote": "0725ea1f3297aec6907fea4b5abb160f695e732c12136e124e447d734878ed24",
+      "trades": "e40d3581c679cbfc8ab0fbe4e07ec211254c38bdce37214a265bd4738ed371ff",
+      "venue_listed": "ccd604644b233a9d16f39fdeb21251bf5e3253515704e20ffbe2cb2d87ab5d81",
+      "volume": "e3e93254dc9ec1d1f2edc2e1777ea75ba3313c6fbd59199dfcc93d255b6ec71c",
+      "vwap_first": "df5b8e178a688493a741ee2e9dba5201549d721dcfbe114334ed68ac910a25d9"
+    },
+    "index_sha256": "b53f5caa068c80804feb06f01039bdbd2ad38d26493519512fd6dfb37e5a63a8",
+    "meta": {},
+    "sha256": "56021df51e76577a67e48a0fd034c99f5a5eb6c2a78853aee088c34ac9ab48a5",
+    "start": "2025-07-01 00:00:00+00:00",
+    "symbols": [
+      "1000BONKUSDT",
+      "1000FLOKIUSDT",
+      "1000LUNCUSDT",
+      "1000PEPEUSDT",
+      "1000SATSUSDT",
+      "1000SHIBUSDT",
+      "1INCHUSDT",
+      "AAVEUSDT",
+      "ACHUSDT",
+      "ACTUSDT",
+      "ADAUSDT",
+      "AEVOUSDT",
+      "AGLDUSDT",
+      "AI16ZUSDT",
+      "AIXBTUSDT",
+      "ALCHUSDT",
+      "ALGOUSDT",
+      "ALLOUSDT",
+      "ALPHAUSDT",
+      "ANIMEUSDT",
+      "APEUSDT",
+      "API3USDT",
+      "APRUSDT",
+      "APTUSDT",
+      "ARBUSDT",
+      "ARCUSDT",
+      "ASTERUSDT",
+      "ATOMUSDT",
+      "AUCTIONUSDT",
+      "AVAXUSDT",
+      "AXSUSDT",
+      "BANDUSDT",
+      "BARDUSDT",
+      "BCHUSDT",
+      "BEATUSDT",
+      "BERAUSDT",
+      "BICOUSDT",
+      "BIGTIMEUSDT",
+      "BIOUSDT",
+      "BLURUSDT",
+      "BNBUSDT",
+      "BNTUSDT",
+      "BOMEUSDT",
+      "BSBUSDT",
+      "BTCUSDT",
+      "CELOUSDT",
+      "CFXUSDT",
+      "CHZUSDT",
+      "COAIUSDT",
+      "COMPUSDT",
+      "CRVUSDT",
+      "DASHUSDT",
+      "DOGEUSDT",
+      "DOGSUSDT",
+      "DOTUSDT",
+      "DYDXUSDT",
+      "EDENUSDT",
+      "EIGENUSDT",
+      "ENAUSDT",
+      "ENJUSDT",
+      "ENSOUSDT",
+      "ENSUSDT",
+      "ETCUSDT",
+      "ETHFIUSDT",
+      "ETHUSDT",
+      "FARTCOINUSDT",
+      "FETUSDT",
+      "FILUSDT",
+      "FLMUSDT",
+      "FTMUSDT",
+      "GALAUSDT",
+      "GIGGLEUSDT",
+      "GLMUSDT",
+      "GMTUSDT",
+      "GOATUSDT",
+      "GPSUSDT",
+      "GRTUSDT",
+      "HBARUSDT",
+      "HOMEUSDT",
+      "HUSDT",
+      "HYPEUSDT",
+      "ICPUSDT",
+      "IDUSDT",
+      "IMXUSDT",
+      "INJUSDT",
+      "IOTAUSDT",
+      "IPUSDT",
+      "JELLYJELLYUSDT",
+      "JTOUSDT",
+      "JUPUSDT",
+      "KAITOUSDT",
+      "KATUSDT",
+      "KLAYUSDT",
+      "KNCUSDT",
+      "LABUSDT",
+      "LAYERUSDT",
+      "LDOUSDT",
+      "LIGHTUSDT",
+      "LINKUSDT",
+      "LITUSDT",
+      "LPTUSDT",
+      "LTCUSDT",
+      "MAGICUSDT",
+      "MANAUSDT",
+      "MASKUSDT",
+      "MEMEUSDT",
+      "MERLUSDT",
+      "MEWUSDT",
+      "MINAUSDT",
+      "MKRUSDT",
+      "MMTUSDT",
+      "MONUSDT",
+      "MOODENGUSDT",
+      "MOVEUSDT",
+      "NEARUSDT",
+      "NEIROETHUSDT",
+      "NEIROUSDT",
+      "NEOUSDT",
+      "NIGHTUSDT",
+      "NMRUSDT",
+      "NOTUSDT",
+      "OMGUSDT",
+      "OMUSDT",
+      "ONDOUSDT",
+      "ONEUSDT",
+      "ONTUSDT",
+      "OPNUSDT",
+      "OPUSDT",
+      "ORDIUSDT",
+      "PENGUUSDT",
+      "PEOPLEUSDT",
+      "PERPUSDT",
+      "PIEVERSEUSDT",
+      "PIPPINUSDT",
+      "PNUTUSDT",
+      "POPCATUSDT",
+      "PUMPUSDT",
+      "PYTHUSDT",
+      "RAVEUSDT",
+      "RENUSDT",
+      "RESOLVUSDT",
+      "REUSDT",
+      "RIVERUSDT",
+      "RSRUSDT",
+      "RVNUSDT",
+      "SAHARAUSDT",
+      "SANDUSDT",
+      "SENTUSDT",
+      "SIGNUSDT",
+      "SNXUSDT",
+      "SOLUSDT",
+      "SOONUSDT",
+      "SPKUSDT",
+      "STORJUSDT",
+      "STRKUSDT",
+      "STXUSDT",
+      "SUIUSDT",
+      "SUSDT",
+      "SUSHIUSDT",
+      "SWARMSUSDT",
+      "TAOUSDT",
+      "TIAUSDT",
+      "TONUSDT",
+      "TRBUSDT",
+      "TRUMPUSDT",
+      "TRXUSDT",
+      "TURBOUSDT",
+      "UBUSDT",
+      "UMAUSDT",
+      "UNIUSDT",
+      "USELESSUSDT",
+      "UXLINKUSDT",
+      "VANAUSDT",
+      "VINEUSDT",
+      "VIRTUALUSDT",
+      "WAVESUSDT",
+      "WCTUSDT",
+      "WIFUSDT",
+      "WLDUSDT",
+      "WLFIUSDT",
+      "WOOUSDT",
+      "WUSDT",
+      "XLMUSDT",
+      "XPLUSDT",
+      "XRPUSDT",
+      "YFIUSDT",
+      "YGGUSDT",
+      "ZBTUSDT",
+      "ZECUSDT",
+      "ZENUSDT",
+      "ZEREBROUSDT",
+      "ZKUSDT",
+      "ZROUSDT",
+      "ZRXUSDT"
+    ]
+  },
+  "prior_ic": 0.0,
+  "promotion_eligible": false,
+  "protocol": {
+    "alpha": 0.05,
+    "bootstrap_samples": 10000,
+    "calibration": {
+      "end": "2025-12-31",
+      "start": "2025-10-01"
+    },
+    "confirmation": {
+      "end": "2026-04-30",
+      "start": "2026-01-01"
+    },
+    "examined_history": true,
+    "family_max": 6,
+    "mean_block_days": 7.0,
+    "min_observations": 60,
+    "prior_trials": 23,
+    "seed": 20260930,
+    "test": {
+      "end": "2026-08-30",
+      "start": "2026-05-01"
+    }
+  },
+  "protocol_sha256": "9398b6f39df6ea558a472aaf8562c038c2238bb968e010e701c5a7933cf4c842",
+  "registered_at": "2026-09-30T11:39:00.306982+00:00",
+  "rule_transform": "Existing Ridge preprocessing, float16-to-float32 inputs, then ModelBundle.score",
+  "rules": [
+    {
+      "definition": "-Z(cs_funding_sum_10080m): buy low settled seven-day funding and sell high funding",
+      "name": "carry",
+      "terms": [
+        {
+          "coefficient": -1.0,
+          "feature": "cs_funding_sum_10080m",
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "definition": "-Z(cs_premium): buy discounted perpetuals and sell expensive perpetuals",
+      "name": "basis",
+      "terms": [
+        {
+          "coefficient": -1.0,
+          "feature": "cs_premium",
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "definition": "-0.5*Z(iret_240m) - 0.5*Z(iret_1440m): fade four-hour and one-day residual moves",
+      "name": "reversal",
+      "terms": [
+        {
+          "coefficient": -0.5,
+          "feature": "iret_240m",
+          "scale": 1.0
+        },
+        {
+          "coefficient": -0.5,
+          "feature": "iret_1440m",
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "definition": "Z(iret_10080m) - sqrt(1/7)*Z(iret_1440m): seven-day residual momentum excluding the last day",
+      "name": "momentum",
+      "terms": [
+        {
+          "coefficient": 1.0,
+          "feature": "iret_10080m",
+          "scale": 1.0
+        },
+        {
+          "coefficient": -0.3779644730092272,
+          "feature": "iret_1440m",
+          "scale": 1.0
+        }
+      ]
+    },
+    {
+      "definition": "Z(flow_ret_div; scale=0.1): follow relative aggressive flow not yet reflected in residual price",
+      "name": "flow",
+      "terms": [
+        {
+          "coefficient": 1.0,
+          "feature": "flow_ret_div",
+          "scale": 0.1
+        }
+      ]
+    },
+    {
+      "definition": "Arithmetic mean of the five raw fixed rules; cross-sectional standardisation follows the sum",
+      "name": "combined",
+      "terms": [
+        {
+          "coefficient": -0.2,
+          "feature": "cs_funding_sum_10080m",
+          "scale": 1.0
+        },
+        {
+          "coefficient": -0.2,
+          "feature": "cs_premium",
+          "scale": 1.0
+        },
+        {
+          "coefficient": -0.1,
+          "feature": "iret_240m",
+          "scale": 1.0
+        },
+        {
+          "coefficient": -0.17559289460184546,
+          "feature": "iret_1440m",
+          "scale": 1.0
+        },
+        {
+          "coefficient": 0.2,
+          "feature": "iret_10080m",
+          "scale": 1.0
+        },
+        {
+          "coefficient": 0.2,
+          "feature": "flow_ret_div",
+          "scale": 0.1
+        }
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "sha256": "f2baf7ab4aac1b2adf74487d25cbdbbb03622e0b4fe156674b8323ea1ef6fd47",
+  "simulation_end": "2026-08-30 23:30:00+00:00",
+  "simulation_start": "2025-10-01 00:00:00+00:00",
+  "sources": {
+    "backtest/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "backtest/engine.py": "c3db8ba700f9eac2b68b2d1a1de1e7683b9ae177d48c9c04b23f45a996de265c",
+    "config.py": "350d0a2361a9f34689616e960de01641ac4690d48348d9618cbe774400611bad",
+    "data/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "data/binance_archive.py": "4402d235a1245cfd40efc690eee0a3a2d657d7a695a88aa8e7eebe0885a534ff",
+    "data/intrabar.py": "89a670179f87438dc20b7c48cc04cde8dde76dfb15c5160c840054bb7c663800",
+    "data/live_feed.py": "86bfe37e402f7cced1147298dbe77ccd7a5c4bd469249fb9332ae4e6f0dbd3b0",
+    "data/panel.py": "9a4cfd41e8547f55faea99b89ad47bb2a4dada7cfc6b03fda9082120735dff36",
+    "data/store.py": "14b0ae0e13aa813e6a23003db3fdadba68ee704496e171f44591eddc2fc515a4",
+    "data/synthetic.py": "4c01e21a710090a05a139bfb0d18b3bf2009cd8c4bb4eec6c05aee782f441722",
+    "data/universe.py": "aff3efcf2e8bbd1ba02e055c4eff3837ebedb38440fa4d1705ea85b9f8066c44",
+    "data/venue.py": "87b99427a0a803e77ef6aabb3374c250ded35bf3434b476fac1d7dc46ccdb796",
+    "features/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "features/library.py": "14dde11f4248f77dfeac657bdd6be994ceda51ad071e40d3277a1c222e7f6187",
+    "labels/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "labels/targets.py": "35de9fa84b508b89b21e019e65aa4082dcc55fda4966409337a63d3fd1708435",
+    "labels/triple_barrier.py": "a79d231cc30a26f7750dbfe07aa6def0bd3c272be2fa4e3eb75e4dcb3e2e537d",
+    "models/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "models/base.py": "0a1a17c20b858cc60ec01a1bfe5e852b35b800cc717e27bde2a148048c95d16c",
+    "models/bundle.py": "4fe2ae87af6a6d9a62584f365e30295b8a774ad0c1fe830c2e2dc2a7eba4717e",
+    "models/deep.py": "b2ba25ddf9fdf57911ac3e284dc7569370bd151892fa12748fb14890e69a0846",
+    "models/drift.py": "02dd0e810a27802036a995db3b0470ed415bf7e6238e93fe3161961add7db882",
+    "models/factors.py": "b12f83bfabaeff73c39964259b4baef74570c4ce1287c56709b2b18ff4bcb3f6",
+    "models/gbm.py": "b550431a4ca5a878db7cde268e33d99157b0966a13b4dc2a1275ec07752393e5",
+    "models/linear.py": "537367b9731a890cc9e87b3ef2301a85fa90bf3e8714d7cb449d5ffc6aafbae8",
+    "portfolio/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "portfolio/alpha.py": "e513e3fb213cf6d77d1f07f8373f1ba36af3b833708a2e0cb8c3fee9a4703371",
+    "portfolio/construct.py": "e6f309139a72f9b317716ad10036565ff237571a166c1ade4ec69d2fb79eb319",
+    "portfolio/costs.py": "014fadbd8f7c627583b396d5a5003811461db12b36621abbac43cf7e929375de",
+    "portfolio/covariance.py": "133cff00c890a77a6926689ef7f3c7eafec12865ecc58b7f19a87ee00e206769",
+    "portfolio/optimizer.py": "dc4d7e4dd399a05e2fc4df76d4d52fc0afb79e4199a8a56d51aa7c0e5f3e3438",
+    "research/dataset.py": "7e90b07274c4c0c50315a225071701ba4df4d71eedd35850a2d7c76417ff5452",
+    "research/evaluate.py": "e77f904aaa6837bcd03a69c0f8388674328f3c307ce95cdc05f15a2c24279517",
+    "research/factor_research.py": "2164831cdb3e4e9cb2d632caacf00d6d9b699f5761fbe0b5a54bd983c6057f0d",
+    "research/provenance.py": "5fbde57ce2b8a3ed58988cec149c23a63467c211cf96edfb517b3dc15e629b0a",
+    "research/selection.py": "f0a7b95c59a537259e7c3d32d5133c270e7dd158d28c55ad0ae433367d91ea44",
+    "risk/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "risk/overlay.py": "0be32c115307f64792b3d5207fc4949f1f79ca110a5bb4bd5fe21e029bd0c379",
+    "validation/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "validation/metrics.py": "5191c0f06bb00e36ba7a13ed89fcf2b95f25124fd17e004f40685a9b96bd0579",
+    "validation/splits.py": "ea7c4efe94ead8fb887fe8e53aeea06a2eb63a7c8a94669e966ca07d6b9d5ca5",
+    "validation/stats.py": "122521be276010d123493a63ccea281f4bf78f0dd972a7a5018f796ca0000773"
+  },
+  "synthetic": false,
+  "versions": {
+    "lightgbm": "4.7.0",
+    "numba": "0.67.0",
+    "numpy": "2.4.6",
+    "pandas": "3.0.6",
+    "python": "3.12.14",
+    "scikit-learn": "1.9.1",
+    "scipy": "1.17.1",
+    "torch": null
+  }
+}

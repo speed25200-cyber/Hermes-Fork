@@ -30,6 +30,12 @@ Le calcul suppose le capital initial configuré inchangé depuis la création du
 La courbe persistante peut couvrir plusieurs champions : le PnL cumulé appartient au compte et ne peut
 pas être attribué intégralement au seul modèle actuellement installé.
 
+Une seconde lecture à **11:00:13 UTC** donne **9 369,26 USDT**, soit **−6,31 %**, avec un IC estimé
+toujours nul, 19,03 USDT de frais et 10,69 USDT de funding net encaissé. L'extrait économique daté est
+conservé dans [`paper_status_1100.json`](../reports/factors-2026-09-30/paper_status_1100.json).
+La recherche additionnelle de six signaux fixes, ses résultats et sa décision cash sont détaillés dans
+[`FACTOR_RESEARCH_2026-09-30.md`](FACTOR_RESEARCH_2026-09-30.md).
+
 ## Pourquoi le backtest positif ne suffit pas
 
 Le rapport du même modèle (`config_hash=1b8c803a29a2`) donne Sharpe 1,36 et +16,4 %/an sur
@@ -138,8 +144,9 @@ fusion ni déploiement du présent lot n'a été effectué pendant l'audit.
   traite ses reprises, mais une panne peut encore priver le journal d'un fill de stop déjà comptabilisé.
 - La comptabilité analytique de la poche nouvelles cotations conserve son ancien curseur de financement ;
   le diagnostic n'en observe aucune opération. Sa migration reste à faire avant d'utiliser son PnL comme preuve.
-- Le remplacement à chaud par une stratégie réellement différente conserve encore la mémoire des scores/IC.
-  Une comparaison de stratégies doit utiliser des états isolés ; une séparation automatique par version reste à faire.
+- Les nouveaux facteurs déterministes séparent leur mémoire de scores/IC par identité de stratégie,
+  y compris après redémarrage. Une transition entre deux modèles ML conserve encore l'ancienne mémoire ;
+  comparer deux modèles ML exige des états isolés. Le bilan financier du compte reste continu.
 
 ## Vérifications exécutées
 
@@ -153,3 +160,8 @@ La [CI GitHub du code corrigé](https://github.com/speed25200-cyber/Hermes-Fork/
 est passée. Le rejeu différentiel sur données réelles décrit ci-dessus est terminé ; il ne démontre pas de
 rentabilité. Aucun test d'ordres connecté n'a été exécuté et aucune nouvelle décision de promotion n'a été
 prise. Les tests de régression utilisent des scénarios contrôlés.
+
+Après l'ajout de la recherche par facteurs et de l'isolation de leurs signaux, la suite complète passe
+à **308 tests réussis** en 228,5 s, avec les mêmes deux avertissements attendus ; Ruff et le diff passent.
+Ce contrôle supplémentaire est consigné dans
+[`reports/factors-2026-09-30/validation.json`](../reports/factors-2026-09-30/validation.json).

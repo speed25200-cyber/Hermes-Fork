@@ -1,0 +1,22 @@
+{
+  "common_config_sha256": "8a14d3788e626a487d3c4d138fe45ba6eb9e589fa4d3a205ac950b2226d8ce92",
+  "config_hash": "309e4e5fd5ca16ee69ca79eb3088d10f55574bb453e4d858f73f6b096d5cd703",
+  "declaration_sha256": "f2baf7ab4aac1b2adf74487d25cbdbbb03622e0b4fe156674b8323ea1ef6fd47",
+  "model_rule": {
+    "definition": "-Z(cs_funding_sum_10080m): buy low settled seven-day funding and sell high funding",
+    "name": "carry",
+    "terms": [
+      {
+        "coefficient": -1.0,
+        "feature": "cs_funding_sum_10080m",
+        "scale": 1.0
+      }
+    ]
+  },
+  "panel_sha256": "56021df51e76577a67e48a0fd034c99f5a5eb6c2a78853aee088c34ac9ab48a5",
+  "promotion_eligible": false,
+  "protocol_sha256": "9398b6f39df6ea558a472aaf8562c038c2238bb968e010e701c5a7933cf4c842",
+  "registered_at": "2026-09-30T11:39:00.306982+00:00",
+  "status": "registered_before_simulation",
+  "type": "factor"
+}

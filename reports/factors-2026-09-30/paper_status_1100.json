@@ -1,0 +1,23 @@
+{
+  "mode": "paper",
+  "updated": "2026-09-30T11:00:13.714057+00:00",
+  "bar": "2026-09-30 10:30:00+00:00",
+  "equity": 9369.259005848644,
+  "ic_est": 0,
+  "capital_fraction": 1,
+  "account": {
+    "equity": 9369.259005848644,
+    "initial": 10000,
+    "fees_paid": 19.033078379820534,
+    "funding_paid": -10.688583606097684
+  },
+  "bundle": {
+    "config_hash": "1b8c803a29a2"
+  },
+  "source": {
+    "repository": "speed25200-cyber/Hermes-Fork",
+    "run_id": 36106193954,
+    "job_id": 109864798196,
+    "operation": "read_only_vps_status"
+  }
+}

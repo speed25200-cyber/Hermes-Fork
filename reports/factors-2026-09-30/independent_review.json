@@ -1,0 +1,336 @@
+{
+  "checks": {
+    "bar_accounting_identity": "return = gross_pnl + funding - fees - spread - impact; gross_pnl already includes signed next-bar VWAP slippage, so slippage must not be subtracted again.",
+    "causality_prefix_check": {
+      "candidates": [
+        "carry",
+        "basis",
+        "reversal",
+        "momentum",
+        "flow",
+        "combined"
+      ],
+      "cutoff_utc": "2026-01-01T12:00:00+00:00",
+      "label_convention": "Forward labels span t+1 through t+H; their IC contribution is shifted H bars before sizing. Unmatured terminal labels are not compared against future-complete labels.",
+      "maximum_absolute_cost_scale_error": 0.0,
+      "maximum_absolute_ic_error": 0.0,
+      "maximum_absolute_score_error": 0.0,
+      "method": "Truncate the actual panel at cutoff, recompute the six scores and the targets needed for lagged IC, then IC and cost scales; compare the observed prefix to saved full-history artifacts. No future rows supplied, no refit, no files written."
+    },
+    "config_hash_matches": true,
+    "declaration_self_hash_matches": true,
+    "funding_coverage_review": "Every active member has observed settlements; no active funding gap above 12 hours was found by the independent temporal reviewer.",
+    "metric_convention": "Compounded returns; initial equity included in drawdown; daily Sharpe independently applies the same Newey-West/Lo adjustment with negative variance adjustment floored at one.",
+    "panel_manifest_exact_match": true,
+    "registration_precedes_simulation": {
+      "evidence": "artifacts/profitability_2026/research.log; all six local trial records created before simulation in runner",
+      "first_simulation_log_utc": "2026-09-30 11:39:14.418",
+      "registered_log_utc": "2026-09-30 11:39:00.497"
+    },
+    "source_files_checked": 42,
+    "source_hash_mismatches": [],
+    "universe_manifest_exact_match": true
+  },
+  "findings": [
+    {
+      "code_references": [
+        "src/hermes/models/factors.py:123",
+        "src/hermes/models/linear.py:24",
+        "src/hermes/research/factor_research.py:272",
+        "src/hermes/research/factor_research.py:358"
+      ],
+      "effect": "Basis and combined are measured using neutral imputations during real data gaps. The 2026-06-29 universe-wide outage produces 1440 zero basis scores. This is a data-quality limitation, not a demonstrated look-ahead leak, and does not reverse the declared cash decision.",
+      "priority": "P2",
+      "recommendation": "Preserve this run and disclose coverage. Declare a policy for broad required-feature outages before any future run; do not tune it against these outcomes.",
+      "title": "Premium data outages are silently neutral-imputed and absent from the original coverage report"
+    },
+    {
+      "code_references": [
+        "src/hermes/research/factor_research.py:389",
+        "src/hermes/backtest/engine.py:402",
+        "src/hermes/backtest/engine.py:405"
+      ],
+      "effect": "The multiplier doubles modeled fees, spread and square-root impact, including stop trading costs. The same historical VWAP fill-premium path and funding rates remain unscaled. Position paths can change when higher costs alter account equity and risk.",
+      "priority": "P2",
+      "recommendation": "Describe the scenario as fees, spread and impact times two. It is not a doubling of all execution discrepancies or funding; no extra stress scenario was run in this review.",
+      "title": "The costs-times-two label must identify exactly which components are stressed"
+    }
+  ],
+  "limits": [
+    "Recorded market dates and candidate pool were already examined; this is retrospective evidence.",
+    "334 complete UTC days are evaluated through 2026-08-30, not the partial final archive day 2026-08-31.",
+    "The 92-day raw warmup contains only about 32 days with an active universe after the 60-day age threshold; the cold-start convention remains common and causal.",
+    "Cashflows and exported metrics reconcile; that does not establish accuracy of modeled exchange fills or future profitability.",
+    "Continuous account slices include existing positions across calibration/confirmation/test boundaries; they are not independent fresh accounts.",
+    "No training, parameter tuning, network access, new economic replay, deployment or trading was performed in this review."
+  ],
+  "premium_quality": {
+    "active_cells": 480960,
+    "active_members_per_bar_max": 30,
+    "active_members_per_bar_min": 30,
+    "all_member_outage_bars": 48,
+    "all_member_premium_outage_bar_counts_by_utc_date": {
+      "2026-06-29": 48
+    },
+    "counts_overlap_note": "Per-symbol counts already include any universe-wide outage rows; do not add those totals together.",
+    "finite_basis_scores_during_all_member_outage": 1440,
+    "imputation": "Absent primitive cells become zero through the declared Ridge preprocessing; absent required columns raise an error.",
+    "missing_premium_active_cells": 3072,
+    "missing_premium_by_symbol": {
+      "1000PEPEUSDT": 48,
+      "AAVEUSDT": 48,
+      "ADAUSDT": 48,
+      "ALLOUSDT": 48,
+      "ASTERUSDT": 48,
+      "AVAXUSDT": 48,
+      "BCHUSDT": 48,
+      "BEATUSDT": 48,
+      "BNBUSDT": 48,
+      "BSBUSDT": 1584,
+      "BTCUSDT": 48,
+      "DOGEUSDT": 48,
+      "ENAUSDT": 48,
+      "ETHUSDT": 48,
+      "FILUSDT": 48,
+      "HOMEUSDT": 48,
+      "HUSDT": 48,
+      "HYPEUSDT": 48,
+      "KATUSDT": 96,
+      "LABUSDT": 48,
+      "LINKUSDT": 48,
+      "NEARUSDT": 48,
+      "ONDOUSDT": 48,
+      "SOLUSDT": 48,
+      "SUIUSDT": 48,
+      "TAOUSDT": 48,
+      "TRUMPUSDT": 48,
+      "WLDUSDT": 48,
+      "XLMUSDT": 48,
+      "XRPUSDT": 48,
+      "ZECUSDT": 48
+    },
+    "missing_premium_fraction": 0.006387225548902195,
+    "nonzero_basis_scores_during_all_member_outage": 0,
+    "panel_sha256": "56021df51e76577a67e48a0fd034c99f5a5eb6c2a78853aee088c34ac9ab48a5",
+    "simulation_bar_open_end": "2026-08-30 23:30:00+00:00",
+    "simulation_bar_open_start": "2025-10-01 00:00:00+00:00",
+    "universe_sha256": "0d058e859488913a2cc1d5a474229ef238c319be066dd0c3ef1d85a673836757"
+  },
+  "recomputed": {
+    "basis": {
+      "base": {
+        "additive_bar_return_components": {
+          "fees": 0.0007641910058095399,
+          "funding": 0.024535391561420185,
+          "gross_pnl": -0.04061336197732436,
+          "impact": 8.3697806248866e-05,
+          "slippage": 0.0007404760551848603,
+          "spread": 0.0002948046392882648
+        },
+        "bar_open_end": "2026-08-30 23:30:00+00:00",
+        "bar_open_start": "2025-10-01 00:00:00+00:00",
+        "bars": 16032,
+        "days": 334,
+        "final_equity_usdt": 9825.09141905945,
+        "input_file_sha256": {
+          "daily/basis.csv": "d4e748462779af450abc8decdd4e82449107be4573b5da73d23575642d0bd125",
+          "local/basis-returns.parquet": "902ddf04ee5307c02e8938f658eff315fa980ce017dbb95296a1d9d595fd0edd",
+          "local/basis-stats.parquet": "c792ed38cb9f14d21b6b76fd0e195ce0bc9de404a367c15fb62fc8d6689f0ddb"
+        },
+        "maximum_absolute_bar_accounting_error": 3.2368855859554735e-16,
+        "maximum_absolute_daily_csv_error": 9.8879238130678e-17,
+        "maximum_absolute_equity_error_usdt": 0.0,
+        "maximum_absolute_metric_error": 0.0,
+        "metrics": {
+          "cagr": -0.01909866326345988,
+          "max_drawdown": -0.055020821224323946,
+          "sharpe_daily": -0.5525339765150872,
+          "total_return": -0.01749085809405504
+        },
+        "windows": {
+          "calibration": {
+            "absolute_error": 0.0,
+            "days": 92,
+            "net_return": -0.001107153438425934,
+            "reported_net_return": -0.001107153438425934
+          },
+          "confirmation": {
+            "absolute_error": 0.0,
+            "days": 120,
+            "net_return": 0.02054586584434559,
+            "reported_net_return": 0.02054586584434559
+          },
+          "test": {
+            "absolute_error": 0.0,
+            "days": 122,
+            "net_return": -0.03620388962094634,
+            "reported_net_return": -0.03620388962094634
+          }
+        }
+      },
+      "cost2": {
+        "additive_bar_return_components": {
+          "fees": 0.0015284018072924664,
+          "funding": 0.02453541705572467,
+          "gross_pnl": -0.04061392291088038,
+          "impact": 0.00016735367003735136,
+          "slippage": 0.0007404734070721427,
+          "spread": 0.0005896152239469952
+        },
+        "bar_open_end": "2026-08-30 23:30:00+00:00",
+        "bar_open_start": "2025-10-01 00:00:00+00:00",
+        "bars": 16032,
+        "days": 334,
+        "final_equity_usdt": 9813.864561190065,
+        "input_file_sha256": {
+          "daily/basis_cost2.csv": "6b29bc359f36b6c29856a96ff3fc410f2f2f79320b69820adda12711afa86c6a",
+          "local/basis_cost2-returns.parquet": "3406db7e3374aeb472bc38aa455656d578305e972d0f3944702875bf720fdd85",
+          "local/basis_cost2-stats.parquet": "bcf2e3dbdb3fd91e6a8ae360f4c9363dc7683db0ab9db8c472c4a165bb8e512b"
+        },
+        "maximum_absolute_bar_accounting_error": 3.432584078089107e-16,
+        "maximum_absolute_daily_csv_error": 9.974659986866641e-17,
+        "maximum_absolute_equity_error_usdt": 0.0,
+        "maximum_absolute_metric_error": 0.0,
+        "metrics": {
+          "cagr": -0.02032347773809884,
+          "max_drawdown": -0.05566679627357851,
+          "sharpe_daily": -0.5894102306383162,
+          "total_return": -0.018613543880993566
+        },
+        "windows": {
+          "calibration": {
+            "absolute_error": 0.0,
+            "days": 92,
+            "net_return": -0.001127021093196512,
+            "reported_net_return": -0.001127021093196512
+          },
+          "confirmation": {
+            "absolute_error": 0.0,
+            "days": 120,
+            "net_return": 0.019870312956796754,
+            "reported_net_return": 0.019870312956796754
+          },
+          "test": {
+            "absolute_error": 0.0,
+            "days": 122,
+            "net_return": -0.03664835144803491,
+            "reported_net_return": -0.03664835144803491
+          }
+        }
+      }
+    },
+    "momentum": {
+      "base": {
+        "additive_bar_return_components": {
+          "fees": 0.018717479231599863,
+          "funding": -0.001124054003016785,
+          "gross_pnl": 0.09508803775790643,
+          "impact": 0.0015308979507799585,
+          "slippage": 0.03109126546756232,
+          "spread": 0.0066013765156025615
+        },
+        "bar_open_end": "2026-08-30 23:30:00+00:00",
+        "bar_open_start": "2025-10-01 00:00:00+00:00",
+        "bars": 16032,
+        "days": 334,
+        "final_equity_usdt": 10627.759671771353,
+        "input_file_sha256": {
+          "daily/momentum.csv": "bcb9c7d018211dfdd5c54c5d5fd938d7a47f4631afdd7319f680f3ea025b6554",
+          "local/momentum-returns.parquet": "c19ef3d15c93a5d34f3fe27feb503a411c25b11e1c6635e950914268138fc3d4",
+          "local/momentum-stats.parquet": "42eebc38aa4cfa2a14aeae49e26bb8c3fbab92d1757d565304667313f7e4504c"
+        },
+        "maximum_absolute_bar_accounting_error": 3.4975006831666766e-16,
+        "maximum_absolute_daily_csv_error": 9.974659986866641e-17,
+        "maximum_absolute_equity_error_usdt": 0.0,
+        "maximum_absolute_metric_error": 0.0,
+        "metrics": {
+          "cagr": 0.06879865134844887,
+          "max_drawdown": -0.11310814866541363,
+          "sharpe_daily": 0.6216833226159881,
+          "total_return": 0.0627759671771353
+        },
+        "windows": {
+          "calibration": {
+            "absolute_error": 0.0,
+            "days": 92,
+            "net_return": 0.03177157980651302,
+            "reported_net_return": 0.03177157980651302
+          },
+          "confirmation": {
+            "absolute_error": 0.0,
+            "days": 120,
+            "net_return": 0.026480328970692968,
+            "reported_net_return": 0.026480328970692968
+          },
+          "test": {
+            "absolute_error": 0.0,
+            "days": 122,
+            "net_return": 0.0034772543229513175,
+            "reported_net_return": 0.0034772543229513175
+          }
+        }
+      },
+      "cost2": {
+        "additive_bar_return_components": {
+          "fees": 0.03883031055521662,
+          "funding": -0.0006505969726757939,
+          "gross_pnl": 0.09583536018393074,
+          "impact": 0.0031175235921761944,
+          "slippage": 0.031425314980203,
+          "spread": 0.013885023802561743
+        },
+        "bar_open_end": "2026-08-30 23:30:00+00:00",
+        "bar_open_start": "2025-10-01 00:00:00+00:00",
+        "bars": 16032,
+        "days": 334,
+        "final_equity_usdt": 10336.83466157371,
+        "input_file_sha256": {
+          "daily/momentum_cost2.csv": "a8cd795a51969eb5fbc47b61bb04fd964681cfe31906ed366b3b07cb1c32fb97",
+          "local/momentum_cost2-returns.parquet": "89fdb9933947169d84b3aa220d945b8e2d55642e1ebc95238a0292456dc61a5b",
+          "local/momentum_cost2-stats.parquet": "da69782878d342d215dab007c047fd1929fc75acebe613f105a115ca419fc213"
+        },
+        "maximum_absolute_bar_accounting_error": 3.645087703896266e-16,
+        "maximum_absolute_daily_csv_error": 9.8879238130678e-17,
+        "maximum_absolute_equity_error_usdt": 0.0,
+        "maximum_absolute_metric_error": 0.0,
+        "metrics": {
+          "cagr": 0.03686673842305588,
+          "max_drawdown": -0.11627558757130907,
+          "sharpe_daily": 0.36151173763445166,
+          "total_return": 0.033683466157371056
+        },
+        "windows": {
+          "calibration": {
+            "absolute_error": 0.0,
+            "days": 92,
+            "net_return": 0.018915651890949903,
+            "reported_net_return": 0.018915651890949903
+          },
+          "confirmation": {
+            "absolute_error": 0.0,
+            "days": 120,
+            "net_return": 0.01439162056742238,
+            "reported_net_return": 0.01439162056742238
+          },
+          "test": {
+            "absolute_error": 0.0,
+            "days": 122,
+            "net_return": 0.00010058908314469761,
+            "reported_net_return": 0.00010058908314469761
+          }
+        }
+      }
+    }
+  },
+  "reviewed_at_utc": "2026-09-30T11:48:44.768590+00:00",
+  "run_declaration_sha256": "f2baf7ab4aac1b2adf74487d25cbdbbb03622e0b4fe156674b8323ea1ef6fd47",
+  "schema_version": 1,
+  "scope": "Independent read-only validation of the recorded six-factor run; this addendum does not alter original evidence or select another candidate.",
+  "verdict": {
+    "economic_selection_remains": "cash",
+    "new_profitability_claim": false,
+    "p0_findings": 0,
+    "p1_findings": 0,
+    "p2_findings": 2
+  }
+}

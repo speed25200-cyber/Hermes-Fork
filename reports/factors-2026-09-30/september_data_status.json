@@ -1,0 +1,21 @@
+{
+  "status": "prices_incomplete_network_transport_outage_funding_complete_with_explicit_unknowns",
+  "recorded_at": "2026-09-30T11:40:16.092778+00:00",
+  "available_archives": 10788,
+  "downloaded_archives": 49,
+  "http_status_counts": {
+    "200": 751,
+    "503": 1007
+  },
+  "error": "Persistent503 upstream connect error / remote address envoy://cloudflare_https_tunnel/ on both official Binance archive endpoints. All downloads stopped after bounded retries.",
+  "funding": {
+    "symbols_queried": 198,
+    "full_interval": 166,
+    "missing_mappings": 31,
+    "partial": "FET history starts2026-09-05 04:00UTC; prior costs unknown"
+  },
+  "bridge": "bridge30m and bridge_manifest.json ready",
+  "impact": "No full September price panel exists. Do not evaluate partial archives as a September strategy return.",
+  "resume": ".venv/bin/python artifacts/profitability_2026/fetch_september.py",
+  "script_sha256": "fb5e0d084cef625fe716177b54f96bf827d093c4aad9e8fe17282231caef54d2"
+}
