@@ -25,9 +25,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from hermes.config import ExecutionConfig
@@ -48,7 +51,7 @@ def ambiguous(exc: OKXError) -> bool:
     return code in AMBIGUOUS_CODES or (len(code) == 3 and code.startswith("5"))
 
 
-TERMINAL = ("filled", "canceled", "mmp_canceled", "missing")
+TERMINAL = ("filled", "canceled", "mmp_canceled")
 
 
 class ChildError(RuntimeError):
@@ -77,6 +80,7 @@ class OKXBroker:
         leverage: int,
         maker_fee: float = 0.0002,
         taker_fee: float = 0.0005,
+        state_file: str | Path | None = None,
     ):
         """``symbols=None`` maps contracts on demand (``register``): any OKX USDT perpetual can be traded."""
         self.c = client
@@ -90,7 +94,49 @@ class OKXBroker:
         self.inst_to_symbol: dict[str, str] = {}
         self._derived: set[str] = set()  # symbols inferred from an exchange position, not chosen by the model
         self._leverage_set: set[str] = set()
+        # Un envoi ou une annulation sans preuve terminale reste à réconcilier, même si l'ordre
+        # n'apparaît plus momentanément dans la liste des ordres ouverts.
+        self._outstanding: set[tuple[str, str]] = set()
+        self._state_file = Path(state_file) if state_file is not None else None
+        if self._state_file is not None and self._state_file.exists():
+            state = json.loads(self._state_file.read_text())
+            if not isinstance(state, dict) or state.get("version") != 1:
+                raise ValueError("journal d'ordres inconnu : réconciliation requise")
+            outstanding = state.get("outstanding")
+            if not isinstance(outstanding, list) or any(
+                not isinstance(row, list) or len(row) != 2 or not all(isinstance(value, str) and value for value in row)
+                for row in outstanding
+            ):
+                raise ValueError("journal d'ordres invalide : réconciliation requise")
+            self._outstanding = {(row[0], row[1]) for row in outstanding}
         self._dms_task: asyncio.Task[None] | None = None
+
+    def _save_outstanding(self) -> None:
+        """Journal atomique écrit avant l'envoi ; une erreur de disque interdit la requête réseau."""
+        if self._state_file is None:
+            return
+        self._state_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._state_file.with_suffix(".tmp")
+        with tmp.open("w") as stream:
+            json.dump({"version": 1, "outstanding": sorted(self._outstanding)}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        tmp.replace(self._state_file)
+        # Le rename doit lui aussi survivre à une coupure machine avant le POST.
+        directory = os.open(self._state_file.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+
+    def _track_order(self, iid: str, clid: str) -> None:
+        self._outstanding.add((iid, clid))
+        self._save_outstanding()
+
+    def _resolve_order(self, iid: str, clid: str) -> None:
+        if (iid, clid) in self._outstanding:
+            self._outstanding.remove((iid, clid))
+            self._save_outstanding()
 
     # -- lifecycle ------------------------------------------------------------------------------------------
     async def start(self) -> None:
@@ -107,7 +153,9 @@ class OKXBroker:
             except OKXError as exc:
                 raise RuntimeError(f"cannot switch to net_mode (close positions/orders first): {exc}") from exc
         # Resting orders from a previous (crashed) run are stale by definition.
-        await self.cancel_own_orders()
+        unresolved = await self.cancel_own_orders()
+        if unresolved:
+            log.warning("ordres non réconciliés au démarrage : %s", "; ".join(unresolved))
         await self.positions()  # maps every instrument that already carries a position
         self._dms_task = asyncio.create_task(self._dead_man_loop())
         log.info("OKX broker ready: %d USDT perpetuals, leverage %dx", len(self.catalog), self.leverage)
@@ -155,9 +203,10 @@ class OKXBroker:
     async def stop(self) -> None:
         if self._dms_task:
             self._dms_task.cancel()
-        await self.cancel_own_orders()
-        with contextlib.suppress(OKXError):
-            await self.c.cancel_all_after(0)
+        unresolved = await self.cancel_own_orders()
+        if not unresolved:
+            with contextlib.suppress(OKXError):
+                await self.c.cancel_all_after(0)
 
     async def _dead_man_loop(self) -> None:
         while True:
@@ -170,13 +219,26 @@ class OKXBroker:
     async def heartbeat(self) -> None:
         await self.c.cancel_all_after(self.cfg.dead_man_switch_s)
 
-    async def cancel_own_orders(self) -> None:
+    async def cancel_own_orders(self) -> list[str]:
+        """Annule puis exige un état terminal ; un ACK d'annulation n'est pas cette preuve."""
         for o in await self.c.pending_orders():
             if o.get("tag") == self.cfg.order_tag or str(o.get("clOrdId", "")).startswith("h"):
-                try:
-                    await self.c.cancel_order(o["instId"], o["clOrdId"])
-                except OKXError as exc:
-                    log.warning("cancel %s: %s", o.get("clOrdId"), exc)
+                self._track_order(o["instId"], o["clOrdId"])
+        unresolved = []
+        for iid, clid in sorted(self._outstanding):
+            try:
+                await self.c.cancel_order(iid, clid)
+            except Exception as exc:
+                # L'ordre peut s'être rempli pendant la demande : seule la lecture suivante tranche.
+                log.warning("cancel %s: %s", clid, exc)
+            try:
+                _, _, state, _ = await self._final_state(iid, clid)
+            except Exception as exc:
+                unresolved.append(f"{iid} {clid} : réconciliation impossible ({exc})")
+                continue
+            if state not in TERMINAL:
+                unresolved.append(f"{iid} {clid} : annulation non confirmée ({state})")
+        return unresolved
 
     # -- state ----------------------------------------------------------------------------------------------
     async def equity(self) -> float:
@@ -257,7 +319,8 @@ class OKXBroker:
         """Trade toward ``targets`` (USDT notionals); positions absent from it are closed, except those in
         ``hold``, which are left exactly as they are (no price this bar, not in the data feed)."""
         rep = ExecutionReport()
-        await self.cancel_own_orders()  # an order left resting by an earlier cycle must not fill twice
+        unresolved = await self.cancel_own_orders()
+        rep.errors.extend(unresolved)
         positions = await self.positions()
         if hold:
             positions = {s: p for s, p in positions.items() if s not in hold}
@@ -271,16 +334,26 @@ class OKXBroker:
         children = self.plan(targets, positions, prices)
         reduces = [c for c in children if c.reduce_only]
         increases = [c for c in children if not c.reduce_only]
+        reductions_complete = True
         for group in (reduces, increases):
+            if group is increases and (unresolved or self._outstanding or not reductions_complete):
+                if group:
+                    rep.errors.append("augmentations suspendues : ordres ou réductions à réconcilier")
+                    rep.unfilled.update({c.symbol: c.contracts for c in group})
+                continue
             results = await asyncio.gather(*(self._execute_child(c, urgent) for c in group), return_exceptions=True)
             for c, r in zip(group, results):
                 if isinstance(r, ChildError):
+                    if c.reduce_only:
+                        reductions_complete = False
                     rep.errors.append(f"{c.symbol}: {r}")
                     rep.fills.extend(r.fills)
                     if r.remaining > 0:
                         rep.unfilled[c.symbol] = r.remaining
                     continue
                 if isinstance(r, BaseException):
+                    if c.reduce_only:
+                        reductions_complete = False
                     rep.errors.append(f"{c.symbol}: {r}")
                     rep.unfilled[c.symbol] = c.contracts
                     continue
@@ -288,6 +361,8 @@ class OKXBroker:
                 rep.fills.extend(fills)
                 if remaining > 0:
                     rep.unfilled[c.symbol] = remaining
+                    if c.reduce_only:
+                        reductions_complete = False
         rep.finished = time.time()
         return rep
 
@@ -295,14 +370,18 @@ class OKXBroker:
         return await self.rebalance({}, urgent=True)
 
     # -- child execution ------------------------------------------------------------------------------------
-    async def _order_state(self, inst: Instrument, clid: str) -> tuple[float, float, str, float]:
-        o = await self.c.get_order(inst.inst_id, clid)
+    async def _order_state(self, inst: Instrument | str, clid: str) -> tuple[float, float, str, float]:
+        iid = inst.inst_id if isinstance(inst, Instrument) else inst
+        o = await self.c.get_order(iid, clid)
         if o is None:
             return 0.0, 0.0, "missing", 0.0
         filled = float(o.get("accFillSz") or 0.0)
         avg = float(o.get("avgPx") or 0.0)
         fee = -float(o.get("fee") or 0.0)  # OKX reports fees as negative numbers
-        return filled, avg, str(o.get("state")), fee
+        state = str(o.get("state"))
+        if state in TERMINAL:
+            self._resolve_order(iid, clid)
+        return filled, avg, state, fee
 
     async def _place(self, ch: Child, clid: str, **order: str) -> bool:
         """Send one order; True when it exists on the exchange.
@@ -313,6 +392,7 @@ class OKXBroker:
         """
         if not ch.reduce_only:
             await self._ensure_leverage(ch.inst)
+        self._track_order(ch.inst.inst_id, clid)
         try:
             await self.c.place_order(
                 instId=ch.inst.inst_id,
@@ -326,6 +406,7 @@ class OKXBroker:
             return True
         except OKXError as exc:
             if not ambiguous(exc):
+                self._resolve_order(ch.inst.inst_id, clid)
                 log.warning("%s %s rejected: %s", order.get("ordType"), ch.inst.inst_id, exc)
                 return False
             log.warning("%s %s ambiguous (%s): checking the exchange", order.get("ordType"), ch.inst.inst_id, exc)
@@ -347,8 +428,8 @@ class OKXBroker:
             await self.c.cancel_order(ch.inst.inst_id, clid)
         raise RuntimeError(f"{ch.inst.inst_id} order {clid}: not confirmed after an ambiguous send, child aborted")
 
-    async def _final_state(self, inst: Instrument, clid: str) -> tuple[float, float, str, float]:
-        """Order state once terminal (filled / canceled / missing), polling briefly after a cancel or IOC."""
+    async def _final_state(self, inst: Instrument | str, clid: str) -> tuple[float, float, str, float]:
+        """Attend une preuve terminale : un ordre introuvable reste inconnu, jamais annulé par défaut."""
         filled, avg, state, fee = await self._order_state(inst, clid)
         for _ in range(10):
             if state in TERMINAL:

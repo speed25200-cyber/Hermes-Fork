@@ -97,6 +97,35 @@ def research_compare(reports: list[Path] = typer.Argument(..., help="Dossiers de
     typer.echo(comparison_table(reports))
 
 
+@research_app.command("audit")
+def research_audit(
+    report: Path = typer.Argument(..., help="Rapport de recherche avec equity_daily.csv"),
+    status: Path | None = typer.Option(None, help="Instantané status.json du moteur (lecture seule)"),
+    out: Path | None = typer.Option(None, help="Rapport JSON ; stdout si absent"),
+) -> None:
+    """Bilan net historique/récent et prospectif, sans entraîner ni changer le trading."""
+    from hermes.research.audit import audit_economics
+
+    try:
+        result = audit_economics(report, status)
+        payload = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        typer.echo(f"Diagnostic impossible : {exc}", err=True)
+        raise typer.Exit(2) from exc
+    if out is None:
+        typer.echo(payload)
+    else:
+        # Un diagnostic ne peut écraser ses sources (ni un résultat précédent).
+        out.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with out.open("x", encoding="utf-8") as fh:
+                fh.write(payload + "\n")
+        except OSError as exc:
+            typer.echo(f"Écriture du diagnostic refusée : {exc}", err=True)
+            raise typer.Exit(2) from exc
+        typer.echo(str(out))
+
+
 @model_app.command("install")
 def model_install(
     source: Path = typer.Argument(..., help="Dossier du bundle (ex. reports/latest/model)"),
@@ -183,7 +212,13 @@ def live_run(
             raise typer.Exit(2)
         # Every OKX USDT perpetual is mapped: contracts listed after training may enter the universe too.
         broker = OKXBroker(
-            client, cfg.execution, None, cfg.risk.exchange_leverage, cfg.costs.maker_fee, cfg.costs.taker_fee
+            client,
+            cfg.execution,
+            None,
+            cfg.risk.exchange_leverage,
+            cfg.costs.maker_fee,
+            cfg.costs.taker_fee,
+            state_file=cfg.live.state_dir / mode / "okx_orders.json",
         )
     engine = LiveEngine(cfg, bundle, feed, broker, store, mode, model_dir=model, operator_cfg=operator, overrides=kv)
 

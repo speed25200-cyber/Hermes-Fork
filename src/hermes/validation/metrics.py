@@ -81,8 +81,13 @@ def _nw_t(x: np.ndarray, lag: int) -> float:
     return float(x.mean() / np.sqrt(max(lrv, 1e-18) / n))
 
 
-def max_drawdown(equity: pd.Series) -> float:
+def max_drawdown(equity: pd.Series, initial_equity: float | None = None) -> float:
+    """Baisse depuis le capital initial quand les observations commencent après le premier rendement."""
     peak = equity.cummax()
+    if initial_equity is not None:
+        if not np.isfinite(initial_equity) or initial_equity <= 0:
+            raise ValueError("le capital initial doit être fini et strictement positif")
+        peak = peak.clip(lower=initial_equity)
     return float((equity / peak - 1.0).min())
 
 
@@ -97,7 +102,7 @@ def performance_summary(returns: pd.Series, periods_per_year: float) -> dict[str
     vol = float(r.std(ddof=1) * np.sqrt(periods_per_year))
     downside = r[r < 0]
     sortino = float(r.mean() / (np.sqrt((downside**2).mean()) + 1e-18) * np.sqrt(periods_per_year))
-    mdd = max_drawdown(eq)
+    mdd = max_drawdown(eq, initial_equity=1.0)
     daily = (1 + r).groupby(r.index.floor("D")).prod() - 1 if isinstance(r.index, pd.DatetimeIndex) else r
     return {
         "total_return": total,

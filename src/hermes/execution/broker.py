@@ -59,7 +59,8 @@ class ExecutionReport:
     @property
     def maker_share(self) -> float:
         tot = self.traded_notional
-        return sum(abs(f.qty * f.price) for f in self.fills if f.maker) / tot if tot else 0.0
+        maker = sum(abs(f.notional) if f.notional else abs(f.qty * f.price) for f in self.fills if f.maker)
+        return maker / tot if tot else 0.0
 
 
 class Broker(Protocol):
@@ -118,6 +119,7 @@ class PaperBroker:
             self.avg = {k: float(v) for k, v in s.get("avg", {}).items()}
             self.fees_paid = float(s.get("fees_paid", 0.0))
             self.funding_paid = float(s.get("funding_paid", 0.0))
+            self.funding_accruals: set[str] = set(s.get("funding_accruals", []))
             # Last marks: after a restart the book is valued at market, not at entry prices.
             self.prices = {k: float(v) for k, v in s.get("prices", {}).items()}
             self.stops = {k: (float(v[0]), float(v[1])) for k, v in s.get("stops", {}).items()}
@@ -125,6 +127,7 @@ class PaperBroker:
             self.cash = float(initial_equity)
             self.qty, self.avg = {}, {}
             self.fees_paid = self.funding_paid = 0.0
+            self.funding_accruals = set()
 
     def set_prices(self, prices: dict[str, float]) -> None:
         self.prices.update({k: v for k, v in prices.items() if v and v > 0})
@@ -140,6 +143,7 @@ class PaperBroker:
                     "avg": self.avg,
                     "fees_paid": self.fees_paid,
                     "funding_paid": self.funding_paid,
+                    "funding_accruals": sorted(self.funding_accruals),
                     "prices": {k: v for k, v in self.prices.items() if k in self.qty},
                     "stops": {k: list(v) for k, v in self.stops.items()},
                 }
@@ -162,15 +166,27 @@ class PaperBroker:
             out[s] = Position(s, q, q * px, self.avg.get(s, px), px)
         return out
 
-    def accrue_funding(self, rates: dict[str, float]) -> float:
-        """Longs pay positive funding: cash -= qty * price * rate."""
+    def accrue_funding(
+        self,
+        rates: dict[str, float],
+        *,
+        notionals: dict[str, float] | None = None,
+        accrual_id: str | None = None,
+    ) -> float:
+        """Les longs paient le funding positif ; un notionnel historique explicite fige son assiette."""
+        if accrual_id is not None and accrual_id in self.funding_accruals:
+            return 0.0
         paid = 0.0
         for s, r in rates.items():
-            q = self.qty.get(s, 0.0)
-            if q and r:
-                paid += q * self.prices.get(s, 0.0) * r
+            notional = (
+                notionals.get(s, 0.0) if notionals is not None else self.qty.get(s, 0.0) * self.prices.get(s, 0.0)
+            )
+            if notional and r:
+                paid += notional * r
         self.cash -= paid
         self.funding_paid += paid
+        if accrual_id is not None:
+            self.funding_accruals.add(accrual_id)
         self._save()
         return paid
 

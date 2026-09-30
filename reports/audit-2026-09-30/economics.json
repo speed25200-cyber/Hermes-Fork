@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "report": {
+      "file": "report.json",
+      "sha256": "01ffb77e0ad004d144bd0f28d69074555775f33b28549c5bc33606312ef41a37"
+    },
+    "daily": {
+      "file": "equity_daily.csv",
+      "sha256": "a347c159a0873f50b4041f7c3a5a6156a45346fe3563854c621f6fd5acbc61ce"
+    },
+    "status": {
+      "file": "paper_status.json",
+      "sha256": "4315734ff6e6a04a0e4ca655b5ee273998533de09a331de424f2a11d5ee1a833"
+    }
+  },
+  "config_hash": "1b8c803a29a2",
+  "historical": {
+    "data_source": "binance_archive",
+    "generated_at": "2026-09-24T05:39:01+00:00",
+    "promoted_at_evaluation": false,
+    "gate_passed": 7,
+    "gate_total": 9,
+    "failed_criteria": [
+      "dsr",
+      "pbo"
+    ],
+    "windows": {
+      "all": {
+        "start": "2023-07-31T00:00:00+00:00",
+        "end": "2026-08-31T00:00:00+00:00",
+        "days": 1128,
+        "missing_calendar_days": 0,
+        "net_return": 0.5980306500863011,
+        "max_drawdown": -0.10920419478509025,
+        "sharpe": 1.363331922020962,
+        "avg_gross": 0.5081814139207269,
+        "avg_ic_est": 0.018812338199433155
+      },
+      "last_365_days": {
+        "start": "2025-09-01T00:00:00+00:00",
+        "end": "2026-08-31T00:00:00+00:00",
+        "days": 365,
+        "missing_calendar_days": 0,
+        "net_return": 0.1663443147565251,
+        "max_drawdown": -0.10172597125618921,
+        "sharpe": 1.2698169717581635,
+        "avg_gross": 0.5015207832404932,
+        "avg_ic_est": 0.020429889574045478
+      },
+      "last_90_days": {
+        "start": "2026-06-03T00:00:00+00:00",
+        "end": "2026-08-31T00:00:00+00:00",
+        "days": 90,
+        "missing_calendar_days": 0,
+        "net_return": 6.210305867937471e-05,
+        "max_drawdown": -2.9407565773187372e-05,
+        "sharpe": 2.3561170298830247,
+        "avg_gross": 5.2093108666666666e-05,
+        "avg_ic_est": 4.7133376666666666e-05
+      },
+      "last_calendar_year_to_date": {
+        "start": "2026-01-01T00:00:00+00:00",
+        "end": "2026-08-31T00:00:00+00:00",
+        "days": 243,
+        "missing_calendar_days": 0,
+        "net_return": -0.07376706092267138,
+        "max_drawdown": -0.07502890039678234,
+        "sharpe": -2.312557183452508,
+        "avg_gross": 0.14274447276864197,
+        "avg_ic_est": 0.005330298742907819
+      }
+    }
+  },
+  "prospective": {
+    "observed_at": "2026-09-30T10:00:12.774282+00:00",
+    "bar": "2026-09-30 09:30:00+00:00",
+    "mode": "paper",
+    "config_hash": "1b8c803a29a2",
+    "current_bundle_matches_report": true,
+    "promoted_in_status": true,
+    "ic_est": 0,
+    "ic_sizing": 0.04279,
+    "paper_nominal_sizing": true,
+    "net_pnl": -635.2882561506285,
+    "net_return": -0.06352882561506284,
+    "assessment": "LOSING_OBSERVED",
+    "initial_equity": 10000.0,
+    "baseline_source": "status.account.initial",
+    "pnl_assumption": "unchanged_initial_capital_and_no_external_flows",
+    "equity": 9364.711743849371,
+    "fees_paid": 18.873108336222696,
+    "funding_pnl": 10.684215592121598,
+    "price_and_execution_pnl": -627.0993634065275
+  },
+  "limits": [
+    "Historique déjà consulté : les fenêtres récentes ne sont pas un nouveau test indépendant.",
+    "Les coûts et le funding historiques sont ceux du simulateur ; leur transfert vers OKX reste à mesurer.",
+    "Ce diagnostic ne promeut aucun modèle et ne modifie ni positions, ni limites, ni seuils de validation.",
+    "PAPER : frais et exécution simulés, absence de flux externes selon le contrat du PaperBroker. Le résidu prix/exécution inclut spread et glissement ; ce n'est pas un alpha brut.",
+    "Le capital initial publié vient de la configuration : le PnL suppose ce paramètre inchangé depuis la création du compte. La courbe persistante peut couvrir plusieurs modèles ; l'identité du modèle courant n'attribue pas le PnL cumulé à ce seul modèle.",
+    "Le papier impose une taille nominale malgré l'IC estimé nul ou négatif. L'historique adapte la taille à l'IC : leurs rendements et expositions ne sont pas directement comparables.",
+    "Un instantané ne donne ni trajectoire quotidienne, ni durée d'observation, ni incertitude statistique ; un gain observé ne démontre pas une rentabilité future."
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "mode": "paper",
+  "updated": "2026-09-30T10:00:12.774282+00:00",
+  "bar": "2026-09-30 09:30:00+00:00",
+  "equity": 9364.711743849371,
+  "gross": 0.8203152258112445,
+  "net": 0.07675797065560351,
+  "ic_est": 0,
+  "risk": {
+    "psi_market": 1,
+    "psi_market_calibrated": 0,
+    "psi_max": 4.562,
+    "psi_ratio_max": 0,
+    "psi_drifted": 0,
+    "psi_unseen": 0,
+    "psi_calibrated": 0,
+    "psi_alert": 0,
+    "ic_h16": 0,
+    "ic_h48": 0,
+    "ic_h96": 0,
+    "cost_scale": 0.5,
+    "ic_sizing": 0.04279,
+    "market_alpha": 0,
+    "books": 9,
+    "budget": 1,
+    "es_1d": 0.04,
+    "es_scale": 0.89031,
+    "drawdown": 0.0685,
+    "halted": 0,
+    "ex_ante_vol": 0.1769,
+    "ex_ante_vol_held": 0.15751,
+    "nav": 9364.84
+  },
+  "notes": [
+    "papier : taille nominale (IC de recherche 0.043 ; IC estimé en direct 0.000)"
+  ],
+  "bundle": {
+    "config_hash": "1b8c803a29a2",
+    "train_start": "2022-06-01 00:00:00+00:00",
+    "train_end": "2026-08-29 19:30:00+00:00",
+    "promoted": true,
+    "research": {
+      "name": "hermes-30m-xl-lb-sres-books",
+      "bar": "30m",
+      "horizon_bars": 48,
+      "sharpe": 1.3633322749880703,
+      "cagr": 0.16382088391930738,
+      "vol": 0.10367522092176139,
+      "avg_gross": 0.508256530542601,
+      "max_drawdown": -0.1169220753178345,
+      "ic": 0.04522639316042546,
+      "ic_by_horizon": {
+        "16": 0.043990151319344604,
+        "48": 0.04522639316042546,
+        "96": 0.03916389339279189
+      }
+    },
+    "gate": {
+      "dsr": {
+        "value": 0.6385218288768264,
+        "threshold": 0.95,
+        "pass": false
+      },
+      "null_pvalue": {
+        "value": 0.04,
+        "threshold": 0.050000000000000044,
+        "pass": true
+      },
+      "pbo": {
+        "value": 0.3531746031746032,
+        "threshold": 0.3,
+        "pass": false
+      },
+      "sharpe": {
+        "value": 1.3633322749880703,
+        "threshold": 0.8,
+        "pass": true
+      },
+      "positive_years": {
+        "value": 0.75,
+        "threshold": 0.6,
+        "pass": true
+      },
+      "oos_months": {
+        "value": 37.10526315789474,
+        "threshold": 12,
+        "pass": true
+      },
+      "cost_stress": {
+        "value": 0.34722021071694736,
+        "threshold": 0,
+        "pass": true
+      },
+      "latency_stress": {
+        "value": 1.2689479439402793,
+        "threshold": 0,
+        "pass": true
+      },
+      "stop_stress": {
+        "value": 0.4521315940310765,
+        "threshold": 0,
+        "pass": true
+      }
+    },
+    "cost_scale": 0.5,
+    "prior_ic": 0
+  },
+  "account": {
+    "equity": 9364.711743849371,
+    "initial": 10000,
+    "cash": 8645.895474616796,
+    "fees_paid": 18.873108336222696,
+    "funding_paid": -10.684215592121598
+  },
+  "strategy": {
+    "name": "hermes-30m-xl-lb-sres-books",
+    "bar": "30m",
+    "holding_bars": 48,
+    "horizons": [
+      16,
+      48,
+      96
+    ],
+    "target": "style",
+    "universe_top_n": 30,
+    "venue": "okx",
+    "vol_target": 0.2,
+    "gross_max": 2.5,
+    "net_max": 0.25,
+    "weight_max": 0.15,
+    "beta_neutral": true,
+    "style_neutral": true,
+    "cost_aversion": 2,
+    "books": [
+      [
+        16,
+        0.5
+      ],
+      [
+        16,
+        1
+      ],
+      [
+        16,
+        2
+      ],
+      [
+        48,
+        0.5
+      ],
+      [
+        48,
+        1
+      ],
+      [
+        48,
+        2
+      ],
+      [
+        96,
+        0.5
+      ],
+      [
+        96,
+        1
+      ],
+      [
+        96,
+        2
+      ]
+    ],
+    "signal_halflife": 0.5,
+    "rebalance_every": 1,
+    "ensemble": "ic_weighted",
+    "stop_sigmas": 8,
+    "daily_loss_limit": 0.03,
+    "drawdown_soft": 0.1,
+    "drawdown_hard": 0.25,
+    "es_limit_daily": 0.04,
+    "max_positions": 40,
+    "capital_fraction": 1,
+    "regime_gate": {
+      "drawdown": 0,
+      "lookback_days": 90,
+      "scale": 0.5
+    },
+    "positioning": [],
+    "funding_per_8h": false
+  },
+  "listing_sleeve": {
+    "enabled": true,
+    "tokens_open": 0,
+    "closed_pnl": 0,
+    "closed": []
+  }
+}

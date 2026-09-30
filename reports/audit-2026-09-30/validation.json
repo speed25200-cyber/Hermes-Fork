@@ -1,0 +1,19 @@
+{
+  "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m pytest -q",
+  "result": {
+    "tests": "248",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "215.476"
+  },
+  "ruff_check": "PASS",
+  "ruff_format_check": "PASS",
+  "git_diff_check": "PASS",
+  "connected_trading_tests": "NOT_RUN",
+  "new_real_market_backtest": "NOT_RUN",
+  "notes": [
+    "Deux avertissements attendus signalent le chargement des anciens bundles sans empreinte de configuration.",
+    "Les tests vérifient des comportements logiciels, pas la rentabilité."
+  ]
+}

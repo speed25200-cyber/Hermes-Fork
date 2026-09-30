@@ -19,6 +19,7 @@ import pandas as pd
 
 from hermes.backtest.engine import BacktestResult, BookSignals, SignalBundle, run_backtest
 from hermes.config import HermesConfig
+from hermes.data.panel import Panel
 from hermes.portfolio.alpha import (
     cs_zscore,
     estimate_ic,
@@ -346,6 +347,7 @@ class Evaluation:
     nohalt: dict[str, object] = field(default_factory=dict)  # diagnostic without drawdown controls
     selection: dict[str, object] = field(default_factory=dict)  # walk-forward choice of the grid setting
     grid_daily: pd.DataFrame = field(default_factory=pd.DataFrame)  # daily returns of every grid variant
+    promotion_eligibility: dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -355,12 +357,29 @@ class Evaluation:
             "tests": self.tests,
             "gate": self.gate,
             "promoted": self.promoted,
+            "promotion_eligibility": self.promotion_eligibility,
             "grid": self.grid.reset_index().to_dict(orient="records"),
             "null_sharpes": self.null_sharpes,
             "halted_at": self.halted_at,
             "nohalt": self.nohalt,
             "selection": {k: v for k, v in self.selection.items() if k != "daily"},
         }
+
+
+def promotion_decision(passed: int, cfg: HermesConfig, panel: Panel) -> tuple[bool, dict[str, object]]:
+    """Les données synthétiques exercent le pipeline, sans jamais constituer une preuve économique.
+
+    Le nombre de critères reste visible et sa politique inchangée pour les données de marché.
+    Le marquage du panneau prime même quand un appelant lui associe une configuration d'archives réelles.
+    """
+    synthetic = cfg.data.source == "synthetic" or bool(panel.meta.get("synthetic", False))
+    eligibility: dict[str, object] = {
+        "eligible": not synthetic,
+        "reason": "synthetic_data" if synthetic else None,
+        "source": cfg.data.source,
+        "synthetic": synthetic,
+    }
+    return passed >= cfg.validation.gate_min_criteria and not synthetic, eligibility
 
 
 def evaluation_window(ds: Dataset, wf: WalkForwardResult, cfg: HermesConfig) -> tuple[Dataset, WalkForwardResult]:
@@ -604,12 +623,17 @@ def evaluate(
     passed = sum(bool(g["pass"]) for g in gate.values())
     tests["gate_passed"] = float(passed)
     tests["gate_required"] = float(v.gate_min_criteria)
-    promoted = passed >= v.gate_min_criteria
+    promoted, eligibility = promotion_decision(passed, cfg, ds.panel)
     mt = ic.get("market_timing")
     # The market model may steer net exposure only if it passes its own out-of-sample test AND improves the
     # promoted cross-sectional book once costs are paid.
     tests["market_promoted"] = float(
-        bool(isinstance(mt, dict) and mt.get("gate") and stress.get("sharpe_with_market", -np.inf) > sr_d)
+        bool(
+            eligibility["eligible"]
+            and isinstance(mt, dict)
+            and mt.get("gate")
+            and stress.get("sharpe_with_market", -np.inf) > sr_d
+        )
     )
     ev = Evaluation(
         ic=ic,
@@ -624,6 +648,7 @@ def evaluate(
         nohalt=nohalt,
         selection=selection,
         grid_daily=grid_all,
+        promotion_eligibility=eligibility,
     )
     return ev, bt
 

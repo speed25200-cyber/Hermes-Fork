@@ -3,9 +3,10 @@ import pandas as pd
 import pytest
 
 from hermes.backtest.engine import SignalBundle, run_backtest
-from hermes.config import RiskConfig, load_config
+from hermes.config import PortfolioConfig, RiskConfig, load_config
 from hermes.data.universe import universe_mask
 from hermes.features.library import build_features
+from hermes.portfolio.construct import BookInputs, PortfolioConstructor
 from hermes.risk.overlay import RiskOverlay
 
 
@@ -66,6 +67,81 @@ def test_daily_loss_reduce_only(tmp_path):
     # Next UTC day, the breaker resets.
     ov.observe(t + pd.Timedelta(days=1), 96.0)
     assert not ov.reduce_only(96.0)
+
+
+@pytest.mark.parametrize("restriction", ["max_positions", "reduce_only"])
+@pytest.mark.parametrize("es_method", ["parametric", "historical"])
+def test_es_cap_is_enforced_after_restrictions_remove_a_hedge(tmp_path, restriction, es_method):
+    cfg = RiskConfig(
+        es_limit_daily=0.035,
+        max_positions=1 if restriction == "max_positions" else 2,
+        kill_switch_file=tmp_path / "KILL",
+    )
+    ov = RiskOverlay(cfg)
+    t = pd.Timestamp("2024-01-01", tz="UTC")
+    ov.observe(t, 100.0)
+    equity = 96.0 if restriction == "reduce_only" else 100.0
+    target = np.array([1.0, -1.0])
+    current = np.array([1.0, 0.0])
+    cov = np.ones((2, 2)) * (0.01 if es_method == "parametric" else 0.0)
+    history = np.full((100, 2), -0.1) if es_method == "historical" else None
+    w, info = ov.apply(t, equity, target, current, cov, bars_per_day=1, hist_daily_returns=history)
+    _, final_es = ov.es_scale(w, cov, bars_per_day=1, hist_daily_returns=history)
+    assert np.count_nonzero(w) == 1
+    assert final_es <= cfg.es_limit_daily + 1e-12
+    assert info["es_1d"] == pytest.approx(final_es)
+    assert 0 < info["es_scale"] < 1
+    if restriction == "reduce_only":
+        assert info["reduce_only"] == 1.0
+        assert np.all(np.abs(w) <= np.abs(current))
+
+
+@pytest.mark.parametrize("beta_neutral", [True, False])
+def test_final_portfolio_limit_preserves_es_and_reductions(beta_neutral):
+    pc = PortfolioConstructor(PortfolioConfig(beta_neutral=beta_neutral, net_max=0.07, weight_max=1.0), 365, 0.03)
+    overlay = RiskOverlay(RiskConfig(max_positions=1, es_limit_daily=0.035), check_kill_file=False)
+    t = pd.Timestamp("2024-01-01", tz="UTC")
+    overlay.observe(t, 100.0)
+    current = np.array([1.0, 0.0])
+    cov = np.ones((2, 2)) * 0.01
+    before, _ = overlay.apply(t, 96.0, np.array([1.0, -1.0]), current, cov, 1)
+    inp = BookInputs(
+        score=np.zeros(2),
+        ivol=np.full(2, 0.01),
+        beta=np.full(2, 2.0),
+        mkt_var=0.0,
+        cost_rate=np.zeros(2),
+        adv=np.full(2, 1e9),
+        w0=current,
+        ic=0.0,
+    )
+    after, scale = pc.limit_after_overlay(before, inp, 1000.0, cov)
+    _, before_es = overlay.es_scale(before, cov, 1)
+    _, after_es = overlay.es_scale(after, cov, 1)
+    assert 0 < scale < 1
+    assert np.allclose(after, before * scale)
+    assert np.all(np.abs(after) <= np.abs(current))
+    assert np.array_equal(after != 0, before != 0)
+    exposure = inp.beta @ after if beta_neutral else after.sum()
+    assert abs(exposure) <= pc.exposure_limit(inp.market_alpha) + 1e-12
+    assert np.sqrt(after @ cov @ after * 365) <= pc.cfg.vol_target_annual + 1e-12
+    assert after_es <= before_es <= overlay.cfg.es_limit_daily + 1e-12
+
+
+def test_backtest_final_beta_limit_survives_max_positions(small_panel, setup):
+    cfg, mask, feats = setup
+    cfg = cfg.model_copy(
+        update={
+            "portfolio": cfg.portfolio.model_copy(update={"net_max": 0.02}),
+            "risk": cfg.risk.model_copy(update={"max_positions": 1, "stop_loss_daily_sigmas": 0.0}),
+        }
+    )
+    fwd = (small_panel["close"].shift(-4) / small_panel["close"] - 1).where(mask)
+    sig = SignalBundle(fwd, pd.Series(0.05, index=mask.index))
+    bt = run_backtest(small_panel, mask, feats.aux, sig, cfg, start=mask.index[96 * 20], end=mask.index[96 * 20 + 30])
+    assert bt.stats["turnover"].gt(0).any()
+    assert bt.stats["n_positions"].le(1).all()
+    assert bt.stats["beta_exposure"].abs().le(cfg.portfolio.net_max + 1e-9).all()
 
 
 def test_kill_switch(tmp_path):

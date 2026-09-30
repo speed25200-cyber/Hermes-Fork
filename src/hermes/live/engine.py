@@ -29,7 +29,7 @@ import pandas as pd
 
 from hermes.backtest.engine import is_rebalance_bar
 from hermes.config import HermesConfig, with_overrides
-from hermes.data.live_feed import BinanceLiveFeed, DailyHistory
+from hermes.data.live_feed import FUNDING_RECONCILE_DAYS, BinanceLiveFeed, DailyHistory
 from hermes.data.panel import BAR_TO_OFFSET, Panel
 from hermes.data.universe import is_excluded, universe_mask
 from hermes.data.venue import OkxListing
@@ -540,7 +540,10 @@ class LiveEngine:
             missing = set(self.bundle.feature_names) - set(feats.names)
             raise RuntimeError(f"feature mismatch with the bundle (missing {sorted(missing)[:5]}...)")
         # Rounded like the stored training rows (research/dataset.py): the models score the values they were fit on.
-        X, mi = feats.stack(mask, rows=np.array([t]), dtype=STORAGE_DTYPE)
+        score_mask = mask
+        if "observed_close" in panel:
+            score_mask = mask & (panel["observed_close"] > 0)
+        X, mi = feats.stack(score_mask, rows=np.array([t]), dtype=STORAGE_DTYPE)
         X = X.astype(np.float32)
         members = list(mi.get_level_values(1))
         d.n_members = len(members)
@@ -657,11 +660,23 @@ class LiveEngine:
         close_t = panel["close"].iloc[t].to_numpy()
         # A held contract without a price for this bar, or without the daily history its universe membership
         # needs (a failed fetch), is left untouched: never liquidated blind on missing data.
-        frozen = (pos_w != 0) & ~np.isfinite(close_t)
+        observed = (
+            panel["observed_close"].iloc[t].fillna(0).to_numpy() > 0
+            if "observed_close" in panel
+            else np.isfinite(close_t)
+        )
+        frozen = (pos_w != 0) & (~np.isfinite(close_t) | ~observed)
         if daily is not None:
             has_daily = daily.quote_volume.reindex(columns=syms).notna().any(axis=0).to_numpy()
             frozen |= (pos_w != 0) & ~has_daily
-        active = mask.iloc[t].to_numpy() & np.isin(syms, members)
+        active = mask.iloc[t].to_numpy() & np.isin(syms, members) & observed
+        held_without_data = bool(frozen.any()) or any(
+            value != 0 and symbol not in syms for symbol, value in positions_notional.items()
+        )
+        missing_quotes = [s for s, ok in zip(syms, observed, strict=True) if not ok]
+        if missing_quotes:
+            d.risk["missing_quotes"] = float(len(missing_quotes))
+            d.notes.append(f"cours non observés : {', '.join(missing_quotes)} ; aucune nouvelle position")
         idx = np.nonzero((active | (pos_w != 0)) & ~frozen)[0]
 
         # The traded (smoothed) score, re-standardised across this bar's members exactly as the backtest does
@@ -728,6 +743,12 @@ class LiveEngine:
         if stale:
             target = RiskOverlay.restrict_to_reductions(target, pos_w[idx])
             d.notes.append("données périmées : réductions seulement")
+        if held_without_data:
+            # Frozen holdings still consume risk. Until their exposure can be measured, do not assign
+            # the full portfolio budget to other symbols and accidentally exceed the combined limits.
+            target = RiskOverlay.restrict_to_reductions(target, pos_w[idx])
+            d.risk["reduce_only"] = 1.0
+            d.notes.append("position conservée sans données fiables : réductions seulement sur le reste du livre")
         if self.mode == "live" and not self.bundle.promoted and not cfg.live.allow_unpromoted:
             target = np.zeros_like(target)
             d.notes.append("modèle non promu : trading réel refusé, livre fermé")
@@ -735,6 +756,10 @@ class LiveEngine:
         w, info = self.overlay.apply(
             ts, nav, target, pos_w[idx], book.cov_bar, self.bpd, self._daily_returns(panel, daily, ts, idx)
         )
+        w, final_scale = self.constructor.limit_after_overlay(w, inp, capital, book.cov_bar)
+        info["portfolio_scale"] = final_scale
+        info["es_1d"] *= final_scale
+        info["es_scale"] *= final_scale
         d.risk.update({k: round(float(v), 5) for k, v in info.items()})
         d.risk["drawdown"] = round(self.overlay.drawdown(nav), 5)
         d.risk["halted"] = float(self.overlay.state.halted)
@@ -864,15 +889,12 @@ class LiveEngine:
         now = self.clock()
         stop_fills: dict[str, float | None] = {}
         if isinstance(self.broker, PaperBroker):
-            last = {f: panel[f].iloc[-1].dropna().to_dict() for f in ("open", "high", "low", "close")}
-            stopped = self.broker.check_stops(last["high"], last["low"], last["open"])  # before the new marks
+            stopped = self._advance_paper_account(panel)
             stop_fills = {f.symbol: f.price for f in stopped}
             if stopped:
                 self.store.add_fills(stopped, "stop")
                 self._closed_now.update(f.symbol for f in stopped)
                 self.store.event("WARNING", f"stops déclenchés (papier) : {', '.join(f.symbol for f in stopped)}")
-            self.broker.set_prices(last["close"])
-            self._accrue_paper_funding(panel)
         equity = await self.broker.equity()
         positions = await self.broker.positions()
         notional = {s: p.notional for s, p in positions.items()}
@@ -1004,6 +1026,9 @@ class LiveEngine:
         assert self.sleeve is not None
         try:
             due = sorted({s for s, _ in self.sleeve.due(now)})
+            observed = panel["observed_close"].iloc[-1] if "observed_close" in panel else None
+            if observed is not None:
+                due = [s for s in due if observed.get(s, 0) > 0]
             close = panel["close"]
             vol: dict[str, float] = {}
             for s in due:
@@ -1020,6 +1045,7 @@ class LiveEngine:
                 and not self.overlay.state.halted
                 and not r.get("reduce_only")
                 and float(r.get("budget", 1.0)) >= 0.999
+                and (observed is None or observed.get(HEDGE, 0) > 0)
             )
             return self.sleeve.targets(now, prices, nav, set(self.tradable(due)), vol, entries=entries)
         except Exception:
@@ -1221,20 +1247,115 @@ class LiveEngine:
             self.sleeve.accrue_funding(rows.fillna(0.0).sum().to_dict(), prices)
             self.store.put("sleeve_funding_until", str(panel.index[-1]))
 
+    def _advance_paper_account(self, panel: Panel) -> list[Fill]:
+        """Replay every unprocessed closed bar, including stops during a missed cycle.
+
+        Funding exposure follows the bar simulation convention: stops precede funding at the bar close.
+        This approximates intrabar settlement timing; it is not an exchange funding ledger. Delayed rates
+        charge that saved exposure, even after the simulated position is closed.
+        A new/legacy account starts at its last known accounting bar; earlier positions are never guessed.
+        """
+        assert isinstance(self.broker, PaperBroker)
+        last = self.store.get("paper_market_until", self.store.get("funding_accrued_until"))
+        rows = panel.index[-1:] if last is None else panel.index[panel.index > pd.Timestamp(str(last))]
+        ledger = self.store.get("paper_funding_exposures", {})
+        ledger = ledger if isinstance(ledger, dict) else {}
+        cutoff = panel.index[-1] - pd.Timedelta(days=FUNDING_RECONCILE_DAYS)
+        ledger = {stamp: rec for stamp, rec in ledger.items() if pd.Timestamp(stamp) >= cutoff or rec.get("pending")}
+        fills: list[Fill] = []
+        for ts in rows:
+            stamp = ts.isoformat()
+            rec = ledger.get(stamp)
+            if rec is None:
+                rec = {"qty_before": dict(self.broker.qty), "notionals": {}, "rates": {}, "revision": 0}
+                ledger[stamp] = rec
+                # Remember the original position before a stop mutates the broker's durable JSON.
+                self.store.put("paper_funding_exposures", ledger)
+            bars = {f: panel[f].loc[ts] for f in ("open", "high", "low", "close")}
+            if "observed_close" in panel:
+                observed = panel["observed_close"].loc[ts] > 0
+                bars = {f: row.where(observed) for f, row in bars.items()}
+            values = {f: row.dropna().to_dict() for f, row in bars.items()}
+            stopped = self.broker.check_stops(values["high"], values["low"], values["open"])
+            # The exact intrabar trigger time is unknown; attribute the simulated fill to this bar's close.
+            fills.extend(replace(f, ts=(ts + panel.bar_delta).timestamp()) for f in stopped)
+            self.broker.set_prices(values["close"])
+            if not rec.get("processed"):
+                rec["qty_after"] = {s: q for s, q in rec["qty_before"].items() if self.broker.qty.get(s) == q and q}
+                rec["notionals"] = {
+                    s: float(q * self.broker.prices[s]) for s, q in rec["qty_after"].items() if s in values["close"]
+                }
+                rec["processed"] = True
+                self.store.put("paper_funding_exposures", ledger)
+            self.broker._save()
+            self.store.put("paper_market_until", stamp)
+        # Persist the historical exposure before charging it. The broker's accrual IDs make retries safe
+        # when its atomic JSON write succeeds but the state-store update is interrupted.
+        self.store.put("paper_funding_exposures", ledger)
+        self._accrue_paper_funding(panel)
+        return fills
+
     def _accrue_paper_funding(self, panel: Panel) -> None:
-        """Paper account: charge every funding settlement since the last accrued bar (none is skipped when a
-        cycle is late or a bar was missed)."""
+        """Apply newly published or revised rates to persisted settlement-time exposures, once."""
+        assert isinstance(self.broker, PaperBroker)
         if "funding_rate" not in panel:
             return
-        last_acc = self.store.get("funding_accrued_until")
-        fr = panel["funding_rate"]
-        if last_acc is None:
-            rows = fr.iloc[-1:]
-        else:
-            rows = fr[fr.index > pd.Timestamp(str(last_acc))]
-        if rows.empty:
+        ledger = self.store.get("paper_funding_exposures", {})
+        if not isinstance(ledger, dict):
             return
-        self.broker.accrue_funding(rows.fillna(0.0).sum().to_dict())  # type: ignore[attr-defined]
+        fr = panel["funding_rate"]
+
+        def finish_pending(rec: dict) -> None:  # type: ignore[type-arg]
+            pending = rec.get("pending")
+            if pending is None:
+                return
+            symbol = pending["symbol"]
+            self.broker.accrue_funding(
+                {symbol: pending["delta"]},
+                notionals={symbol: pending["notional"]},
+                accrual_id=pending["id"],
+            )
+            rec["rates"][symbol] = pending["rate"]
+            rec["revision"] = pending["revision"]
+            del rec["pending"]
+            self.store.put("paper_funding_exposures", ledger)
+
+        for stamp, rec in ledger.items():
+            ts = pd.Timestamp(stamp)
+            notionals = rec["notionals"]
+            booked = rec["rates"]
+            # A restart first replays the exact durable payload, even if the provider has revised its
+            # rate again. Recomputing a delta under an already-paid ID would silently miss a correction.
+            finish_pending(rec)
+            if ts not in fr.index:
+                continue
+            for symbol, qty in rec.get("qty_after", {}).items():
+                if symbol in notionals or symbol not in panel.symbols:
+                    continue
+                observed = "observed_close" not in panel or panel["observed_close"].at[ts, symbol] > 0
+                price = panel["close"].at[ts, symbol]
+                if observed and np.isfinite(price) and price > 0:
+                    # A previously missing quote may arrive after the position has changed or closed.
+                    # Recover its mark using the saved quantity, never today's broker position.
+                    notionals[symbol] = float(qty * price)
+                    self.store.put("paper_funding_exposures", ledger)
+            for symbol, rate in fr.loc[ts].items():
+                if symbol not in notionals or not np.isfinite(rate):
+                    continue
+                delta = float(rate) - float(booked.get(symbol, 0.0))
+                if not delta:
+                    continue
+                revision = int(rec.get("revision", 0)) + 1
+                rec["pending"] = {
+                    "symbol": symbol,
+                    "rate": float(rate),
+                    "delta": delta,
+                    "notional": notionals[symbol],
+                    "revision": revision,
+                    "id": f"{stamp}:{symbol}:{revision}",
+                }
+                self.store.put("paper_funding_exposures", ledger)
+                finish_pending(rec)
         self.store.put("funding_accrued_until", str(panel.index[-1]))
 
     async def run_forever(self) -> None:

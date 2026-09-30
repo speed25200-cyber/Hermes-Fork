@@ -96,9 +96,16 @@ def test_research_run_end_to_end_report_resume_and_compare(cfg_small, tmp_path, 
     assert set(ev.gate) >= {"dsr", "null_pvalue", "pbo", "cost_stress", "latency_stress", "oos_months"}
     # Promotion: at least validation.gate_min_criteria (7) of the nine criteria.
     passed = sum(bool(g["pass"]) for g in ev.gate.values())
-    assert tests["gate_passed"] == passed and tests["gate_required"] == 7 and ev.promoted == (passed >= 7)
+    assert tests["gate_passed"] == passed and tests["gate_required"] == 7
+    assert not ev.promoted and ev.promotion_eligibility["reason"] == "synthetic_data"
+    assert rep["evaluation"]["promotion_eligibility"] == ev.promotion_eligibility
+    assert "données synthétiques, aucune preuve de rentabilité" in (out / "REPORT.md").read_text()
     assert f"{passed} critères sur 9, 7 requis" in (out / "REPORT.md").read_text()
     meta = json.loads((out / "model" / "bundle.json").read_text())
+    provenance = rep["training_provenance"]
+    assert provenance == meta["training_provenance"]
+    assert provenance["panel"]["symbols"] == panel.symbols
+    assert len(provenance["sha256"]) == 64
     assert set(meta["research"]["ic_by_horizon"]) == {str(h) for h in cfg_small.labels.horizons}
     assert (out / "REPORT.md").exists() and (out / "model" / "bundle.json").exists()
     nh = rep["evaluation"]["nohalt"]  # diagnostic without drawdown controls, over the whole period
@@ -120,13 +127,14 @@ def test_research_run_end_to_end_report_resume_and_compare(cfg_small, tmp_path, 
     np.testing.assert_allclose(wf2.score.to_numpy(), wf.score.to_numpy(), rtol=1e-5, atol=1e-6)
 
 
-def test_resume_accepts_a_longer_saved_history_only():
+def test_resume_rejects_legacy_markers_without_content_evidence():
     from hermes.research.run import _resumable
 
     saved = "abc:2022-06-01 00:00:00+00:00:2026-08-31 23:45:00+00:00:289"
     shorter = "abc:2022-06-01 00:00:00+00:00:2026-08-31 22:45:00+00:00:289"
-    assert _resumable(saved, shorter)  # truncated: every fold only saw its own past
-    assert not _resumable(shorter, saved)  # never extended
+    assert not _resumable(saved, saved)
+    assert not _resumable(saved, shorter)
+    assert not _resumable(shorter, saved)
     assert not _resumable(saved, shorter.replace(":289", ":288"))
     assert not _resumable(saved, "xyz" + shorter[3:])
 

@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from hermes.config import ExecutionConfig
-from hermes.execution.broker import PaperBroker, Position
+from hermes.execution.broker import ExecutionReport, Fill, PaperBroker, Position
 from hermes.execution.okx.client import Credentials, OKXClient, OKXError
 from hermes.execution.okx.instruments import Instrument, binance_price_factor, okx_inst_id
 from hermes.execution.okx_broker import OKXBroker
@@ -106,8 +106,9 @@ class FakeOKX:
 def _broker(fake: FakeOKX, **cfg) -> OKXBroker:
     http = httpx.AsyncClient(base_url="https://x", transport=httpx.MockTransport(fake.handler))
     client = OKXClient(Credentials("k", "s", "p"), base_url="https://x", demo=True, client=http)
+    state_file = cfg.pop("state_file", None)
     ec = ExecutionConfig(venue="okx", chase_interval_s=0.5, maker_timeout_s=cfg.pop("timeout", 3), **cfg)
-    b = OKXBroker(client, ec, ["BTCUSDT"], leverage=3)
+    b = OKXBroker(client, ec, ["BTCUSDT"], leverage=3, state_file=state_file)
     inst = Instrument.from_okx(INST)
     b.instruments = {"BTCUSDT": inst}
     b.inst_to_symbol = {inst.inst_id: "BTCUSDT"}
@@ -401,3 +402,197 @@ def test_position_on_a_non_crypto_swap_stays_visible_and_is_closed():
     assert list(pos) == ["BB-USDT-SWAP"] and pos["BB-USDT-SWAP"].contracts == -4
     kids = b.plan({}, pos, {"BB-USDT-SWAP": 5.0})
     assert len(kids) == 1 and kids[0].reduce_only and kids[0].side == "buy"
+
+
+def test_maker_share_uses_usdt_notionals_for_contract_fills():
+    rep = ExecutionReport(
+        fills=[
+            Fill("BTCUSDT", "buy", 2.0, 50_000.0, 0.2, True, notional=1_000.0),
+            Fill("ETHUSDT", "sell", -5.0, 2_000.0, 0.5, False, notional=1_000.0),
+        ]
+    )
+    assert rep.traded_notional == 2_000.0
+    assert rep.maker_share == 0.5
+    # Les anciens fills papier sans notionnel explicite gardent leur convention en unités de base.
+    assert ExecutionReport(fills=[Fill("BTCUSDT", "buy", 1.0, 100.0, 0.0, True)]).maker_share == 1.0
+
+
+class PendingCancellationOKX(FakeOKX):
+    """Un ACK d'annulation arrive avant la preuve terminale, même hors de la liste des ordres ouverts."""
+
+    def __init__(self):
+        super().__init__(fill_after=None)
+        self.hide_pending = False
+        self.orders["hprevious"] = {
+            "instId": INST["instId"],
+            "clOrdId": "hprevious",
+            "tag": "hermes",
+            "ordType": "post_only",
+            "state": "live",
+            "accFillSz": "0",
+            "avgPx": "",
+            "sz": "1",
+            "px": "100",
+        }
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/api/v5/trade/orders-pending":
+            rows = [] if self.hide_pending else [o for o in self.orders.values() if o["state"] == "live"]
+            return httpx.Response(200, json={"code": "0", "data": rows})
+        if path == "/api/v5/trade/cancel-order":
+            return httpx.Response(200, json={"code": "0", "data": [{"sCode": "0"}]})
+        if path == "/api/v5/market/tickers":
+            return httpx.Response(200, json={"code": "0", "data": [{"instId": INST["instId"], "last": "100"}]})
+        return super().handler(request)
+
+
+def test_unconfirmed_previous_cancel_blocks_increases_until_reconciled(monkeypatch):
+    async def no_wait(_seconds):
+        pass
+
+    monkeypatch.setattr("hermes.execution.okx_broker.asyncio.sleep", no_wait)
+    fake = PendingCancellationOKX()
+    b = _broker(fake, maker_first=False)
+    first = asyncio.run(b.rebalance({"BTCUSDT": 5.0}, urgent=True))
+    assert first.errors and not first.fills and len(fake.orders) == 1
+    fake.hide_pending = True
+    second = asyncio.run(b.rebalance({"BTCUSDT": 5.0}, urgent=True))
+    assert second.errors and not second.fills and len(fake.orders) == 1
+    fake.orders["hprevious"]["state"] = "canceled"
+    third = asyncio.run(b.rebalance({"BTCUSDT": 5.0}, urgent=True))
+    assert not third.errors and third.fills and len(fake.orders) == 2
+
+
+def test_acknowledged_order_missing_from_reads_never_triggers_a_replacement(monkeypatch):
+    from hermes.execution.okx_broker import Child, ChildError
+
+    async def no_wait(_seconds):
+        pass
+
+    monkeypatch.setattr("hermes.execution.okx_broker.asyncio.sleep", no_wait)
+
+    class InvisibleOKX(PendingCancellationOKX):
+        def handler(self, request):
+            if request.url.path == "/api/v5/trade/order" and request.method == "GET":
+                return httpx.Response(200, json={"code": "51603", "msg": "not visible", "data": []})
+            return super().handler(request)
+
+    fake = InvisibleOKX()
+    fake.orders.clear()
+    fake.hide_pending = True
+    b = _broker(fake, maker_first=False)
+    ch = Child("BTCUSDT", b.instruments["BTCUSDT"], "buy", 0.05, False)
+    with pytest.raises(ChildError, match="missing"):
+        asyncio.run(b._execute_child(ch, urgent=True))
+    report = asyncio.run(b.rebalance({"BTCUSDT": 5.0}, urgent=True))
+    assert report.errors and not report.fills and len(fake.orders) == 1
+
+
+def test_incomplete_reduction_blocks_the_opening_leg_of_a_flip():
+    class PartialCloseOKX(PendingCancellationOKX):
+        def handler(self, request):
+            if request.url.path == "/api/v5/account/positions":
+                row = {"instId": INST["instId"], "pos": "5", "markPx": "100", "avgPx": "100"}
+                return httpx.Response(200, json={"code": "0", "data": [row]})
+            response = super().handler(request)
+            if request.url.path == "/api/v5/trade/order" and request.method == "POST":
+                body = json.loads(request.content)
+                if body.get("reduceOnly"):
+                    self.orders[body["clOrdId"]].update(state="canceled", accFillSz="2")
+            return response
+
+    fake = PartialCloseOKX()
+    fake.orders.clear()
+    b = _broker(fake, maker_first=False)
+    report = asyncio.run(b.rebalance({"BTCUSDT": -7.0}, urgent=True))
+    assert len(fake.orders) == 1 and all(o["reduceOnly"] for o in fake.orders.values())
+    assert report.errors and sum(abs(f.qty) for f in report.fills) == 2.0
+
+
+def test_paper_historical_funding_is_idempotent_after_restart(tmp_path):
+    path = tmp_path / "account.json"
+    broker = PaperBroker(path, 10_000.0, 0.0, 0.0)
+    paid = broker.accrue_funding({"BTCUSDT": 0.001}, notionals={"BTCUSDT": 2_000.0}, accrual_id="settlement-1")
+    assert paid == 2.0 and broker.cash == 9_998.0
+    restarted = PaperBroker(path, 1.0, 0.0, 0.0)
+    assert (
+        restarted.accrue_funding({"BTCUSDT": 0.001}, notionals={"BTCUSDT": 2_000.0}, accrual_id="settlement-1") == 0.0
+    )
+    assert restarted.cash == 9_998.0 and restarted.funding_paid == 2.0
+
+
+def test_unknown_order_survives_restart_and_blocks_another_send(tmp_path, monkeypatch):
+    from hermes.execution.okx_broker import Child, ChildError
+
+    async def no_wait(_seconds):
+        pass
+
+    monkeypatch.setattr("hermes.execution.okx_broker.asyncio.sleep", no_wait)
+    path = tmp_path / "okx_orders.json"
+
+    class DelayedVisibilityOKX(PendingCancellationOKX):
+        invisible = True
+
+        def handler(self, request):
+            if request.url.path == "/api/v5/trade/order" and request.method == "POST":
+                clid = json.loads(request.content)["clOrdId"]
+                # La persistance précède réellement le POST, même si son résultat disparaît.
+                assert [INST["instId"], clid] in json.loads(path.read_text())["outstanding"]
+            if self.invisible and request.url.path == "/api/v5/trade/order" and request.method == "GET":
+                return httpx.Response(200, json={"code": "51603", "msg": "not visible", "data": []})
+            return super().handler(request)
+
+    fake = DelayedVisibilityOKX()
+    fake.orders.clear()
+    fake.hide_pending = True
+    broker = _broker(fake, maker_first=False, state_file=path)
+    child = Child("BTCUSDT", broker.instruments["BTCUSDT"], "buy", 0.05, False)
+    with pytest.raises(ChildError):
+        asyncio.run(broker._execute_child(child, urgent=True))
+    restarted = _broker(fake, maker_first=False, state_file=path)
+    report = asyncio.run(restarted.rebalance({"BTCUSDT": 5.0}, urgent=True))
+    assert report.errors and len(fake.orders) == 1
+    fake.invisible = False
+    for order in fake.orders.values():
+        order["state"] = "canceled"
+    resumed = asyncio.run(restarted.rebalance({"BTCUSDT": 5.0}, urgent=True))
+    assert not resumed.errors and resumed.fills and len(fake.orders) == 2
+    assert json.loads(path.read_text())["outstanding"] == []
+
+
+def test_order_journal_write_failure_prevents_submission(tmp_path):
+    from hermes.execution.okx_broker import Child, ChildError
+
+    blocker = tmp_path / "not_a_directory"
+    blocker.write_text("x")
+    fake = FakeOKX()
+    broker = _broker(fake, maker_first=False, state_file=blocker / "okx_orders.json")
+    child = Child("BTCUSDT", broker.instruments["BTCUSDT"], "buy", 0.05, False)
+    with pytest.raises(ChildError):
+        asyncio.run(broker._execute_child(child, urgent=True))
+    assert not fake.orders
+
+
+def test_order_journal_directory_sync_failure_prevents_submission(tmp_path, monkeypatch):
+    import os
+
+    from hermes.execution.okx_broker import Child, ChildError
+
+    fsync = os.fsync
+    calls = 0
+
+    def fail_directory_sync(fd):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("directory sync failed")
+        fsync(fd)
+
+    monkeypatch.setattr("hermes.execution.okx_broker.os.fsync", fail_directory_sync)
+    fake = FakeOKX()
+    broker = _broker(fake, maker_first=False, state_file=tmp_path / "okx_orders.json")
+    child = Child("BTCUSDT", broker.instruments["BTCUSDT"], "buy", 0.05, False)
+    with pytest.raises(ChildError, match="directory sync failed"):
+        asyncio.run(broker._execute_child(child, urgent=True))
+    assert calls == 2 and not fake.orders
